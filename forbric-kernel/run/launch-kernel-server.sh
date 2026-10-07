@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Boot the MC 26.2 DEDICATED SERVER through the SOVEREIGN KERNEL (no Knot, no genuine FML/FancyModLoader lifecycle)
-# from the merged 3-ABI base, with the Forge + NeoForge runtime jars as PASSIVE ABI carriers. M1 goal: reach Done.
+# Boot the MC 26.2 DEDICATED SERVER through the SOVEREIGN KERNEL (no Knot, no genuine FML/FancyModLoader
+# lifecycle) from NeoForge's own patched game jar, with the NeoForge runtime jar as a PASSIVE ABI carrier.
+# M1 goal: reach Done.
 #
 # Parent -cp: kernel boot jar + kernel deps + MC 26.2 libraries (parent-loaded).
-# Owned (transform-loaded by ForbricClassLoader): merged base + forge-runtime + neoforge-runtime.
+# Owned (transform-loaded by ForbricClassLoader): neoforge base + neoforge-runtime.
 #
 # Usage: [RUNDIR=…] [FORBRIC_JVM=…] ./launch-kernel-server.sh [extra game args]
 set -uo pipefail
@@ -12,18 +13,16 @@ MC="${MC_DIR:-$HOME/Library/Application Support/minecraft}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 KERNEL="$(cd "$HERE/.." && pwd)"
 # Same FORBRIC_OLD knob lib.sh uses: one variable points a second working tree at the staged artifacts
-# instead of needing MERGED, FORGE_RT and NEO_RT set individually.
+# instead of needing GAME_BASE and NEO_RT set individually.
 OLD="$(cd "${FORBRIC_OLD:-$KERNEL/../forbric-loader}" && pwd)"
 STAGE="$OLD/run"
 
-MERGED="${MERGED:-$STAGE/merged-base/patched-mc-merged-26.2.jar}"
-FORGE_RT="${FORGE_RT:-$STAGE/merged-base/forge-runtime-interop.jar}"
-[ -f "$FORGE_RT" ] || FORGE_RT="$STAGE/forge-runtime/forge-runtime.jar"
+GAME_BASE="${GAME_BASE:-$STAGE/neoforge-base/patched-mc-neoforge-26.2.jar}"
 NEO_RT="${NEO_RT:-$STAGE/neoforge-runtime/neoforge-runtime.jar}"
 RUNDIR="${RUNDIR:-$KERNEL/run/server-kernel}"
 mkdir -p "$RUNDIR"
 
-[ -f "$MERGED" ] || { echo "merged base not found: $MERGED (run $STAGE/build-merged-base.sh)" >&2; exit 2; }
+[ -f "$GAME_BASE" ] || { echo "staged game base not found: $GAME_BASE (prepare it with the forbric-loader staging pipeline, or run prepareDev)" >&2; exit 2; }
 
 # EULA (dedicated server refuses to start otherwise). Kernel testing only — the user has accepted MC's EULA.
 [ -f "$RUNDIR/eula.txt" ] || echo "eula=true" > "$RUNDIR/eula.txt"
@@ -62,20 +61,20 @@ JLINE="$(find "$MC/libraries/org/jline" -name 'jline-*-3.25.1.jar' 2>/dev/null |
 
 # Game root metadata (version.json) on the PARENT -cp, as a resources-only jar. Mods that ask
 # getSystemClassLoader() for it — CustomSkinLoader's bootstrap picks its bytecode patch variant by the protocol
-# version it finds there — get null under Forbric otherwise, because the merged base belongs to
+# version it finds there — get null under Forbric otherwise, because the game base belongs to
 # ForbricClassLoader. See run/game-metadata-jar.sh for why this must never carry class files.
-META_JAR="$("$HERE/game-metadata-jar.sh" "$MERGED" 2>/dev/null)" || META_JAR=""
+META_JAR="$("$HERE/game-metadata-jar.sh" "$GAME_BASE" 2>/dev/null)" || META_JAR=""
 CP="$BOOT_JAR:$BOOT_DEPS:$VANILLA_CP${JLINE:+:$JLINE}${META_JAR:+:$META_JAR}"
 
-# Guest mixins are written against VANILLA bytecode; the merged base is vanilla+Forge+NeoForge byte-merged, so an
+# Guest mixins are written against VANILLA bytecode; the game base is NeoForge's patched jar, not vanilla, so an
 # injection anchor a mixin expects may have moved. The KERNEL now relaxes EVERY discovered guest mod's mixin
 # configs by default (ForbricMixinService.setGuestConfigs), turning such a failure into a soft skip instead of a
 # fatal MixinApplyError — no launcher-side glob needed. Add more with -Dforbric.relaxMixinOverwrites, or get
 # strict Mixin behaviour back for debugging with -Dforbric.relaxGuestMixins=off.
 
 echo "[kernel-launch] rundir=$RUNDIR"
-echo "[kernel-launch] merged base = $MERGED"
-echo "[kernel-launch] owned carriers: $(basename "$FORGE_RT"), $(basename "$NEO_RT")"
+echo "[kernel-launch] game base = $GAME_BASE"
+echo "[kernel-launch] owned carrier: $(basename "$NEO_RT")"
 cd "$RUNDIR"
 
 # The MC libraries go BOTH on the parent -cp and to the kernel as owned jars (--libraryPath): mods mixin into
@@ -84,6 +83,6 @@ cd "$RUNDIR"
 # Developer runs use strict compatibility decisions; installed profiles retain the product default (ask).
 exec java -Djava.awt.headless=true -Dforbric.compatibilityPolicy="${FORBRIC_COMPAT_POLICY:-strict}" ${FORBRIC_JVM:-} \
   -cp "$CP" net.forbric.kernel.boot.KernelServerLaunch \
-  --gameJar "$MERGED" --runtimeJar "$FORGE_RT" --runtimeJar "$NEO_RT" \
+  --gameJar "$GAME_BASE" --runtimeJar "$NEO_RT" \
   --libraryPath "$VANILLA_CP${JLINE:+:$JLINE}" \
   -- --gameDir "$RUNDIR" --nogui "$@"

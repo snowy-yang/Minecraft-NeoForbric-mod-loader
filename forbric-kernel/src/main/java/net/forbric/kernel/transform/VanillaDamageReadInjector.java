@@ -46,23 +46,24 @@ import net.forbric.kernel.util.ForbricLog;
  * {@code LOAD} handler creates the {@code LivingHurtEvent} it {@code @Share}s, its {@code @Inject} at the armour call
  * reads it, and the read now runs first: every hit on a living entity was a NullPointerException on the server thread.
  *
- * <p>So right after the invulnerability check — before MinecraftForge's Hurt seam, which reads the container —
+ * <p>So right after the invulnerability check — before anything else reads the container —
  * {@code KernelLivingDamage.vanillaRead(this, container, damage, damage)} is called. Its first {@code fload 3} is the
  * one such an injector binds to; the second is the parameter as it came. Only when the two differ does the helper move
  * the container by the difference, so with no such mod NeoForge's damage is untouched, bit for bit — including the
  * invulnerability-frame call, whose parameter and container already differ by a reduction other mods may modify.
  *
  * <p>Applied to {@code LivingEntity} and {@code Player} (which overrides it the same way), only where the method opens
- * with the invulnerability check and reads the parameter only after the armour call. Registered after
- * {@code ForgeDamageSeamsInjector}, so the read lands ahead of its seam. {@code -Dforbric.vanillaDamageRead=off}.
+ * with the invulnerability check and reads the parameter only after the armour call. {@code -Dforbric.vanillaDamageRead=off}.
  */
 public final class VanillaDamageReadInjector implements ClassTransformer {
 	public static final String PROPERTY = "forbric.vanillaDamageRead";
 	static final String LIVING = "net/minecraft/world/entity/LivingEntity";
 	static final List<String> TARGETS = List.of("net.minecraft.world.entity.LivingEntity", "net.minecraft.world.entity.player.Player");
-	static final String HURT_DESC = ForgeDamageSeamsInjector.HURT_DESC;
-	static final String HELPER = ForgeDamageSeamsInjector.RUNTIME;
-	static final String HELPER_DESC = "(L" + LIVING + ";L" + ForgeDamageSeamsInjector.CONTAINER + ";FF)V";
+	static final String DAMAGE_SOURCE = "Lnet/minecraft/world/damagesource/DamageSource;";
+	static final String HURT_DESC = "(Lnet/minecraft/server/level/ServerLevel;" + DAMAGE_SOURCE + "F)V";
+	static final String CONTAINER = "net/neoforged/neoforge/common/damagesource/DamageContainer";
+	static final String HELPER = "net/forbric/kernel/runtime/KernelLivingDamage";
+	static final String HELPER_DESC = "(L" + LIVING + ";L" + CONTAINER + ";FF)V";
 
 	public static boolean enabled() {
 		return !"off".equalsIgnoreCase(System.getProperty(PROPERTY, "on"));
@@ -127,7 +128,7 @@ public final class VanillaDamageReadInjector implements ClassTransformer {
 		read.add(new VarInsnNode(Opcodes.ALOAD, 0));
 		read.add(new FieldInsnNode(Opcodes.GETFIELD, containers.owner, "damageContainers", "Ljava/util/Stack;"));
 		read.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/util/Stack", "peek", "()Ljava/lang/Object;", false));
-		read.add(new TypeInsnNode(Opcodes.CHECKCAST, ForgeDamageSeamsInjector.CONTAINER));
+		read.add(new TypeInsnNode(Opcodes.CHECKCAST, CONTAINER));
 		read.add(new VarInsnNode(Opcodes.FLOAD, 3));
 		read.add(new VarInsnNode(Opcodes.FLOAD, 3));
 		read.add(new MethodInsnNode(Opcodes.INVOKESTATIC, HELPER, "vanillaRead", HELPER_DESC, false));

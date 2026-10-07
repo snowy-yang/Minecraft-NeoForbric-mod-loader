@@ -46,7 +46,7 @@ public final class TestFixtures {
 
 	/** The kinds of input a clean checkout lacks, one per way a machine comes to have them. */
 	public enum Fixture {
-		/** The staged merged base and carriers under {@link #stagedRoot()}. */
+		/** The staged game base and the NeoForge carrier under {@link #stagedRoot()}. */
 		STAGED("staged"),
 		/** build/classes/java/runtime, compiled only when the staged jars are present. */
 		GAME_SIDE("game-side"),
@@ -193,37 +193,26 @@ public final class TestFixtures {
 		return Path.of(home, ".minecraft");
 	}
 
+	/**
+	 * Reads one class (by binary name) out of a staged artifact, as the deleted Forge fixtures did: the staged
+	 * layout is {@code <stagedRoot>/<artifact-dir>/<file>}, and a missing jar is a missing STAGED fixture.
+	 */
+	public static byte[] stagedClass(String artifactPath, String binaryName) throws IOException {
+		Path path = stagedRoot().resolve(artifactPath);
+		require(Fixture.STAGED, Files.isRegularFile(path), "staged artifact absent: " + path);
+		return requireEntry(Fixture.STAGED, path, binaryName.replace('.', '/') + ".class");
+	}
+
+	/** The local Minecraft install's library tree, under {@link #minecraftDir()}. */
+	public static Path minecraftLibraries() {
+		return minecraftDir().resolve("libraries");
+	}
+
 	/** Minecraft 26.2's own client jar inside {@link #minecraftDir()}. */
 	public static Path vanillaJar() {
 		return minecraftDir().resolve("versions/26.2/26.2.jar");
 	}
 
-	/**
-	 * MinecraftForge's patched game exactly as the merged base under {@link #stagedRoot()} took it. tools/dev.py stages
-	 * the one its own merge read as {@code forge-patched/}, with the installer's build pins beside it and beside the
-	 * merged base. A tree without matching pins is forbric-loader's, whose {@code forge-patched/} is an older build:
-	 * its merge read the copy a Forbric launcher install keeps under {@code libraries/}, which is also where
-	 * run/build-merged-base.sh reads it by default.
-	 */
-	public static Path forgeMergeInput() {
-		Path staged = stagedRoot().resolve("forge-patched/patched-mc-forge-26.2.jar");
-		if (Files.isRegularFile(staged) && sameBuild(staged, stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar"))) {
-			return staged;
-		}
-		return minecraftDir().resolve("libraries/net/forbric/patched-mc-forge/26.2-65.0.1/patched-mc-forge-26.2-65.0.1.jar");
-	}
-
-	/** Whether both artifacts carry the same installer build pins ({@code <jar>.pins}), so came out of one build. */
-	private static boolean sameBuild(Path one, Path other) {
-		Path first = one.resolveSibling(one.getFileName() + ".pins");
-		Path second = other.resolveSibling(other.getFileName() + ".pins");
-		try {
-			return Files.isRegularFile(first) && Files.isRegularFile(second)
-					&& Files.readString(first).strip().equals(Files.readString(second).strip());
-		} catch (IOException unreadable) {
-			return false;
-		}
-	}
 
 	/**
 	 * Netty's codec library under {@link #minecraftDir()}: 26.2 ships netty 4.2's split {@code netty-codec-base},

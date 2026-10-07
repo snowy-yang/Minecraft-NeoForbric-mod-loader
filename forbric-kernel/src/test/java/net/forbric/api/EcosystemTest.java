@@ -34,41 +34,33 @@ class EcosystemTest {
 	@Test
 	void theConstantNamesAreWhatTheDifferentialOracleCompilesAgainst() {
 		assertEquals("FABRIC", Ecosystem.FABRIC.name());
-		assertEquals("FORGE", Ecosystem.FORGE.name());
 		assertEquals("NEOFORGE", Ecosystem.NEOFORGE.name());
 	}
 
-	/**
-	 * The config id is NOT the constant name for traditional Forge. The player-facing override file has always
-	 * spelled it {@code minecraftforge}, and that file is the player's — the kernel renamed its constant, not
-	 * their config. Reading it with {@code valueOf} instead of {@link Ecosystem#parse} is a bug that has already
-	 * happened once.
-	 */
 	@Test
-	void theConfigIdKeepsThePlayersSpellingForTraditionalForge() {
-		assertEquals("minecraftforge", Ecosystem.FORGE.configId());
+	void theConfigIdIsTheConstantName() {
 		assertEquals("neoforge", Ecosystem.NEOFORGE.configId());
 		assertEquals("fabric", Ecosystem.FABRIC.configId());
-
-		assertEquals(Ecosystem.FORGE, Ecosystem.parse("minecraftforge"));
-		assertEquals(Ecosystem.FORGE, Ecosystem.parse("forge"));
-		assertEquals(Ecosystem.FORGE, Ecosystem.parse("  MinecraftForge "));
 	}
 
+	/**
+	 * Traditional MinecraftForge names an ecosystem this loader no longer runs; parse must answer null rather
+	 * than guess, so a stale config value is reported as unknown instead of loading something.
+	 */
 	@Test
 	void anUnrecognisedSpellingIsNullRatherThanAGuess() {
+		assertNull(Ecosystem.parse("minecraftforge"));
+		assertNull(Ecosystem.parse("forge"));
 		assertNull(Ecosystem.parse("quilt"));
 		assertNull(Ecosystem.parse(null));
 		assertNull(Ecosystem.parse(""));
 	}
 
 	/**
-	 * The family split is what decides whether a mod is driven by the Forge-family lifecycle at all, and the two
-	 * Forge families are on the same side of it however different their packages are.
+	 * The family split is what decides whether a mod is driven by the Forge-family lifecycle at all.
 	 */
 	@Test
-	void bothForgeFamiliesAreOneFamilyAndFabricIsNot() {
-		assertTrue(Ecosystem.FORGE.isForgeFamily());
+	void neoForgeIsTheForgeFamilyAndFabricIsNot() {
 		assertTrue(Ecosystem.NEOFORGE.isForgeFamily());
 		assertFalse(Ecosystem.FABRIC.isForgeFamily());
 	}

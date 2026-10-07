@@ -23,17 +23,17 @@ import net.forbric.kernel.util.ByteScan;
 import net.forbric.kernel.util.ForbricLog;
 
 /**
- * Names the mods that ask for a capability system the merged game does not have.
+ * Names the mods that ask for a capability system this game does not have.
  *
  * <h2>What is missing, and why this is a warning rather than a repair</h2>
  *
  * <p>Traditional MinecraftForge attaches capabilities — item handlers, fluid tanks, energy storage — to entities,
- * block entities and levels through a provider on a common superclass. The merge puts those three root types
- * under NeoForge's attachment system instead, so that superclass and its storage are gone. A mod calling
- * {@code getCapability} therefore has nothing to call it on.
+ * block entities and levels through a provider on a common superclass. A Forbric instance carries no
+ * MinecraftForge at all, so that superclass and its storage are gone. A mod calling {@code getCapability}
+ * therefore has nothing to call it on.
  *
  * <p>Attaching capabilities for real means giving those root types a provider, which is a change to how the
- * merge builds them, not something a transformer can add afterwards. Until then the honest thing is to say which
+ * game is built, not something a transformer can add afterwards. Until then the honest thing is to say which
  * mods are affected, because the failure otherwise arrives as a missing-method error from inside the mod, on a
  * line the player cannot connect to anything.
  *
@@ -66,31 +66,19 @@ public final class CapabilityUseAudit {
 	}
 
 	/** One line naming every affected mod, or nothing at all when none is. */
-	/** The three roots the composition shim must have reached before mod loading for the feature to exist. */
-	static final Set<String> ROOTS = Set.of("net/minecraft/world/entity/Entity",
-			"net/minecraft/world/level/block/entity/BlockEntity", "net/minecraft/world/level/Level");
-
 	/**
-	 * With the shim on and every root composed, one INFO line; otherwise every mod in the jars that use the
-	 * capability package is marked DEGRADED by id and the WARN names the mods, not a count. Attribution goes
-	 * through the catalog by jar name; {@link net.forbric.api.ModCatalog#mark} drops what it does not know.
+	 * With MinecraftForge gone this instance carries no capability composition at all, so every mod in the jars
+	 * that use the capability package is marked DEGRADED by id and the WARN names the mods, not a count.
+	 * Attribution goes through the catalog by jar name; {@link net.forbric.api.ModCatalog#mark} drops what it
+	 * does not know.
 	 */
-	public static void report(boolean shimActive, Set<String> composedRoots) {
+	public static void report() {
 		Set<String> users;
 		synchronized (USERS) {
 			if (USERS.isEmpty()) return;
 			users = Set.copyOf(USERS);
 		}
-		Set<String> missing = new LinkedHashSet<>(ROOTS);
-		missing.removeAll(composedRoots);
-		if (shimActive && missing.isEmpty()) {
-			ForbricLog.info("[Forbric/Capabilities] %d mod jar(s) use MinecraftForge's capability system — composed into "
-					+ "Entity/BlockEntity/Level (ServerLevel and LevelChunk when the world loads): %s", users.size(), users);
-			return;
-		}
-		String why = shimActive
-				? "this instance did not compose MinecraftForge capabilities into " + simple(missing)
-				: "-Dforbric.forgeCapabilities=off: this instance does not carry MinecraftForge capabilities";
+		String why = "this instance does not carry MinecraftForge capabilities";
 		java.util.List<String> named = new java.util.ArrayList<>();
 		for (net.forbric.api.ModCatalog.Entry entry : net.forbric.api.ModCatalog.everything()) {
 			if (entry.jar() == null || !users.contains(entry.jar())) continue;
@@ -100,12 +88,6 @@ public final class CapabilityUseAudit {
 		}
 		ForbricLog.warn("[Forbric/Capabilities] %d mod jar(s) use MinecraftForge's capability system and will find it "
 				+ "inert — %s. Marked DEGRADED: %s (jars: %s)", users.size(), why, named, users);
-	}
-
-	private static java.util.List<String> simple(Set<String> internal) {
-		java.util.List<String> out = new java.util.ArrayList<>();
-		for (String name : internal) out.add(name.substring(name.lastIndexOf('/') + 1));
-		return out;
 	}
 
 	/** The jars recorded so far. Package-private: the report is the product; this is for the test. */

@@ -39,11 +39,8 @@ import net.minecraft.server.packs.resources.ReloadableResourceManager;
  * window. Until then {@code getResource} answers empty for everything, vanilla assets included.
  *
  * <p>NeoForge lives with that: its {@code ClientModLoader.finish()} is called from the same place, before the
- * reload, so a NeoForge mod reading a resource in client setup gets nothing there too. <b>MinecraftForge does
- * not.</b> Its {@code ClientModLoader.onResourceReload} is itself a {@code PreparableReloadListener}: mod loading,
- * {@code FMLClientSetupEvent} and the SIDED_SETUP deferred queue all run INSIDE the first reload, by which point
- * the manager holds its packs. The kernel runs one window for both families, so a MinecraftForge mod written
- * against that guarantee met an empty manager.
+ * reload, so a NeoForge mod reading a resource in client setup gets nothing there too. A Fabric mod loaded in the
+ * kernel's same early window met the same empty manager and had no reason to expect it.
  *
  * <p>Xaero's World Map is what found it. Its deferred client-setup work calls
  * {@code getResourceManager().getResource(xaeroworldmap:vanilla_states.dat).get()} with no {@code isPresent}
@@ -59,8 +56,8 @@ import net.minecraft.server.packs.resources.ReloadableResourceManager;
  * vanilla closing the manager it replaces closes exactly them.
  *
  * <p>It is a LENIENCY, not a restoration of vanilla behaviour: on genuine NeoForge those reads would still find
- * nothing. Serving the resource cannot break a mod that did not ask for it, and it is what a MinecraftForge mod
- * is entitled to. {@code -Dforbric.clientResourcePreload=off} goes back to the empty manager.
+ * nothing. Serving the resource cannot break a mod that did not ask for it.
+ * {@code -Dforbric.clientResourcePreload=off} goes back to the empty manager.
  */
 public final class KernelClientResources {
 	public static final String PROPERTY = "forbric.clientResourcePreload";
@@ -100,8 +97,8 @@ public final class KernelClientResources {
 			ForbricLog.info("[Forbric/ClientResources] %d namespace(s) visible; the carriers' own: %s",
 					manager.getNamespaces().size(),
 					// Sorted: getNamespaces returns a Set, and an assertion on an unordered line is a flake.
-					manager.getNamespaces().stream().filter(n -> n.equals("neoforge") || n.equals("forge"))
-							.sorted().toList());
+						manager.getNamespaces().stream().filter(n -> n.equals("neoforge"))
+								.sorted().toList());
 			return packs.size();
 		} catch (Throwable t) {
 			ForbricLog.debug("[Forbric/ClientResources] could not preload the client resource manager: %s",

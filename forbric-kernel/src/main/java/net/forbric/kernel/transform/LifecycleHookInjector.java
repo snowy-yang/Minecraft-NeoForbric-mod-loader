@@ -115,7 +115,6 @@ public final class LifecycleHookInjector implements ClassTransformer {
 	// Same descriptor as the hook — keep the boolean on the stack, plain owner+name swap.
 	private static final Trigger[] SERVER_TRIGGERS = {
 			new Trigger(ForeignType.SERVER_MOD_LOADER.internal(Ecosystem.NEOFORGE), "load", "(Z)V", "onServerModLoading", 0),
-			new Trigger(ForeignType.SERVER_MOD_LOADER.internal(Ecosystem.FORGE), "load", "()V", "onServerModLoadingNoArg", 0),
 	};
 
 	// Client trigger: ClientModLoader.begin()V in net.minecraft.client.main.Main.main — the EXACT client analogue of
@@ -131,7 +130,6 @@ public final class LifecycleHookInjector implements ClassTransformer {
 	private static final String BEGIN = "begin";
 	private static final Trigger[] CLIENT_TRIGGERS = {
 			new Trigger(ForeignType.CLIENT_MOD_LOADER.internal(Ecosystem.NEOFORGE), BEGIN, "()V", "onClientModLoading", 0),
-			new Trigger(ForeignType.CLIENT_MOD_LOADER.internal(Ecosystem.FORGE), BEGIN, "()V", "onClientModLoading", 0),
 	};
 
 	// The class + method carrying the trigger to rewrite. Server: Main.main. Client: Main.main (client entry), where

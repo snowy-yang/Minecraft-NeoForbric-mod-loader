@@ -9,7 +9,7 @@ import net.forbric.kernel.util.ForbricLog;
 import net.forbric.api.Ecosystem;
 import net.forbric.api.ForeignType;
 
-/** Runs Fabric's original veto before each carrier's fluid interaction, retaining all native scheduling. */
+/** Runs Fabric's original veto before the carrier's fluid interaction, retaining all native scheduling. */
 public final class FabricFluidFlowMixinAdapter {
 	public static final String PROPERTY = "forbric.fabricFluidFlow";
 	private static final String MIXIN = "net/fabricmc/fabric/mixin/block/LiquidBlockMixin";
@@ -38,7 +38,7 @@ public final class FabricFluidFlowMixinAdapter {
 			for (AbstractInsnNode i : host.instructions) if (i instanceof MethodInsnNode call
 					&& call.getOpcode() == Opcodes.INVOKESTATIC && call.name.equals("canInteract")
 					&& call.desc.equals("(" + LEVEL + POS + ")Z")
-					&& Set.of(ForeignType.FLUID_INTERACTION_REGISTRY.internal(Ecosystem.FORGE),ForeignType.FLUID_INTERACTION_REGISTRY.internal(Ecosystem.NEOFORGE)).contains(call.owner)) matches.add(call);
+					&& call.owner.equals(ForeignType.FLUID_INTERACTION_REGISTRY.internal(Ecosystem.NEOFORGE))) matches.add(call);
 			if (matches.size() != 1) return 0;
 			hosts.add(host); nativeCalls.add(matches.getFirst());
 		}

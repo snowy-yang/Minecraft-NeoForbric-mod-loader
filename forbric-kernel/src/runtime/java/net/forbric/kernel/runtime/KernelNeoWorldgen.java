@@ -42,20 +42,19 @@ import net.forbric.kernel.util.ForbricLog;
 import net.forbric.kernel.util.Reflect;
 
 /**
- * The three NeoForge worldgen mechanisms the byte merge left with no driver, and their guards.
+ * The three NeoForge worldgen mechanisms the kernel's own boot leaves with no driver, and their guards.
  *
  * <h2>Data maps</h2>
  *
  * <p>NeoForge loads its data maps from a {@code DataMapLoader} that genuine NeoForge attaches to the server's
- * resource reload, in the patched {@code ReloadableServerResources}. The merge kept MinecraftForge's version of
- * that class, and a constant-pool scan of the whole merged base finds {@code DataMapLoader} named by NOTHING —
- * so no data map has ever been loaded in a Forbric instance. That is ten built-ins (compostables, furnace fuels,
+ * resource reload, in the patched {@code ReloadableServerResources} — an attachment the kernel's own reload path
+ * never runs, so no data map would be loaded in a Forbric instance. That is ten built-ins (compostables, furnace fuels,
  * oxidizables, waxables, strippables, parrot imitations, vibration frequencies, villager gifts, villager
  * distances, monster-room mobs) plus every data map any NeoForge mod declares, all silently empty.
  *
  * <h2>Monster rooms</h2>
  *
- * <p>The visible half of that. The merged {@code MonsterRoomFeature.randomEntityId} is two instructions —
+ * <p>The visible half of that. {@code MonsterRoomFeature.randomEntityId} is two instructions —
  * {@code invokestatic MonsterRoomHooks.getRandomMonsterRoomMob} — reading a static {@code WeightedList} that only
  * a {@code DataMapsUpdatedEvent} listener fills, so it was null and threw. The kernel had answered that by
  * neutering {@code MonsterRoomFeature.place} outright, which means NO dungeon, therefore no spawner and no
@@ -236,8 +235,8 @@ public final class KernelNeoWorldgen {
 	}
 
 	/**
-	 * Everything NeoForge does at {@code handleServerAboutToStart} that the merge left with no driver, in the
-	 * order genuine NeoForge does it.
+	 * Everything NeoForge does at {@code handleServerAboutToStart} that the kernel's own boot leaves with no
+	 * driver, in the order genuine NeoForge does it.
 	 *
 	 * <p>This replaces the {@code runModifiers} call inside that method, which is the earliest kernel-controlled
 	 * point on the server-start path and — importantly — is still AHEAD of {@code ServerAboutToStartEvent}. Data
@@ -264,9 +263,6 @@ public final class KernelNeoWorldgen {
 	private static void applyBiomeAndStructureModifiers(MinecraftServer server) {
 		int biome = countOrMinusOne(server, NeoForgeRegistries.Keys.BIOME_MODIFIERS);
 		int structure = countOrMinusOne(server, NeoForgeRegistries.Keys.STRUCTURE_MODIFIERS);
-		// MinecraftForge's modifiers ride inside this same pass (ForgeWorldModifierInjector splices them into the
-		// lists runModifiers materialises); the round-trip audit decides beforehand whether they may.
-		KernelForgeWorldgen.auditRoundTrip(server);
 		try {
 			Method runModifiers =
 					ServerLifecycleHooks.class.getDeclaredMethod("runModifiers", MinecraftServer.class);
@@ -275,7 +271,6 @@ public final class KernelNeoWorldgen {
 			ForbricLog.info("[Forbric/Worldgen] applied NeoForge's %d biome modifier(s) and %d structure "
 					+ "modifier(s) — the kernel used to neuter this outright because its datapack registries were "
 					+ "not declared", biome, structure);
-			KernelForgeWorldgen.summarize();
 		} catch (Throwable t) {
 			ForbricLog.warn("[Forbric/Worldgen] NeoForge's biome/structure modifiers did not apply — "
 					+ biome + " biome and " + structure + " structure modifier(s) were loaded and none of them "

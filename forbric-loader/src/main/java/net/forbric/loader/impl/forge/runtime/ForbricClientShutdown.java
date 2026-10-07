@@ -102,7 +102,6 @@ public final class ForbricClientShutdown {
 		List<String> stopped = new ArrayList<>();
 		synchronized (STOPPED) {
 			stopNightconfigDefaultInstance(cl, stopped);
-			stopForgeHandlerWatchers(cl, stopped);
 		}
 		return stopped;
 	}

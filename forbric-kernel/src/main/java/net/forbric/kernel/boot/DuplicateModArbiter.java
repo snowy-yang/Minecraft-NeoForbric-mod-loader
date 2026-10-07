@@ -898,7 +898,7 @@ public final class DuplicateModArbiter {
 
 	/** See {@link #nestedPreference()} — both halves of this order are a measured defect, one each way. */
 	private static final List<Ecosystem> NESTED_DEFAULT =
-			List.of(Ecosystem.NEOFORGE, Ecosystem.FABRIC, Ecosystem.FORGE);
+			List.of(Ecosystem.NEOFORGE, Ecosystem.FABRIC);
 
 	/** {@code -Dforbric.modOwner=sodium=fabric,lithostitched=neoforge} */
 	private static Ecosystem overrideFor(String modId) {

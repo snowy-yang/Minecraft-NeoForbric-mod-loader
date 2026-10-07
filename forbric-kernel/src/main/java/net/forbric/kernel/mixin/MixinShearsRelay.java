@@ -24,12 +24,11 @@ import org.objectweb.asm.tree.VarInsnNode;
  *
  * <p>Vanilla decides shearing with {@code stack.is(Items.SHEARS)} in six places: carving a pumpkin, disarming tripwire,
  * harvesting a beehive, shearing a sheep, a snow golem and a mooshroom. The merged bodies ask the stack instead —
- * NeoForge's {@code canPerformAction(ItemAbilities.SHEARS_*)} in the three blocks, MinecraftForge's
- * {@code canPerformAction(ToolActions.SHEARS_HARVEST)} in the three mobs. BCLib wraps each vanilla call
+ * NeoForge's {@code canPerformAction(ItemAbilities.SHEARS_*)} in the three blocks. BCLib wraps each vanilla call
  * ({@code original || tagged c:tools/shear or a mineable/shears tool}) so a modded shears item that only carries the tag
- * works; on the merged base four of those wraps had nothing to bind to, and the beehive and mooshroom ones bound only to
- * those methods' other {@code is} calls (glass bottle, bowl), where they do nothing. A tag-only shears item carved,
- * sheared and disarmed nothing.
+ * works; on the merged base the pumpkin and tripwire wraps had nothing to bind to, and the beehive one bound only to
+ * that method's other {@code is} calls (glass bottle), where it does nothing. A tag-only shears item carved,
+ * disarmed and harvested nothing.
  *
  * <p>For a handler in a row of {@link #ROWS}, a new {@code @WrapOperation} on the carrier's call hands the handler the
  * question it was written for: its receiver, {@code Items.SHEARS}, and an {@code Operation} ({@code KernelShears.relay})
@@ -40,7 +39,7 @@ import org.objectweb.asm.tree.VarInsnNode;
  * method the handler moves (renamed aside, its injector removed, like MixinWrapOperationShim); where one is, the handler
  * stays bound to it and a copy of its body answers the carrier's call.
  *
- * <p>Only a Fabric mod's handler — NeoForge's and MinecraftForge's mods were written against the carrier call — and only
+ * <p>Only a Fabric mod's handler — NeoForge's mods were written against the carrier call — and only
  * the reviewed shape: a {@code @WrapOperation} on {@code ItemStack.is(Object)Z} with one selector naming a row's method,
  * no ordinal, slice or {@code @Group}, and a handler that is exactly {@code (ItemStack, Object, Operation) → boolean}
  * with no sugar, of the target method's static-ness. The merged method must make the row's carrier call exactly once,
@@ -58,15 +57,13 @@ public final class MixinShearsRelay {
 	private static final String GROUP = "Lorg/spongepowered/asm/mixin/injection/Group;";
 	private static final String ABILITIES = "net/neoforged/neoforge/common/ItemAbilities";
 	private static final String ABILITY = "Lnet/neoforged/neoforge/common/ItemAbility;";
-	private static final String TOOL_ACTIONS = "net/minecraftforge/common/ToolActions";
-	private static final String TOOL_ACTION = "Lnet/minecraftforge/common/ToolAction;";
 
 	/**
 	 * A vanilla {@code stack.is(Items.SHEARS)} the merge replaced with {@code stack.canPerformAction(constant)}.
 	 *
 	 * @param target  the class (internal name)
 	 * @param method  the method's name; the merged class has one of that name
-	 * @param owner   the constant's owner, {@link #ABILITIES} or {@link #TOOL_ACTIONS}
+	 * @param owner   the constant's owner, {@link #ABILITIES}
 	 * @param field   the constant
 	 * @param type    the constant's descriptor, which is also the carrier call's one parameter
 	 * @param because why the carrier's question is the vanilla one, asked the carrier's way
@@ -79,18 +76,11 @@ public final class MixinShearsRelay {
 
 	private static final String NEO = "NeoForge's patch asks the stack for the shears ability ShearsItem declares, the same "
 			+ "question vanilla's is(SHEARS) asked, extended to any item that declares it";
-	private static final String FORGE = "MinecraftForge's patch asks the stack for SHEARS_HARVEST, the ToolAction form of vanilla's "
-			+ "is(SHEARS). The merge dropped MinecraftForge's ShearsItem override, so the carrier says no even for vanilla shears "
-			+ "(they shear through NeoForge's ShearsItem.interactLivingEntity instead); a relayed handler that says yes — BCLib's "
-			+ "does for vanilla shears too — shears here, on vanilla's path";
 
 	static final List<Row> ROWS = List.of(
 			new Row("net/minecraft/world/level/block/PumpkinBlock", "useItemOn", ABILITIES, "SHEARS_CARVE", ABILITY, NEO),
 			new Row("net/minecraft/world/level/block/TripWireBlock", "playerWillDestroy", ABILITIES, "SHEARS_DISARM", ABILITY, NEO),
-			new Row("net/minecraft/world/level/block/BeehiveBlock", "useItemOn", ABILITIES, "SHEARS_HARVEST", ABILITY, NEO),
-			new Row("net/minecraft/world/entity/animal/sheep/Sheep", "mobInteract", TOOL_ACTIONS, "SHEARS_HARVEST", TOOL_ACTION, FORGE),
-			new Row("net/minecraft/world/entity/animal/golem/SnowGolem", "mobInteract", TOOL_ACTIONS, "SHEARS_HARVEST", TOOL_ACTION, FORGE),
-			new Row("net/minecraft/world/entity/animal/cow/MushroomCow", "mobInteract", TOOL_ACTIONS, "SHEARS_HARVEST", TOOL_ACTION, FORGE));
+			new Row("net/minecraft/world/level/block/BeehiveBlock", "useItemOn", ABILITIES, "SHEARS_HARVEST", ABILITY, NEO));
 
 	private MixinShearsRelay() {
 	}

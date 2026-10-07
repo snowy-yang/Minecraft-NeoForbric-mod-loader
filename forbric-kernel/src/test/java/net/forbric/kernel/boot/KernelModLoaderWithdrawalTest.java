@@ -285,7 +285,7 @@ class KernelModLoaderWithdrawalTest {
 		// see its ids at all.
 		Set<String> otherSide = new LinkedHashSet<>();
 		Map<String, List<String>> failed = new LinkedHashMap<>();
-		KernelModLoader.recordNeoOutcome(new ModClassInfo("demo.ForgeMod", "demo", Ecosystem.FORGE), true,
+		KernelModLoader.recordNeoOutcome(new ModClassInfo("demo.ForgeMod", "demo", Ecosystem.NEOFORGE), true,
 				new RuntimeException("boom"), otherSide, failed);
 		assertTrue(failed.isEmpty());
 		assertTrue(otherSide.isEmpty());

@@ -44,17 +44,17 @@ class KernelEventSubscribersTest {
 		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
 		try {
 			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(Ecosystem.FORGE, "broken", "B", "1", "", java.util.List.of(), "b.jar", "", ""),
-					new net.forbric.api.ModCatalog.Entry(Ecosystem.FORGE, "bruised", "C", "1", "", java.util.List.of(), "c.jar", "", "")));
+					new net.forbric.api.ModCatalog.Entry(Ecosystem.NEOFORGE, "broken", "B", "1", "", java.util.List.of(), "b.jar", "", ""),
+					new net.forbric.api.ModCatalog.Entry(Ecosystem.NEOFORGE, "bruised", "C", "1", "", java.util.List.of(), "c.jar", "", "")));
 			net.forbric.api.ModCatalog.mark("broken", net.forbric.api.ModCatalog.Status.FAILED, "its @Mod constructor threw");
 			net.forbric.api.ModCatalog.mark("bruised", net.forbric.api.ModCatalog.Status.DEGRADED, "it threw during common setup");
 			assertTrue(KernelEventSubscribers.didNotFinishLoading("broken"));
 			assertFalse(KernelEventSubscribers.didNotFinishLoading("bruised"), "DEGRADED still gets its listeners");
 			// wthit's shape: a second id in the SAME jar as the failed one is skipped too.
 			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(Ecosystem.FORGE, "waila", "waila", "1", "", java.util.List.of(), "wthit.jar", "", ""),
-					new net.forbric.api.ModCatalog.Entry(Ecosystem.FORGE, "wthit", "wthit", "1", "", java.util.List.of(), "wthit.jar", "", ""),
-					new net.forbric.api.ModCatalog.Entry(Ecosystem.FORGE, "other", "other", "1", "", java.util.List.of(), "other.jar", "", "")));
+					new net.forbric.api.ModCatalog.Entry(Ecosystem.NEOFORGE, "waila", "waila", "1", "", java.util.List.of(), "wthit.jar", "", ""),
+					new net.forbric.api.ModCatalog.Entry(Ecosystem.NEOFORGE, "wthit", "wthit", "1", "", java.util.List.of(), "wthit.jar", "", ""),
+					new net.forbric.api.ModCatalog.Entry(Ecosystem.NEOFORGE, "other", "other", "1", "", java.util.List.of(), "other.jar", "", "")));
 			net.forbric.api.ModCatalog.mark("waila", net.forbric.api.ModCatalog.Status.FAILED, "its @Mod constructor threw");
 			assertTrue(KernelEventSubscribers.didNotFinishLoading("wthit"), "shares the jar with a failed mod");
 			assertFalse(KernelEventSubscribers.didNotFinishLoading("other"));
@@ -162,8 +162,8 @@ class KernelEventSubscribersTest {
 	 */
 	@Test
 	void collectsTheEventTypesASubscriberWaitsOn() {
-		var sub = KernelEventSubscribers.scanClassBytes(subscriberListening("com/example/Events", EBS_FORGE,
-				"Lnet/minecraftforge/eventbus/api/listener/SubscribeEvent;",
+		var sub = KernelEventSubscribers.scanClassBytes(subscriberListening("com/example/Events", EBS_NEO,
+				"Lnet/neoforged/bus/api/SubscribeEvent;",
 				"net/minecraftforge/event/ServerChatEvent",
 				"net/minecraftforge/event/level/BlockEvent$BreakEvent"));
 
@@ -181,7 +181,7 @@ class KernelEventSubscribersTest {
 	void ignoresAOneArgMethodThatIsNotSubscribed() {
 		ClassWriter cw = new ClassWriter(0);
 		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, "com/example/Plain", null, "java/lang/Object", null);
-		annotate(cw, EBS_FORGE, "example", null, DIST_FORGE);
+		annotate(cw, EBS_NEO, "example", null, DIST_FORGE);
 		emit(cw, "helper", "net/minecraftforge/event/ServerChatEvent", null);
 		emit(cw, "deprecatedHelper", "net/minecraftforge/event/level/BlockEvent$BreakEvent",
 				"Ljava/lang/Deprecated;");
@@ -207,11 +207,11 @@ class KernelEventSubscribersTest {
 	@Test
 	void keepsWhichFamilyDeclaredTheSubscriber() {
 		var forge = KernelEventSubscribers.scanClassBytes(
-				subscriber("com/example/ForgeEvents", EBS_FORGE, "example", null, DIST_FORGE));
+				subscriber("com/example/ForgeEvents", EBS_NEO, "example", null, DIST_FORGE));
 		var neo = KernelEventSubscribers.scanClassBytes(
 				subscriber("com/example/NeoEvents", EBS_NEO, "example", null, DIST_NEO));
 
-		assertEquals(Ecosystem.FORGE, forge.family());
+		assertEquals(Ecosystem.NEOFORGE, forge.family());
 		assertEquals(Ecosystem.NEOFORGE, neo.family());
 		assertEquals("com.example.ForgeEvents", forge.className());
 	}
@@ -231,11 +231,11 @@ class KernelEventSubscribersTest {
 		// both would double every listener; first-declared wins.
 		ClassWriter cw = new ClassWriter(0);
 		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC, "com/example/BothEvents", null, "java/lang/Object", null);
-		annotate(cw, EBS_FORGE, "example", null, DIST_FORGE);
+		annotate(cw, EBS_NEO, "example", null, DIST_FORGE);
 		annotate(cw, EBS_NEO, "example", null, DIST_NEO);
 		cw.visitEnd();
 
-		assertEquals(Ecosystem.FORGE,
+		assertEquals(Ecosystem.NEOFORGE,
 				KernelEventSubscribers.scanClassBytes(cw.toByteArray()).family());
 	}
 
@@ -244,7 +244,7 @@ class KernelEventSubscribersTest {
 	@Test
 	void capturesDistsModIdAndBus() {
 		var s = KernelEventSubscribers.scanClassBytes(
-				subscriber("com/example/ClientOnly", EBS_FORGE, "geckolib", "MOD", DIST_FORGE, "CLIENT"));
+				subscriber("com/example/ClientOnly", EBS_NEO, "geckolib", "MOD", DIST_FORGE, "CLIENT"));
 
 		assertEquals(Set.of("CLIENT"), s.dists());
 		assertEquals("geckolib", s.modId());
@@ -256,7 +256,7 @@ class KernelEventSubscribersTest {
 		// Forge's own default. It is the value that routes per event type, so defaulting to FORGE instead would
 		// strand every mod-bus listener in the class.
 		var s = KernelEventSubscribers.scanClassBytes(
-				subscriber("com/example/Events", EBS_FORGE, null, null, DIST_FORGE));
+				subscriber("com/example/Events", EBS_NEO, null, null, DIST_FORGE));
 
 		assertEquals("BOTH", s.bus());
 		assertNull(s.modId());
@@ -326,9 +326,9 @@ class KernelEventSubscribersTest {
 				new ModAnnotationScanner.ModClassInfo("a.One", "one", Ecosystem.NEOFORGE),
 				new ModAnnotationScanner.ModClassInfo("a.Two", "two", Ecosystem.NEOFORGE)), classless),
 				"two @Mod classes and no name is still ambiguous");
-		assertNull(KernelEventSubscribers.ownerModId(new KernelEventSubscribers.Subscriber("a.Events",
-				Ecosystem.FORGE, Set.of(), null, null), java.util.List.of(), classless),
-				"MinecraftForge builds no container for a javafml mod without a class");
+		assertEquals("data_only", KernelEventSubscribers.ownerModId(new KernelEventSubscribers.Subscriber("a.Events",
+				Ecosystem.NEOFORGE, Set.of(), null, null), java.util.List.of(), classless),
+				"the classless NeoForge mod's container owns its unnamed subscriber");
 	}
 
 	@Test

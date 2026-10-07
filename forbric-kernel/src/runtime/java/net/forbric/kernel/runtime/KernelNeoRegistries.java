@@ -45,8 +45,8 @@ import net.neoforged.neoforge.registries.RegisterEvent;
  * The game side of NeoForge's registry phase: {@code NewRegistryEvent}, then {@code RegisterEvent} for every
  * registry, in NeoForge's own order.
  *
- * <p>The MinecraftForge twin is {@link KernelForgeRegistries}, and as there the boot side keeps what is policy —
- * which buses, whether to honour NeoForge's order, and the unfreeze/freeze window all of this runs inside.
+ * <p>The boot side keeps what is policy — which buses, whether to honour NeoForge's order, and the
+ * unfreeze/freeze window all of this runs inside.
  *
  * <h2>What is still reflective</h2>
  *
@@ -183,7 +183,7 @@ public final class KernelNeoRegistries {
 	 * registry). A {@code DeferredRegister}'s {@code DeferredHolder}s resolve during their OWN registry's event,
 	 * so a mod registering {@code minecraft:item} must see every mod's blocks already registered — which only
 	 * holds if all buses fire for BLOCK before any fires for ITEM. NeoForge content is explicitly namespaced by
-	 * {@code DeferredRegister}, so unlike the MinecraftForge twin there is no active container to track here.
+	 * {@code DeferredRegister}, so there is no active container to track here.
 	 *
 	 * <p>One mod's listener must not take the window down with it. Genuine NeoForge wraps each container's
 	 * dispatch and collects the failure as a {@code ModLoadingIssue}, so the other mods AND the baseline still

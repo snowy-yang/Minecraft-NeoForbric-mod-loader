@@ -129,7 +129,7 @@ class NestedCandidateSelectionTest {
 		var decision = decide(); var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(JointCandidateSelector.Status.SOLVED, plan.selection().status());
 		assertEquals(1, plan.nestedFiles().size()); assertEquals("lib-1.jar", plan.nestedFiles().getFirst().getFileName().toString());
-		System.setProperty("forbric.nestedDupePreference", "fabric,minecraftforge,neoforge");
+		System.setProperty("forbric.nestedDupePreference", "fabric,neoforge");
 		assertSame(decision, DuplicateModArbiter.arbitrateNested(EnvType.CLIENT, plan.nestedFiles()));
 		assertTrue(CompatibilityFindings.confirmedRequired().isEmpty());
 	}
@@ -254,14 +254,14 @@ class NestedCandidateSelectionTest {
 		assertEquals(net.forbric.api.Ecosystem.NEOFORGE, selectedFamily("xaerolib"));
 		assertTrue(CompatibilityFindings.confirmedRequired().isEmpty(), () -> CompatibilityFindings.all().toString());
 		// The order is a preference among satisfying builds, not an artifact the first-sorted identity forced.
-		reset(); System.setProperty("forbric.nestedDupePreference", "minecraftforge,neoforge,fabric");
+		reset(); System.setProperty("forbric.nestedDupePreference", "neoforge,fabric");
 		xaeroPair(); decide();
 		assertEquals(JointCandidateSelector.Status.SOLVED, DuplicateModArbiter.currentPlan().selection().status());
-		assertEquals(net.forbric.api.Ecosystem.FORGE, selectedFamily("xaerolib"));
-		reset(); System.setProperty("forbric.modOwner", "xaerolib=minecraftforge");
+		assertEquals(net.forbric.api.Ecosystem.NEOFORGE, selectedFamily("xaerolib"));
+		reset(); System.setProperty("forbric.modOwner", "xaerolib=neoforge");
 		xaeroPair(); decide();
 		assertEquals(JointCandidateSelector.Status.SOLVED, DuplicateModArbiter.currentPlan().selection().status());
-		assertEquals(net.forbric.api.Ecosystem.FORGE, selectedFamily("xaerolib"));
+		assertEquals(net.forbric.api.Ecosystem.NEOFORGE, selectedFamily("xaerolib"));
 	}
 
 	@Test void aFabricBuildWithoutJarJarMetadataCanStandInForAForgeCoordinate() throws Exception {
@@ -311,29 +311,6 @@ class NestedCandidateSelectionTest {
 		assertEquals("2.0.4", plan.inventory().nodes().get(plan.nestedFiles().getFirst()).claim().versionOf("fabric-screen-api-v1"));
 	}
 
-	@Test void aNestedForgeMixinExtrasNoNewerThanTheKernelsOwnIsNotLoaded() throws Exception {
-		// badpackets-forge nests mixinextras-forge 0.3.5, whose @Mod constructor calls ModList.get(), gone from
-		// MinecraftForge 26.2. MinecraftForge ships 0.5.3 and its JarJar selection closes the nested copy unopened.
-		Map<String, NestedCandidateInventory.Coordinate> coordinate = Map.of("META-INF/jarjar/mixinextras-forge.jar",
-				new NestedCandidateInventory.Coordinate("io.github.llamalad7:mixinextras-forge", "[0.3.5,)", "0.3.5"));
-		for (String nested : List.of("0.3.5", "0.5.4", "0.6.0")) for (String kernel : List.of("0.5.4", "")) {
-			reset(); Files.deleteIfExists(mods().resolve("badpackets.jar"));
-			KernelBundledJars.mixinExtrasVersionForTests(kernel);
-			byte[] wrapper = forge("mixinextras", nested, Map.of(), Map.of(),
-					Map.of("com/llamalad7/mixinextras/platform/forge/MixinExtrasMod.class", type("com/llamalad7/mixinextras/platform/forge/MixinExtrasMod")));
-			install("badpackets.jar", forge("badpackets", "0.12.2", Map.of("META-INF/jarjar/mixinextras-forge.jar", wrapper), coordinate, Map.of()));
-			decide(); var plan = DuplicateModArbiter.currentPlan(); String label = "nested " + nested + ", kernel " + kernel;
-			assertEquals(JointCandidateSelector.Status.SOLVED, plan.selection().status(), label);
-			boolean superseded = !kernel.isEmpty() && !nested.equals("0.6.0");
-			assertEquals(superseded ? 0 : 1, plan.nestedFiles().size(), label);
-			assertTrue(plan.verify(plan.nestedFiles()), label);
-		}
-		// A Fabric mod's own nested mixinextras-fabric is the Fabric dependency graph's business, not this rule's.
-		reset(); KernelBundledJars.mixinExtrasVersionForTests("0.5.4");
-		assertFalse(NestedCandidateInventory.supersededByKernelMixinExtras(new DuplicateModArbiter.Claim(root, net.forbric.api.Ecosystem.FABRIC,
-				List.of("mixinextras"), Map.of("mixinextras", "0.3.5")), "0.5.4"));
-	}
-
 	@Test void twoCopiesOfOneJarJarArtifactKeepTheNewestArtifactVersionWhateverTheirModsTomlSays() throws Exception {
 		// FML keeps the newest in-range artifactVersion of one artifact. Nested mods.toml files often declare the
 		// same literal for every build, or an unresolved ${file.jarVersion}, and the cache directory is a content
@@ -381,18 +358,6 @@ class NestedCandidateSelectionTest {
 		assertTrue(Set.of(first, second).contains(result.unsatisfied().getFirst().consumer()));
 		assertTrue(CompatibilityFindings.all().stream().noneMatch(f -> f.id().contains("addon.mixins.json")),
 				"the addon's own contract is met, so it has no finding");
-	}
-
-	@Test void aStalePinForAnEcosystemWithNoCandidateIsWarnedAboutNotObeyedAtEveryContractsExpense() throws Exception {
-		Path[] jade = jadePair();
-		System.setProperty("forbric.modOwner", "jade=minecraftforge");
-		var decision = decide(); var result = DuplicateModArbiter.currentPlan().selection();
-		assertEquals(JointCandidateSelector.Status.SOLVED, result.status());
-		assertFalse(decision.suppressed(jade[1]));
-		assertTrue(result.unsatisfied().isEmpty());
-		assertTrue(CompatibilityFindings.confirmedRequired().isEmpty(), () -> CompatibilityFindings.all().toString());
-		assertTrue(CompatibilityFindings.all().stream().anyMatch(f -> f.modId().equals("jade")
-				&& f.confidence() == net.forbric.api.CompatibilityFinding.Confidence.SUSPECTED), "the ignored pin stays visible");
 	}
 
 	@Test void theSelectionDoesNotDependOnTheMachinesSpeed() throws Exception {
@@ -609,7 +574,7 @@ class NestedCandidateSelectionTest {
 
 	/** foo 2.0 (Fabric, preferred here) and foo 1.9 (NeoForge); {@code app} declares it cannot run with foo >=2.0. */
 	private Path[] fooPair() throws Exception {
-		System.setProperty("forbric.dupeIdPreference", "fabric,neoforge,minecraftforge");
+		System.setProperty("forbric.dupeIdPreference", "fabric,neoforge");
 		return new Path[] {install("foo-neo.jar", neo("foo", "1.9", Map.of(), Map.of(), Map.of())),
 				install("foo-fabric.jar", fabric("foo", "2.0", Map.of(), "", Map.of()))};
 	}
@@ -646,33 +611,6 @@ class NestedCandidateSelectionTest {
 		assertEquals(JointCandidateSelector.Status.SOLVED, DuplicateModArbiter.currentPlan().selection().status());
 		assertTrue(CompatibilityFindings.confirmedRequired().isEmpty(), "no choice here could avoid it: main loaded it anyway");
 		assertTrue(CompatibilityFindings.all().stream().anyMatch(f -> f.id().equals("arbitration:breaks:foo") && f.modId().equals("app")));
-	}
-
-	/** gate-m19's fixture: Fabric JiJ with no JarJar metadata, MinecraftForge JarJar naming its platform artifact. */
-	private void m19(String range, String artifactVersion) throws Exception {
-		install("forbricnestfab.jar", fabric("forbricnestfab", "1.0.0", Map.of("META-INF/jars/forbricnestlib-fabric.jar",
-				fabric("forbricnestlib", "1.0.0", Map.of(), "", Map.of())), "", Map.of()));
-		install("forbricnestforge.jar", forge("forbricnestforge", "1.0.0", Map.of("META-INF/jarjar/forbricnestlib-forge.jar",
-				forge("forbricnestlib", "1.0.0", Map.of(), Map.of(), Map.of())), Map.of("META-INF/jarjar/forbricnestlib-forge.jar",
-				new NestedCandidateInventory.Coordinate("forbric.nestlib:forbricnestlib-forge", range, artifactVersion)), Map.of()));
-	}
-
-	@Test void theRealM19ShapeFollowsThePreferenceThePinAndTheRange() throws Exception {
-		m19("[1.0.0,)", "1.0.0"); decide();
-		assertEquals(JointCandidateSelector.Status.SOLVED, DuplicateModArbiter.currentPlan().selection().status());
-		assertEquals(net.forbric.api.Ecosystem.FABRIC, selectedFamily("forbricnestlib"));
-		assertTrue(CompatibilityFindings.all().isEmpty(), () -> CompatibilityFindings.all().toString());
-		reset(); System.setProperty("forbric.modOwner", "forbricnestlib=minecraftforge"); m19("[1.0.0,)", "1.0.0"); decide();
-		assertEquals(JointCandidateSelector.Status.SOLVED, DuplicateModArbiter.currentPlan().selection().status());
-		assertEquals(net.forbric.api.Ecosystem.FORGE, selectedFamily("forbricnestlib"));
-		reset(); m19("[2.0.0,)", "2.0.0"); decide();
-		assertEquals(JointCandidateSelector.Status.SOLVED, DuplicateModArbiter.currentPlan().selection().status());
-		assertEquals(net.forbric.api.Ecosystem.FORGE, selectedFamily("forbricnestlib"), "the range, not the preference, decides");
-		reset(); System.setProperty("forbric.modOwner", "forbricnestlib=fabric"); m19("[2.0.0,)", "2.0.0"); decide();
-		assertEquals(JointCandidateSelector.Status.UNSATISFIABLE, DuplicateModArbiter.currentPlan().selection().status());
-		assertEquals(net.forbric.api.Ecosystem.FABRIC, selectedFamily("forbricnestlib"), "the explicit choice is kept and reported");
-		assertTrue(CompatibilityFindings.confirmedRequired().stream().anyMatch(f -> f.id().startsWith("arbitration:jarjar:")
-				&& f.modId().equals("forbricnestforge")), () -> CompatibilityFindings.all().toString());
 	}
 
 	private static byte[] api(String name, int access) {

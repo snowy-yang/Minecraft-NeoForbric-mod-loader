@@ -49,7 +49,6 @@ import net.minecraft.network.chat.FormattedText;
 public final class KernelModListScreen extends Screen {
 	private static final int TAG_FABRIC = 0xFFDBB03B;
 	private static final int TAG_NEOFORGE = 0xFFE5834C;
-	private static final int TAG_FORGE = 0xFF8B9BC4;
 	private static final int DIM = 0xFFA0A0A0;
 	private static final int BRIGHT = 0xFFFFFFFF;
 	/** Panel wash, so mod names stay legible over whatever the world happens to look like behind them. */
@@ -275,8 +274,7 @@ public final class KernelModListScreen extends Screen {
 
 	private static String summary() {
 		String counts = ModCatalog.count(Ecosystem.FABRIC) + " Fabric   "
-				+ ModCatalog.count(Ecosystem.NEOFORGE) + " NeoForge   "
-				+ ModCatalog.count(Ecosystem.FORGE) + " MinecraftForge";
+				+ ModCatalog.count(Ecosystem.NEOFORGE) + " NeoForge";
 		int broken = ModCatalog.failures().size();
 		// "did not finish loading", never "not running": a withdrawn mod's classes ARE loaded and its mixins ARE
 		// applied. Telling a player it is absent sends them to reinstall something that is already there.
@@ -292,7 +290,7 @@ public final class KernelModListScreen extends Screen {
 		return switch (ecosystem) {
 			case FABRIC -> "Fabric";
 			case NEOFORGE -> "NeoForge";
-			case FORGE -> "MinecraftForge";
+			default -> ecosystem.name();
 		};
 	}
 
@@ -300,7 +298,7 @@ public final class KernelModListScreen extends Screen {
 		return switch (ecosystem) {
 			case FABRIC -> TAG_FABRIC;
 			case NEOFORGE -> TAG_NEOFORGE;
-			case FORGE -> TAG_FORGE;
+			default -> BRIGHT;
 		};
 	}
 

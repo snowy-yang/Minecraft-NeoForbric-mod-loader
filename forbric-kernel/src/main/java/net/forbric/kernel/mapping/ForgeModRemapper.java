@@ -133,7 +133,7 @@ public final class ForgeModRemapper {
 
 	/** @see #automaticModuleName(String, Ecosystem) */
 	public static String automaticModuleName(String modId) {
-		return automaticModuleName(modId, Ecosystem.FORGE);
+		return automaticModuleName(modId, Ecosystem.NEOFORGE);
 	}
 
 	/**

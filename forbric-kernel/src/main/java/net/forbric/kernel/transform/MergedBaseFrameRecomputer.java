@@ -100,10 +100,6 @@ public final class MergedBaseFrameRecomputer implements ClassTransformer {
 			"net/minecraftforge/common/capabilities/CapabilityProvider$Entities",
 			"net/minecraftforge/common/capabilities/CapabilityProvider$Levels",
 			"net/minecraftforge/common/capabilities/CapabilityProvider$BlockEntities",
-			// The mirror image, and the reason this is not a MinecraftForge-only repair: one family's PartEntity is
-			// off EnderDragonPart's hierarchy. The merge put it under MinecraftForge's; DragonPartsInjector moves it
-			// under NeoForge's, which every part consumer casts to, so a MinecraftForge mod is the one at risk now.
-			DragonPartsInjector.lostPartEntity(),
 			// Two anonymous-class supers the merge materialised from the other side.
 			"net/minecraft/server/commands/FunctionCommand$FunctionCustomExecutor",
 			"net/minecraft/commands/execution/CustomCommandExecutor$WithErrorHandling");
@@ -115,7 +111,6 @@ public final class MergedBaseFrameRecomputer implements ClassTransformer {
 	 */
 	private static final String[] NEEDLES = {
 			"net/minecraftforge/common/capabilities/CapabilityProvider",
-			DragonPartsInjector.lostPartEntity(),
 			"net/minecraft/server/commands/FunctionCommand$FunctionCustomExecutor",
 			"net/minecraft/commands/execution/CustomCommandExecutor$WithErrorHandling",
 	};
@@ -263,9 +258,6 @@ public final class MergedBaseFrameRecomputer implements ClassTransformer {
 	private String[] header(String type) {
 		return hierarchy.computeIfAbsent(type, name -> {
 			if ("java/lang/Object".equals(name)) return new String[] {null, "0"};
-			// A class the kernel rebases at load time answers with the superclass it is loaded with, not the jar's.
-			String rebased = DragonPartsInjector.rebasedSuperclass(name);
-			if (rebased != null) return new String[] {rebased, "0"};
 			byte[] bytes = classBytes.apply(name + ".class");
 			if (bytes == null) {
 				throw new TypeNotPresentException(name, null);

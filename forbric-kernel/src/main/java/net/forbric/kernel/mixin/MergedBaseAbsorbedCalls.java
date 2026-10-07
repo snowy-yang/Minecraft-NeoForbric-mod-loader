@@ -39,15 +39,14 @@ public final class MergedBaseAbsorbedCalls {
 					"Lorg/joml/Vector4f;set(FFFF)Lorg/joml/Vector4f;",
 					"Lnet/neoforged/neoforge/client/ClientHooks;getFogColor(Lnet/minecraft/client/Camera;FLnet/minecraft/client/multiplayer/"
 							+ "ClientLevel;IFFFFLorg/joml/Vector4f;)V",
-					Set.of(Ecosystem.FABRIC, Ecosystem.FORGE),
+					Set.of(Ecosystem.FABRIC),
 					"the hook first does dest.set(r, g, b, 1) exactly as vanilla's last act did, then applies a fluid type's "
 							+ "modifyFogColor (only with the camera inside the fluid) and posts ViewportEvent.ComputeFogColor; after "
 							+ "it, dest holds vanilla's colour with NeoForge's changes, so puzzleslib's FogEvents.Color listeners "
 							+ "run after NeoForge's instead of on the bare colour -- an ordering choice, not a loss. Restoring a "
 							+ "dest.set before the hook would be discarded by the hook's own set. AFTER the hook is also the "
 							+ "method's return, where TAIL injectors (nuit's) land, so their order against it follows Mixin's "
-							+ "application order where vanilla ran AFTER-set first. MinecraftForge's own jar sets dest after its "
-							+ "ForgeHooksClient.getFogColor the same way, so its mods follow the hook too"));
+							+ "application order where vanilla ran AFTER-set first"));
 
 	private MergedBaseAbsorbedCalls() {
 	}

@@ -30,18 +30,18 @@ class MultiLoaderEntrypointsTest {
 		System.clearProperty(MultiLoaderArbiter.ENTRYPOINT_SWITCH);
 	}
 
-	@Test void aForgeConstructorWinsOverBothLeftoverManifests() throws Exception {
-		Path jar = fixture("forge.jar", "example.ForgeEntry", Map.of("example/ForgeEntry.class",
-				type("example/ForgeEntry", Ecosystem.FORGE, "example", null, false)));
-		assertEquals(Ecosystem.FORGE, MultiLoaderArbiter.ownerOf(jar));
-		assertEquals(List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE, Ecosystem.FABRIC), MultiLoaderArbiter.declaredBy(jar),
+	@Test void anFmlShapedConstructorWinsOverBothManifests() throws Exception {
+		Path jar = fixture("fml.jar", "example.FmlEntry", Map.of("example/FmlEntry.class",
+				type("example/FmlEntry", Ecosystem.NEOFORGE, "example", null, false)));
+		assertEquals(Ecosystem.NEOFORGE, MultiLoaderArbiter.ownerOf(jar));
+		assertEquals(List.of(Ecosystem.NEOFORGE, Ecosystem.FABRIC), MultiLoaderArbiter.declaredBy(jar),
 				"declarations still provide presence aliases; only initialization ownership changes");
-		assertFalse(MultiLoaderArbiter.suppressedFor(jar, Ecosystem.FORGE));
-		assertTrue(MultiLoaderArbiter.suppressedFor(jar, Ecosystem.NEOFORGE));
+		assertFalse(MultiLoaderArbiter.suppressedFor(jar, Ecosystem.NEOFORGE));
+		assertTrue(MultiLoaderArbiter.suppressedFor(jar, Ecosystem.FABRIC));
 		MultiLoaderArbiter.reset();
 		System.setProperty("forbric.multiLoaderPreference", "fabric");
-		assertEquals(Ecosystem.FORGE, MultiLoaderArbiter.ownerOf(jar),
-				"a Forge-only constructor cannot be instantiated by Fabric's default adapter");
+		assertEquals(Ecosystem.NEOFORGE, MultiLoaderArbiter.ownerOf(jar),
+				"an FML-shaped constructor cannot be instantiated by Fabric's default adapter");
 		MultiLoaderArbiter.reset();
 		System.setProperty(MultiLoaderArbiter.ENTRYPOINT_SWITCH, "off");
 		System.clearProperty("forbric.multiLoaderPreference");
@@ -55,11 +55,11 @@ class MultiLoaderEntrypointsTest {
 		assertFalse(MultiLoaderArbiter.suppressedFor(jar, Ecosystem.FABRIC));
 	}
 
-	@Test void aNoArgForgeClassStillDoesNotImplementTheFabricMainContract() throws Exception {
-		Path jar = fixture("wrong-interface.jar", "example.ForgeEntry", Map.of("example/ForgeEntry.class",
-				type("example/ForgeEntry", Ecosystem.FORGE, "example", null, true)));
+	@Test void aNoArgFmlClassIsStillNotTheFabricMainContract() throws Exception {
+		Path jar = fixture("wrong-interface.jar", "example.FmlEntry", Map.of("example/FmlEntry.class",
+				type("example/FmlEntry", Ecosystem.NEOFORGE, "example", null, false)));
 		System.setProperty("forbric.multiLoaderPreference", "fabric");
-		assertEquals(Ecosystem.FORGE, MultiLoaderArbiter.ownerOf(jar));
+		assertEquals(Ecosystem.NEOFORGE, MultiLoaderArbiter.ownerOf(jar));
 	}
 
 	@Test void theFabricContractMayBeInheritedFromAnOwnSuperclass() throws Exception {
@@ -71,20 +71,20 @@ class MultiLoaderEntrypointsTest {
 
 	@Test void preferenceStillChoosesAmongRealImplementations() throws Exception {
 		Path jar = fixture("universal.jar", "example.FabricEntry", Map.of(
-				"example/ForgeEntry.class", type("example/ForgeEntry", Ecosystem.FORGE, "example", null, true),
-				"example/NeoEntry.class", type("example/NeoEntry", Ecosystem.NEOFORGE, "example", null, true),
+				"example/FmlEntry.class", type("example/FmlEntry", Ecosystem.NEOFORGE, "example", null, false),
+				"example/NeoEntry.class", type("example/NeoEntry", Ecosystem.NEOFORGE, "example", null, false),
 				"example/FabricEntry.class", type("example/FabricEntry", null, null, "net/fabricmc/api/ModInitializer", true)));
 		assertEquals(Ecosystem.NEOFORGE, MultiLoaderArbiter.ownerOf(jar));
 		MultiLoaderArbiter.reset();
-		System.setProperty("forbric.multiLoaderPreference", "fabric,minecraftforge,neoforge");
+		System.setProperty("forbric.multiLoaderPreference", "fabric,neoforge");
 		assertEquals(Ecosystem.FABRIC, MultiLoaderArbiter.ownerOf(jar));
 	}
 
 	@Test void anUnrelatedShadedModAnnotationDoesNotValidateTheWrongManifest() throws Exception {
 		Path jar = fixture("shaded.jar", null, Map.of(
-				"example/ForgeEntry.class", type("example/ForgeEntry", Ecosystem.FORGE, "example", null, true),
-				"shaded/Library.class", type("shaded/Library", Ecosystem.NEOFORGE, "another_library", null, true)));
-		assertEquals(Ecosystem.FORGE, MultiLoaderArbiter.ownerOf(jar));
+				"example/FmlEntry.class", type("example/FmlEntry", Ecosystem.NEOFORGE, "example", null, false),
+				"shaded/Library.class", type("shaded/Library", Ecosystem.NEOFORGE, "another_library", null, false)));
+		assertEquals(Ecosystem.NEOFORGE, MultiLoaderArbiter.ownerOf(jar));
 	}
 
 	@Test void dataOnlyJarsKeepTheirExistingPreference() throws Exception {
@@ -110,7 +110,7 @@ class MultiLoaderEntrypointsTest {
 		TestFixtures.require(Fixture.THIRD_PARTY, available, "requires the prepared random baseline jars");
 		for (int i = 0; i < names.size(); i++) {
 			Path jar = mods.resolve(names.get(i));
-			assertEquals(i < 2 ? Ecosystem.FORGE : Ecosystem.FABRIC, MultiLoaderArbiter.ownerOf(jar), names.get(i));
+			assertEquals(i < 2 ? Ecosystem.NEOFORGE : Ecosystem.FABRIC, MultiLoaderArbiter.ownerOf(jar), names.get(i));
 			MultiLoaderArbiter.reset();
 			System.setProperty(MultiLoaderArbiter.ENTRYPOINT_SWITCH, "off");
 			assertEquals(Ecosystem.NEOFORGE, MultiLoaderArbiter.ownerOf(jar), "negative control: " + names.get(i));
@@ -143,7 +143,7 @@ class MultiLoaderEntrypointsTest {
 		out.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, name, null, parent,
 				implemented == null ? null : new String[] {implemented});
 		if (family != null) {
-			String descriptor = family == Ecosystem.FORGE ? "Lnet/minecraftforge/fml/common/Mod;" : "Lnet/neoforged/fml/common/Mod;";
+			String descriptor = "Lnet/neoforged/fml/common/Mod;";
 			var annotation = out.visitAnnotation(descriptor, true); annotation.visit("value", modId); annotation.visitEnd();
 		}
 		var ctor = out.visitMethod(Opcodes.ACC_PUBLIC, "<init>", noArg ? "()V"

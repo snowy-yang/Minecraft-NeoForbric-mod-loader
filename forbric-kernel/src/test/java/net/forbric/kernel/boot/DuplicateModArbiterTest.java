@@ -167,7 +167,7 @@ class DuplicateModArbiterTest {
 		Decision d = DuplicateModArbiter.arbitrate(List.of(
 				claim("/mods/a.jar", Ecosystem.FABRIC, "alpha"),
 				claim("/mods/b.jar", Ecosystem.NEOFORGE, "beta"),
-				claim("/mods/c.jar", Ecosystem.FORGE, "gamma")));
+				claim("/mods/c.jar", Ecosystem.NEOFORGE, "gamma")));
 
 		assertTrue(d.suppressedJars().isEmpty());
 		assertTrue(d.ownerByModId().isEmpty());
@@ -281,16 +281,15 @@ class DuplicateModArbiterTest {
 	}
 
 	@Test
-	void threeWayContestLeavesExactlyOneSurvivor() {
-		System.setProperty("forbric.multiLoaderPreference", "minecraftforge,fabric,neoforge");
+	void aContestLeavesExactlyOneSurvivor() {
+		System.setProperty("forbric.multiLoaderPreference", "neoforge,fabric");
 
 		Decision d = DuplicateModArbiter.arbitrate(List.of(
 				claim("/mods/x-fabric.jar", Ecosystem.FABRIC, "x"),
-				claim("/mods/x-neoforge.jar", Ecosystem.NEOFORGE, "x"),
-				claim("/mods/x-forge.jar", Ecosystem.FORGE, "x")));
+				claim("/mods/x-neoforge.jar", Ecosystem.NEOFORGE, "x")));
 
-		assertEquals(2, d.suppressedJars().size());
-		assertFalse(d.suppressed(Path.of("/mods/x-forge.jar")));
+		assertEquals(1, d.suppressedJars().size());
+		assertFalse(d.suppressed(Path.of("/mods/x-neoforge.jar")));
 	}
 
 	@Test
@@ -360,17 +359,15 @@ class DuplicateModArbiterTest {
 	}
 
 	@Test
-	void aThreeWayContestAliasesBothLosingEcosystems() {
-		System.setProperty("forbric.dupeIdPreference", "minecraftforge,fabric,neoforge");
+	void aContestAliasesTheLosingEcosystem() {
+		System.setProperty("forbric.dupeIdPreference", "neoforge,fabric");
 
 		Decision d = DuplicateModArbiter.arbitrate(List.of(
 				claim("/mods/x-fabric.jar", Ecosystem.FABRIC, "x"),
-				claim("/mods/x-neoforge.jar", Ecosystem.NEOFORGE, "x"),
-				claim("/mods/x-forge.jar", Ecosystem.FORGE, "x")));
+				claim("/mods/x-neoforge.jar", Ecosystem.NEOFORGE, "x")));
 
-		assertEquals(2, d.aliases().size());
+		assertEquals(1, d.aliases().size());
 		assertEquals(1, d.aliasesFor(Ecosystem.FABRIC).size());
-		assertEquals(1, d.aliasesFor(Ecosystem.NEOFORGE).size());
 	}
 
 	@Test

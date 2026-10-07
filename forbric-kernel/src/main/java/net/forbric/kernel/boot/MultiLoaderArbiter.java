@@ -63,7 +63,7 @@ import net.forbric.kernel.util.ForbricLog;
  */
 public final class MultiLoaderArbiter {
 	private static final List<Ecosystem> DEFAULT_PREFERENCE =
-			List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE, Ecosystem.FABRIC);
+			List.of(Ecosystem.NEOFORGE, Ecosystem.FABRIC);
 	static final String ENTRYPOINT_SWITCH = "forbric.multiLoaderEntrypoints";
 
 	/** jar path -> the ecosystem that owns it. Computed once per jar; discovery order is stable. */
@@ -140,10 +140,9 @@ public final class MultiLoaderArbiter {
 		Set<Ecosystem> found = new HashSet<>();
 		try (JarFile zip = new JarFile(jar.toFile())) {
 			List<ModAnnotationScanner.ModClassInfo> annotations = ModAnnotationScanner.scan(jar);
-			for (Ecosystem family : List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE)) {
+			for (Ecosystem family : List.of(Ecosystem.NEOFORGE)) {
 				if (!declared.contains(family)) continue;
-				String manifest = family == Ecosystem.NEOFORGE
-						? ForbricModDiscoverer.NEOFORGE_MANIFEST : ForbricModDiscoverer.FORGE_MANIFEST;
+				String manifest = ForbricModDiscoverer.NEOFORGE_MANIFEST;
 				try (var in = zip.getInputStream(zip.getJarEntry(manifest))) {
 					Set<String> ids = new HashSet<>();
 					for (var mod : ModsTomlParser.parse(in).getMods()) ids.add(mod.getModId());
@@ -234,8 +233,7 @@ public final class MultiLoaderArbiter {
 		List<Ecosystem> declared = new ArrayList<>();
 		try (JarFile zip = new JarFile(jar.toFile())) {
 			if (zip.getEntry(ForbricModDiscoverer.NEOFORGE_MANIFEST) != null) declared.add(Ecosystem.NEOFORGE);
-			if (zip.getEntry(ForbricModDiscoverer.FORGE_MANIFEST) != null) declared.add(Ecosystem.FORGE);
-			if (zip.getEntry(ForbricModDiscoverer.FABRIC_MANIFEST) != null) declared.add(Ecosystem.FABRIC);
+						if (zip.getEntry(ForbricModDiscoverer.FABRIC_MANIFEST) != null) declared.add(Ecosystem.FABRIC);
 		} catch (Throwable t) {
 			ForbricLog.debug("[Forbric/MultiLoader] could not read %s: %s", jar.getFileName(), String.valueOf(t));
 		}

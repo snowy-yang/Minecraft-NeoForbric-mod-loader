@@ -18,7 +18,6 @@ package net.forbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -42,7 +41,7 @@ import net.forbric.kernel.TestFixtures;
 import net.forbric.kernel.TestFixtures.Fixture;
 
 /**
- * Pins {@link ClientPackHookInjector} for BOTH Forge families.
+ * Pins {@link ClientPackHookInjector} on the NeoForge carrier.
  *
  * <p>It replaces the whole body of {@code ClientModLoader.setupModResourcePacks} with a call into the kernel, so
  * the kernel owns which resource packs a client mounts. It has no warn path: if the descriptor or the owner name
@@ -52,7 +51,7 @@ import net.forbric.kernel.TestFixtures.Fixture;
  * <p>The load-bearing detail is that the replacement body is {@code ALOAD 0; INVOKESTATIC hook; RETURN}. Slot 0
  * holds the {@code PackRepository} only because the method is STATIC. If a carrier ever made it an instance
  * method, slot 0 would be {@code this} and the kernel would be handed a {@code ClientModLoader} where it expects a
- * repository — so that modifier is asserted against the real carriers here, not assumed.
+ * repository — so that modifier is asserted against the real carrier here, not assumed.
  */
 class ClientPackHookInjectorTest {
 	private static final Path RUN = TestFixtures.stagedRoot();
@@ -63,34 +62,23 @@ class ClientPackHookInjectorTest {
 	private final ClientPackHookInjector injector = new ClientPackHookInjector();
 
 	/**
-	 * The premise of {@code ALOAD 0}, and a correction to what the class javadoc claims.
-	 *
-	 * <p>It says the injector redirects "each ecosystem's" {@code setupModResourcePacks}. On the staged carriers
-	 * that is only true of NeoForge: MinecraftForge's {@code ClientModLoader} has no such method at all — it takes
-	 * the repository in {@code begin(Minecraft, PackRepository, ReloadableResourceManager)} instead — so the
-	 * MinecraftForge entry in {@code OWNERS} matches nothing and is a hedge, not a live path. Asserting that
-	 * explicitly means a carrier that later ADDS the method makes this test fail, which is the moment to check
-	 * whether the hedge has become a second live rewrite.
+	 * The premise of {@code ALOAD 0}: the method must exist on the carrier and be static, or the kernel is handed
+	 * the wrong slot-0 argument and no mod's client assets are ever mounted.
 	 */
 	@Test
-	void neoForgeDeclaresTheMethodStaticallyAndMinecraftForgeDoesNotDeclareItAtAll() throws Exception {
-		byte[] neo = carrier(Ecosystem.NEOFORGE);
+	void neoForgeDeclaresTheMethodStatically() throws Exception {
+		byte[] neo = neoCarrier();
 
 		MethodNode m = method(parse(neo), METHOD, DESC);
 		assertNotNull(m, "NeoForge: " + METHOD + DESC + " is gone — the client pack hook silently stops applying "
 				+ "and no mod's assets are mounted");
 		assertTrue((m.access & Opcodes.ACC_STATIC) != 0, "NeoForge: " + METHOD + " is no longer static, so the "
 				+ "injector's ALOAD 0 would hand the kernel `this` instead of the PackRepository");
-
-		byte[] forge = carrier(Ecosystem.FORGE);
-		assertNull(method(parse(forge), METHOD, DESC),
-				"MinecraftForge's ClientModLoader now declares " + METHOD + " — the OWNERS entry for it has stopped "
-						+ "being a hedge and become a live rewrite; re-check that the kernel should own both");
 	}
 
 	@Test
 	void theNeoForgeCarrierIsRewrittenToCallTheKernel() throws Exception {
-		byte[] real = carrier(Ecosystem.NEOFORGE);
+		byte[] real = neoCarrier();
 
 		String className = ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.NEOFORGE);
 		byte[] out = injector.transform(className, real, ctx());
@@ -133,14 +121,6 @@ class ClientPackHookInjectorTest {
 		return false;
 	}
 
-	/** The hedge really is inert today: handed the real MinecraftForge class, the injector changes nothing. */
-	@Test
-	void theMinecraftForgeCarrierIsUnchangedBecauseItHasNoSuchMethod() throws Exception {
-		byte[] real = carrier(Ecosystem.FORGE);
-
-		assertSame(real, injector.transform(ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.FORGE), real, ctx()));
-	}
-
 	/** A same-named method with a different descriptor is not the one, and must be left running. */
 	@Test
 	void aDifferentDescriptorIsNotRewritten() {
@@ -160,11 +140,9 @@ class ClientPackHookInjectorTest {
 		return new TransformContext(EnvType.CLIENT, false, "intermediary");
 	}
 
-	private static byte[] carrier(Ecosystem eco) throws Exception {
-		Path jar = eco == Ecosystem.NEOFORGE
-				? RUN.resolve("neoforge-runtime/neoforge-runtime.jar")
-				: RUN.resolve("forge-runtime/forge-runtime.jar");
-		return TestFixtures.requireEntry(Fixture.STAGED, jar, ForeignType.CLIENT_MOD_LOADER.internal(eco) + ".class");
+	private static byte[] neoCarrier() throws Exception {
+		Path jar = RUN.resolve("neoforge-runtime/neoforge-runtime.jar");
+		return TestFixtures.requireEntry(Fixture.STAGED, jar, ForeignType.CLIENT_MOD_LOADER.internal(Ecosystem.NEOFORGE) + ".class");
 	}
 
 	private static ClassNode parse(byte[] bytes) {

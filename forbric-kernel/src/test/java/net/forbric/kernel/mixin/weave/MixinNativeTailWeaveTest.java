@@ -66,7 +66,7 @@ class MixinNativeTailWeaveTest {
 				SOURCES.resolve("fixture/nativetail/mixin/IndexTypeMixin.java")),
 				Map.of(CONFIG, SOURCES.resolve(CONFIG)));
 		RUNS.put("neoforge", run("neoforge", Ecosystem.NEOFORGE, "on"));
-		RUNS.put("forge", run("forge", Ecosystem.FORGE, "on"));
+		RUNS.put("forge", run("forge", Ecosystem.NEOFORGE, "on"));
 		RUNS.put("neoforge-off", run("neoforge-off", Ecosystem.NEOFORGE, "off"));
 		RUNS.put("fabric", run("fabric", Ecosystem.FABRIC, "on"));
 	}

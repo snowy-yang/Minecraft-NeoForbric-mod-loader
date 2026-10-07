@@ -2,38 +2,37 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**One Minecraft instance that runs Fabric mods, Forge mods and NeoForge mods at the same time.**
+**One Minecraft instance that runs Fabric mods and NeoForge mods at the same time.**
 
 Version 0.3.0 · Minecraft 26.2
 
 ## What it does
 
-Minecraft mods come in three kinds, and normally you have to pick one. A mod is built for **Fabric**, or
-for **Forge**, or for **NeoForge**, and it only works on the one it was built for. Put a Fabric mod into
-a Forge game and nothing happens. So most people keep several separate setups, and whichever one they
-start, most of their mods are sitting in the other ones.
+Minecraft mods come in two main kinds, and normally you have to pick one. A mod is built for **Fabric**
+or for **NeoForge**, and it only works on the one it was built for. Put a Fabric mod into a NeoForge
+game and nothing happens. So most people keep two separate setups, and whichever one they start, half
+of their mods are sitting in the other one.
 
-Forbric is a fourth thing you install instead of those three. You put **every** mod into **one** folder —
-Fabric, Forge and NeoForge mixed together, no sorting — and Forbric opens each file, works out what kind
+Forbric is a third thing you install instead of those two. You put **every** mod into **one** folder —
+Fabric and NeoForge mixed together, no sorting — and Forbric opens each file, works out what kind
 it is, and loads it. All of them are running in the same world at the same time.
 
 It also gives you one list of everything you have installed. The pause menu and the title screen get a
 Forbric mods button, and from that list you can open a mod's own settings screen, whichever of the
-three it belongs to (for Fabric mods, only when Mod Menu is installed too).
+two it belongs to (for Fabric mods, only when Mod Menu is installed too).
 
 **You may have heard of Kilt or Sinytra Connector.** Those are mods you add to a normal loader, and they
 re-create one side's features inside the other — a translator in the room. Forbric is the loader itself.
-Fabric Loader and the loaders inside Forge and NeoForge never start; Forbric does their job — finding the
+Fabric Loader and NeoForge's own loader never start; Forbric does their job — finding the
 mods, starting them, running them in order — and tries to do it the way each mod's own loader would. Your
-mods call the real Fabric API and the real Forge and NeoForge code; that part is not re-created. So this is
-not three loaders running side by side: it is one new loader that puts all three kinds of mods, and the
+mods call the real Fabric API and the real NeoForge code; that part is not re-created. So this is
+not two loaders running side by side: it is one new loader that puts both kinds of mods, and the
 real code they rely on, into one game.
 
-But Forge and NeoForge both change Minecraft, often in the same spots, and one game can hold only one
-version of each spot, so Forbric mostly keeps NeoForge's. Its own glue then keeps the other mods working:
-it passes game events on to Forge mods, moves Fabric mods' changes to where the code now sits, and lets
-mods from different loaders hand each other items, fluids and energy. That glue is translation too, and
-it is not finished, which is one reason some mods still fail.
+The game itself is NeoForge's: Forbric runs NeoForge's own patched Minecraft, and NeoForge mods sit on
+their native ground. Its own glue then keeps the other side working: it moves Fabric mods' changes to
+where the code now sits, and lets mods from the two loaders hand each other items, fluids and energy.
+That glue is translation too, and it is not finished, which is one reason some mods still fail.
 
 Connector is mature and Forbric is not, so if Connector already runs the mods you want, use Connector.
 Forbric is for the cases it cannot reach.
@@ -52,7 +51,7 @@ Forbric is for the cases it cannot reach.
   afterwards).
 
 You do **not** need to install Minecraft 26.2 first. If you do not have it, the installer downloads it.
-You also do **not** need Fabric, Forge or NeoForge, and you do not need to find any other files: the
+You also do **not** need Fabric or NeoForge, and you do not need to find any other files: the
 installer downloads and builds everything Forbric needs. Your mods still need their own prerequisites as
 usual, for example Fabric API for most Fabric mods.
 
@@ -90,8 +89,8 @@ usual, for example Fabric API for most Fabric mods.
    Leave everything else alone. In particular, leave **Built artifacts** empty — it is only for developers
    who built Forbric's game files from source.
 
-5. **Press Install and wait.** The first install takes several minutes. It is downloading Minecraft's,
-   Forge's and NeoForge's own files and putting them together on your computer, because those files
+5. **Press Install and wait.** The first install takes several minutes. It is downloading Minecraft's and
+   NeoForge's own files and putting them together on your computer, because those files
    cannot legally be handed out ready-made. Stay connected while it runs. Installing again later reuses
    what is already on disk and is quick.
 
@@ -110,7 +109,7 @@ usual, for example Fabric API for most Fabric mods.
 
 ### Where to put mods
 
-**Fabric, Forge and NeoForge mods all go in the same `mods` folder.** Which folder that is depends on
+**Fabric and NeoForge mods all go in the same `mods` folder.** Which folder that is depends on
 your launcher, not on Forbric:
 
 - If your launcher keeps each version separate (often called version isolation; PCL2 and HMCL can do
@@ -124,15 +123,15 @@ a folder called `.forbric-kernel` appears next to the right `mods` folder.
 Your launcher may call `26.2-forbric` a Fabric version. That is on purpose: a launcher shows only one mod
 loader per version, so Forbric's version tells it Fabric. PCL2 reads this, treats `26.2-forbric` as a
 modded version and suggests Fabric builds first in its mod browser. Other launchers may show it as plain
-Minecraft. Either way, Forbric loads Fabric, Forge and NeoForge mods from the `mods` folder.
+Minecraft. Either way, Forbric loads Fabric and NeoForge mods from the `mods` folder.
 
-One thing to watch: many mods come as a Fabric build, a Forge build and a NeoForge build. Put **one**
+One thing to watch: many mods come as a Fabric build and a NeoForge build. Put **one**
 build of each mod in the folder. If you add more than one, Forbric still runs only one of them. The first
 time this happens it writes its choice to `forbric-mods.txt` next to your `mods` folder, where you can pick
 the other build.
 
 The same goes for a prerequisite (library) mod that several of your mods need: one build is usually
-enough, because a Forge or NeoForge mod can normally use the Fabric build of its prerequisite and the
+enough, because a NeoForge mod can normally use the Fabric build of its prerequisite and the
 other way round. Adding the prerequisite for both loaders does not give each mod its own copy: Forbric
 still runs only one. If one mod plugs straight into another (Iris into Sodium, for example), use the same
 loader's build of both. For Sodium, also see *A known crash* below.
@@ -145,7 +144,7 @@ Select a mod and press **Config**, or double-click the row, to open that mod's o
 
 Fabric mods hand their settings screens to Mod Menu, so a Fabric mod gets a **Config** button in this list
 only when Mod Menu is installed too. With Mod Menu there are **two** mods buttons, on the title screen and in
-the pause menu. Use the one with three squares: it opens settings for all three kinds, while Mod Menu's own
+the pause menu. Use the one with three squares: it opens settings for both kinds, while Mod Menu's own
 button opens settings only for Fabric mods.
 
 ### If something goes wrong
@@ -174,6 +173,9 @@ want to keep. To get the disk space back as well, also delete `.minecraft/.forbr
 `.minecraft/libraries/net/forbric/`.
 
 ## What's new in 0.3.0
+
+*This section is the release notes for 0.3.0 as it shipped; the rest of this page describes the current
+code, and the two do not match word for word.*
 
 **More mods work.** We picked three batches of about 100 random mods from Modrinth (popular ones and
 random ones, all three kinds) and started the game with each mod on its own. **80.5% loaded without errors
@@ -215,14 +217,14 @@ because there is no screen to ask you on (see *If something goes wrong* above).
 
 ## What we promise
 
-**Your existing Minecraft is not touched.** Forbric installs alongside everything else. Your Fabric,
-Forge and NeoForge setups, your worlds, and your other mod folders are exactly as they were.
+**Your existing Minecraft is not touched.** Forbric installs alongside everything else. Your Fabric
+and NeoForge setups, your worlds, and your other mod folders are exactly as they were.
 
 **Uninstalling is deleting a folder.** Nothing is scattered around your system, and nothing is left
 running when you are not playing.
 
 **Nothing is hidden.** All the source code is here and the licence is Apache-2.0. This repository
-contains no Minecraft, Forge or NeoForge code — all of that is fetched from their own servers and
+contains no Minecraft or NeoForge code — all of that is fetched from their own servers and
 assembled on your machine when you install.
 
 And what we do **not** promise:
@@ -248,35 +250,31 @@ Forbric is not affiliated with Mojang, FabricMC, MinecraftForge or NeoForged.
 
 ### For mod developers
 
-**Your mod does not need to change.** It calls the genuine Fabric API, MinecraftForge or NeoForge classes,
+**Your mod does not need to change.** It calls the genuine Fabric API or NeoForge classes,
 so there is no compatibility layer to code against. What Forbric re-implements is the loader: class
 loading, mod discovery, load order, the lifecycle, the Mixin service, and Fabric Loader's API (Forbric
 carries Fabric Loader's public API types, which keep FabricMC's copyright, and implements them; Fabric
-Loader itself never runs). The game is different too: the installer builds one merged game jar from both
-Forge families' patches. What this means for your mod:
+Loader itself never runs). The game is different too: it is NeoForge's own patched jar, built by the
+installer. What this means for your mod:
 
-- **The game is one merged jar.** Where MinecraftForge and NeoForge patched the same method (about a
-  thousand of them), only one version was kept: NeoForge's in all but five, MinecraftForge's in those
-  five. An event whose call was lost that way — nearly always a MinecraftForge one, plus a few NeoForge
-  ones such as item tooltips and screen opening — reaches your listener only if Forbric re-emits it, and
-  one without a bridge never fires ([introduction.md §8](introduction.md#8-event-bridges)). Events whose
-  call survived the merge fire as usual. The coremods NeoForge itself ships are not loaded; Forbric
-  applies their rewrites itself.
-- **Mixins are applied to that merged code.** Forbric relaxes mods' mixin configs (`required: false`,
+- **The game is NeoForge's own patched jar** — vanilla 26.2 carrying NeoForge's patches. NeoForge's
+  events fire as usual. The coremods NeoForge itself ships are not loaded; Forbric applies their
+  rewrites itself. Fabric API events whose mixin cannot fit the patched base are fired from NeoForge's
+  own call sites instead ([introduction.md §8](introduction.md#8-event-bridges)).
+- **Mixins are applied to that patched base.** Forbric relaxes mods' mixin configs (`required: false`,
   `defaultRequire: 0`), so an injector whose target is missing does nothing instead of failing, unless it
   sets `require` itself. It moves an injector whose target moved, and drops a whole mixin when none of its
-  targets exist ([§7](introduction.md#7-mixin-on-the-merged-base)).
+  targets exist ([§7](introduction.md#7-mixin-on-the-patched-base)).
 - **Start-up runs in Forbric's order**, close to but not the same as each loader's native order
   ([§3](introduction.md#3-boot-order)).
-- **Start-up extensions are not supported:** MinecraftForge's ModLauncher services
-  (`ITransformationService`, `ILaunchPluginService`) and `coremods.json`, NeoForge's
-  `ClassProcessorProvider`, and custom mod or dependency locators. Today they are skipped without a
+- **Start-up extensions are not supported:** NeoForge's `ClassProcessorProvider` and `coremods.json`,
+  and custom mod or dependency locators. Today they are skipped without a
   warning.
 
 More detail:
 
 - [introduction.md](introduction.md) — how Forbric works inside, for developers: boot order, how the
-  three kinds of mods are loaded together, what the installer builds, and how it is tested.
+  two kinds of mods are loaded together, what the installer builds, and how it is tested.
 - [forbric-kernel/README.md](forbric-kernel/README.md) — a shorter summary of the kernel, which is what
   the installer installs.
 

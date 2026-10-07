@@ -18,10 +18,10 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.entity.FuelValues;
 
 /**
- * fabric-content-registries' fuel events, on the fuel values the merged game actually builds.
+ * fabric-content-registries' fuel events, on the fuel values the game actually builds.
  *
  * <p>Fabric registers fuels through {@code FuelValueEvents.BUILD} and {@code EXCLUSIONS}, fired by a wrap in vanilla's
- * {@code FuelValues.vanillaBurnTimes}. The merged server never calls that: it builds its fuels from NeoForge's
+ * {@code FuelValues.vanillaBurnTimes}. NeoForge's server never calls that: it builds its fuels from the
  * {@code furnace_fuels} data map in {@code DataMapHooks.populateFuelValues}, as a client on a NeoForge connection does,
  * so a Fabric mod's fuel never went in a furnace. FabricFuelValuesInjector calls {@link #apply} on that builder just
  * before it is built, in Fabric's order: BUILD, vanilla's non-flammable-wood removal, EXCLUSIONS. The removal applies
@@ -31,13 +31,13 @@ import net.minecraft.world.level.block.entity.FuelValues;
  *
  * <p>Fuel events are one way a Fabric mod adds fuel; a mixin on the RETURN of {@code vanillaBurnTimes} is the other.
  * torrential puts its Angling Table in the table that way ({@code @ModifyReturnValue}, 1.5 × the base unit) and
- * Lithium runs its whole block-info pass from there. On native Fabric — and on native MinecraftForge — the server's
+ * Lithium runs its whole block-info pass from there. On native Fabric the server's
  * fuel table comes out of {@code vanillaBurnTimes(Provider, FeatureFlagSet)}, which calls the three-argument overload
- * with 200, so both run on it. The merged server never calls it — its table comes from {@code populateFuelValues} —
+ * with 200, so both run on it. NeoForge's server never calls it — its table comes from {@code populateFuelValues} —
  * so the Angling Table would not burn on a Forbric server while the client, which does call it, thought it would.
  *
  * <p>{@link #throughVanillaReturnHooks} hands the table {@code populateFuelValues} built through that same
- * two-argument call as its result: the merge-added body {@code vanillaBurnTimes(Builder, int)} starts by returning
+ * two-argument call as its result: the builder overload {@code vanillaBurnTimes(Builder, int)} starts by returning
  * the {@link #takePending pending} table when there is one, so nothing of vanilla's is rebuilt and the body's own
  * anchors (fabric-content-registries' fuel events among them, already run by {@link #apply}) are skipped, while every
  * RETURN hook on each of the three overloads runs on it once, in the order the native server runs them. It is
@@ -97,7 +97,7 @@ public final class KernelFabricFuel {
 	 *
 	 * <p>The table goes back unchanged when the body's short-circuit was never reached: a carrier whose stub stopped
 	 * forwarding to it would otherwise have the full vanilla table rebuilt in place of the data map's, and a mixin
-	 * that cancels vanillaBurnTimes at HEAD would throw away every NeoForge and MinecraftForge fuel with it. Natively
+	 * that cancels vanillaBurnTimes at HEAD would throw away every NeoForge fuel with it. Natively
 	 * such a cancel replaces only vanilla's table; here there is more in it than vanilla's, so the data map's result
 	 * stands. A hook that throws costs its own change, not the server's fuel table.
 	 */
@@ -108,16 +108,16 @@ public final class KernelFabricFuel {
 		Pending outer = PENDING.get();
 		PENDING.set(pending);
 		try {
-			// The call the native Fabric and MinecraftForge servers make, so a hook on either outer overload runs too.
+			// The call the native Fabric server makes, so a hook on either outer overload runs too.
 			FuelValues hooked = FuelValues.vanillaBurnTimes(registries, features);
 			if (!pending.taken) {
-				warnHooksOnce("vanillaBurnTimes returned without reaching the merge-added body the kernel short-circuits "
+				warnHooksOnce("vanillaBurnTimes returned without reaching the builder body the kernel short-circuits "
 						+ "(a HEAD cancel, or a carrier whose overload no longer forwards)", null);
 				return built;
 			}
 			if (HOOKS_PROVED.compareAndSet(false, true)) {
 				ForbricLog.info("[Forbric/Fuel] the fuel table NeoForge's populateFuelValues built went through "
-						+ "FuelValues.vanillaBurnTimes' return hooks — the merged server never calls that method, so a "
+						+ "FuelValues.vanillaBurnTimes' return hooks — NeoForge's server never calls that method, so a "
 						+ "mod's mixin there (torrential's Angling Table) never reached the fuels a furnace uses");
 			}
 			return hooked == null ? built : hooked;
@@ -132,7 +132,7 @@ public final class KernelFabricFuel {
 
 	/**
 	 * The table {@link #throughVanillaReturnHooks} is carrying, once; null when there is none. Called at the head of
-	 * the merge-added {@code FuelValues.vanillaBurnTimes(Builder, int)}, which returns it as its result instead of
+	 * the builder overload {@code FuelValues.vanillaBurnTimes(Builder, int)}, which returns it as its result instead of
 	 * building vanilla's. Once only, so a hook that calls vanillaBurnTimes again gets the method as shipped.
 	 */
 	public static FuelValues takePending() {

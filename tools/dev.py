@@ -30,29 +30,22 @@ API_PINS = (
     ('energy-5.0.0.jar', 'https://maven.modmuss50.me/teamreborn/energy/5.0.0/energy-5.0.0.jar',
      '889afc438d3e4add5cfdac76517da7987a2c495e4731690a56f2c5dee775db59'),
 )
-STAGED_FILES = ('merged-base/patched-mc-merged-26.2.jar', 'forge-runtime/forge-runtime.jar',
-                'merged-base/forge-runtime-interop.jar', 'neoforge-runtime/neoforge-runtime.jar',
-                # Not launched, but the bytecode tests compare the merge against both patched sides.
-                'forge-patched/patched-mc-forge-26.2.jar', 'neoforge-patched/patched-mc-neoforge-26.2.jar',
-                # Also only read by tests: the merge's own report, the pins that tie the Forge side to this merge,
-                # and the two canary mods (see CANARIES).
-                'merged-base/merge-conflicts.txt', 'merged-base/patched-mc-merged-26.2.jar.pins',
-                'forge-patched/patched-mc-forge-26.2.jar.pins',
-                'forge-runtime/forbriclive.jar', 'neoforge-runtime/forbricneolive.jar')
-# forbric-loader/run/build-testmods.sh's two canary mods, built the same way into the stage: (sources, jar, javac
-# --release, the staged game jars they compile against). Their sources go beside them, as in forbric-loader/run/,
+STAGED_FILES = ('neoforge-base/patched-mc-neoforge-26.2.jar', 'neoforge-runtime/neoforge-runtime.jar',
+                # Not launched, but the bytecode tests read the patched side the base was staged from.
+                'neoforge-patched/patched-mc-neoforge-26.2.jar',
+                # Also only read by tests: the pins that tie the NeoForge side to this base,
+                # and the canary mod (see CANARIES).
+                'neoforge-patched/patched-mc-neoforge-26.2.jar.pins',
+                'neoforge-runtime/forbricneolive.jar')
+# forbric-loader/run/build-testmods.sh's canary mod, built the same way into the stage: (sources, jar, javac
+# --release, the staged game jars it compiles against). Its sources go beside it, as in forbric-loader/run/,
 # because the tests check the packaged data against the source it was built from.
 CANARY_SOURCES = ROOT / 'forbric-loader' / 'run'
 CANARIES = (
-    # The NeoForge carrier last: the MinecraftForge canary asks NeoForge's loader whether a foreign mod is there, as
-    # a multi-platform mod does. build-testmods.sh found that loader among a launcher's libraries.
-    ('livemod-src', 'forge-runtime/forbriclive.jar', '17',
-     ('forge-runtime/forge-runtime.jar', 'forge-patched/patched-mc-forge-26.2.jar', 'neoforge-runtime/neoforge-runtime.jar')),
     ('livemod-src-neoforge', 'neoforge-runtime/forbricneolive.jar', '21',
      ('neoforge-runtime/neoforge-runtime.jar', 'neoforge-patched/patched-mc-neoforge-26.2.jar')),
 )
-# What build-testmods.sh packages besides classes. The mixin config goes at the jar root: Forge drops a declared
-# config whose entry is missing with only a warning, so a misplaced one makes the canary silently do nothing.
+# What build-testmods.sh packages besides classes.
 CANARY_RESOURCES = ('META-INF', 'forbriclive.mixins.json', 'data', 'assets')
 CONSOLE_PINS = (
     ('jline-reader', '26333a275de502adf1dd9e6ea50aa0b4021412c71490df9ed5e88a648886ee89'),
@@ -214,7 +207,7 @@ def stage_minecraft(mc, native_dir, arch=None, assets=True):
         # client launch knows to fetch them instead of reporting a broken install.
         (mc / NO_ASSETS).write_text('prepared with --no-assets\n')
         print('[dev] Assets skipped (--no-assets): enough for tests and dedicated servers, not for the client', flush=True)
-    # Forge-family runtimes omit JLine as a game-provided library, but vanilla metadata does not list it.
+    # NeoForge's runtime omits JLine as a game-provided library, but vanilla metadata does not list it.
     for name, sha in CONSOLE_PINS:
         relative = f'org/jline/{name}/3.25.1/{name}-3.25.1.jar'
         fetch('https://repo.maven.apache.org/maven2/' + relative, mc / 'libraries' / relative,

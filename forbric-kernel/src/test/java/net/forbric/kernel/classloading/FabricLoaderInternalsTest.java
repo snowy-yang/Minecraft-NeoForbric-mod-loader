@@ -39,8 +39,8 @@ import net.fabricmc.loader.impl.game.minecraft.Hooks;
  * Which of Fabric Loader's internals mods can link against, from where, and what the switch takes away.
  *
  * <p>The probe half is the one that can quietly go wrong: these classes did not exist before, so every
- * {@code Class.forName} of them answered "no" — including the Forge-family mods'. Now that they exist, a Forge or
- * NeoForge class must still be told no, or it takes a Fabric branch it was never built for.
+ * {@code Class.forName} of them answered "no" — including the NeoForge mods'. Now that they exist, a NeoForge
+ * class must still be told no, or it takes a Fabric branch it was never built for.
  */
 @ResourceLock("system-properties")
 class FabricLoaderInternalsTest {
@@ -53,16 +53,15 @@ class FabricLoaderInternalsTest {
 	}
 
 	@Test
-	void aForgeFamilyClassIsStillToldTheyDoNotExist() {
+	void aNeoForgeClassIsStillToldTheyDoNotExist() {
 		assertTrue(LoaderProbePolicy.enabled(), "the test JVM never sets -Dforbric.loaderProbes=off");
 		ClassLoader here = getClass().getClassLoader();
 
 		for (String marker : List.of(IMPL, LEGACY)) {
 			assertTrue(LoaderProbePolicy.isProbe(marker), marker + " must be a probe now that it exists");
-			for (LoaderProbePolicy.Family family : List.of(LoaderProbePolicy.Family.FORGE, LoaderProbePolicy.Family.NEOFORGE)) {
-				assertThrows(ClassNotFoundException.class, () -> LoaderProbePolicy.forName(marker, false, here, family.name()),
-						family + " asking for " + marker);
-			}
+			assertThrows(ClassNotFoundException.class, () -> LoaderProbePolicy.forName(marker, false, here,
+					LoaderProbePolicy.Family.NEOFORGE.name()),
+					"a NeoForge class asking for " + marker);
 		}
 	}
 

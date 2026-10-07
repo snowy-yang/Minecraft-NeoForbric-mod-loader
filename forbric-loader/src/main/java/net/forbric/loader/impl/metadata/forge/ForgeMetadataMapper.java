@@ -64,14 +64,13 @@ public final class ForgeMetadataMapper {
 	public static List<DiscoveredMod> toDiscoveredMods(ForgeModsToml toml, String jarVersion, String source,
 			List<String> accessTransformers, List<String> extraMixinConfigs, java.util.function.Predicate<String> mixinConfigPresent) {
 		return toDiscoveredMods(toml, jarVersion, source, accessTransformers, extraMixinConfigs, mixinConfigPresent,
-				ModEcosystem.FORGE);
+				ModEcosystem.NEOFORGE);
 	}
 
 	/**
 	 * @param ecosystem which Forge-family ecosystem declared this toml — {@link ModEcosystem#NEOFORGE} when it
-	 *                  came from {@code META-INF/neoforge.mods.toml}, {@link ModEcosystem#FORGE} for the classic
-	 *                  {@code META-INF/mods.toml}. Both files share the same schema; the ecosystem is decided by
-	 *                  which manifest the jar carried, not by the toml contents.
+	 *                  came from {@code META-INF/neoforge.mods.toml} (the only manifest discovered today).
+	 *                  The ecosystem is decided by which manifest the jar carried, not by the toml contents.
 	 */
 	public static List<DiscoveredMod> toDiscoveredMods(ForgeModsToml toml, String jarVersion, String source,
 			List<String> accessTransformers, List<String> extraMixinConfigs,

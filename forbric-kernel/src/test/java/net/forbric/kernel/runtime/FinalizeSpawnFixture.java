@@ -1,6 +1,8 @@
 /* Copyright 2026 The Forbric Project. Licensed under the Apache License, Version 2.0. */
 package net.forbric.kernel.runtime;
 
+import net.forbric.kernel.TestFixtures;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
@@ -40,7 +42,7 @@ final class FinalizeSpawnFixture implements AutoCloseable {
 		assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, errors, errors, args.toArray(String[]::new)), errors.toString());
 		// NeoForge's own spawner hook, the one finalizeTrialSpawner calls with initialize=false.
 		ClassNode original = new ClassNode();
-		new ClassReader(ForgeSpawnFixture.staged("neoforge-runtime/neoforge-runtime.jar", "net.neoforged.neoforge.event.EventHooks")).accept(original, 0);
+		new ClassReader(TestFixtures.stagedClass("neoforge-runtime/neoforge-runtime.jar", "net.neoforged.neoforge.event.EventHooks")).accept(original, 0);
 		var hook = original.methods.stream().filter(m -> m.name.equals("finalizeMobSpawnSpawner")).findFirst().orElseThrow();
 		ClassWriter writer = new ClassWriter(0); writer.visit(original.version, original.access, original.name, null, "java/lang/Object", null);
 		hook.accept(writer); writer.visitEnd();

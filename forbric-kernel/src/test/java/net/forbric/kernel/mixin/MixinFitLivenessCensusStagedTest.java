@@ -324,7 +324,7 @@ class MixinFitLivenessCensusStagedTest {
 				}
 			}
 		}
-		for (Map.Entry<String, Ecosystem> toml : Map.of("META-INF/mods.toml", Ecosystem.FORGE, "META-INF/neoforge.mods.toml", Ecosystem.NEOFORGE).entrySet()) {
+		for (Map.Entry<String, Ecosystem> toml : Map.of("META-INF/mods.toml", Ecosystem.NEOFORGE, "META-INF/neoforge.mods.toml", Ecosystem.NEOFORGE).entrySet()) {
 			byte[] bytes = content.get(toml.getKey());
 			if (bytes == null) continue;
 			unit.add(toml.getValue());
@@ -336,7 +336,7 @@ class MixinFitLivenessCensusStagedTest {
 			for (String line : new String(manifest, StandardCharsets.UTF_8).replace("\r\n ", "").split("\r?\n")) {
 				if (!line.startsWith("MixinConfigs:")) continue;
 				for (String name : line.substring("MixinConfigs:".length()).split(",")) {
-					if (!name.isBlank()) declared.computeIfAbsent(name.trim(), k -> new LinkedHashSet<>()).add(unit.contains(Ecosystem.NEOFORGE) ? Ecosystem.NEOFORGE : Ecosystem.FORGE);
+					if (!name.isBlank()) declared.computeIfAbsent(name.trim(), k -> new LinkedHashSet<>()).add(unit.contains(Ecosystem.NEOFORGE) ? Ecosystem.NEOFORGE : Ecosystem.NEOFORGE);
 				}
 			}
 		}
@@ -346,7 +346,7 @@ class MixinFitLivenessCensusStagedTest {
 		for (String name : candidates) {
 			if (!content.containsKey(name)) continue;
 			Set<Ecosystem> by = declared.getOrDefault(name, unit.size() == 1 ? unit : Set.of());
-			for (Ecosystem preferred : List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE, Ecosystem.FABRIC)) {
+			for (Ecosystem preferred : List.of(Ecosystem.NEOFORGE, Ecosystem.NEOFORGE, Ecosystem.FABRIC)) {
 				if (by.contains(preferred) && (by.size() == 1 || unit.contains(preferred))) { out.put(name, preferred); break; }
 			}
 		}

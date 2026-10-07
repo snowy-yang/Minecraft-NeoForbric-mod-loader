@@ -65,7 +65,7 @@ class MixinRetargetSplitTest {
 	@Test
 	void aMinecraftForgeModMovesAndANeoForgeModDoesNot() {
 		Function<String, byte[]> resolver = resolver(hud(List.of("extractHealthLevel", "extractFoodLevel"), false));
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertEquals(1, MixinRetarget.plan(MixinFit.parse(redirect(MAX_HEARTS)), resolver).rewrites().size());
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(redirect(MAX_HEARTS)), resolver).isEmpty(),

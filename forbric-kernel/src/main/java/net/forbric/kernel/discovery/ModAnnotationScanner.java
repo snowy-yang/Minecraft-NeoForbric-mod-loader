@@ -97,9 +97,8 @@ public final class ModAnnotationScanner {
 	public static final String MOD_DESC_MINECRAFTFORGE = "Lnet/minecraftforge/fml/common/Mod;";
 	/** NeoForge {@code @Mod} descriptor (the parked NeoForge path). */
 	public static final String MOD_DESC_NEOFORGE = "Lnet/neoforged/fml/common/Mod;";
-	/** Both Forge-family {@code @Mod} annotations share the same shape ({@code String value()}); recognise either. */
+	/** The Forge-family {@code @Mod} annotation shape ({@code String value()}). */
 	private static final java.util.Map<String, Ecosystem> MOD_DESCRIPTORS = java.util.Map.of(
-			MOD_DESC_MINECRAFTFORGE, Ecosystem.FORGE,
 			MOD_DESC_NEOFORGE, Ecosystem.NEOFORGE);
 
 	private ModAnnotationScanner() {

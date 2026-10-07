@@ -1,10 +1,10 @@
 package net.forbric.kernel.runtime.transfer;
 
 /**
- * Energy arithmetic shared by every bridge direction. One Forge Energy unit (FE, MinecraftForge and NeoForge) is one
- * Team Reborn Energy unit (E): the three APIs describe the same quantity and no exchange rate is applied anywhere.
+ * Energy arithmetic shared by every bridge direction. One Forge Energy unit (FE, NeoForge) is one
+ * Team Reborn Energy unit (E): the two APIs describe the same quantity and no exchange rate is applied anywhere.
  *
- * <p>The only unit difference is width. Forge and NeoForge move {@code int} amounts, Reborn moves {@code long}. A long
+ * <p>The only unit difference is width. NeoForge moves {@code int} amounts, Reborn moves {@code long}. A long
  * request is clamped to what the int side can express BEFORE anything moves; the int side then reports what it
  * really moved, and that exact amount is what the long side sees. The unrepresentable remainder is never moved, so
  * it stays in its source: nothing is rounded after a mutation, and no energy is created or destroyed. A long AMOUNT

@@ -15,33 +15,27 @@ import net.forbric.api.ForeignType;
 import net.forbric.kernel.util.ForbricLog;
 
 /**
- * Every event one family's bus posts while the other family's bus is dispatching, on the same thread, checked the
- * same way for all of them.
+ * Every event posted by one family's bus while that family's bus is dispatching, checked the same way for all of
+ * them.
  *
- * <p>The kernel's bus-to-bus bridges are listeners: a NeoForge listener that posts MinecraftForge's event (or the
- * reverse), synchronously, inside the outer dispatch. So a post that begins and ends inside the other family's
- * dispatch is that dispatch's forward, and {@code EventChainAuditInjector} reports both buses' entry and exit here
- * without knowing any bridge by name. Per (outer event, inner event) pair and per outer post this records:
+ * <p>The kernel's bus bridges are listeners: a NeoForge listener that posts another event synchronously, inside
+ * the outer dispatch. So a post that begins and ends inside the other dispatch is that dispatch's forward, and
+ * {@code EventChainAuditInjector} reports the bus's entry and exit here without knowing any bridge by name. Per
+ * (outer event, inner event) pair and per outer post this records:
  * <ul>
  *   <li>how many times the inner event was posted: once is a forward, more than once is double delivery;</li>
  *   <li>whether an inner cancel reached the outer event when the outer event can be cancelled;</li>
  *   <li>whether the inner dispatch threw;</li>
  *   <li>for an outer event that has been forwarded at least once, how many of its posts were not forwarded, and
- *   whether the outer event was already cancelled then (NeoForge's forwards do not receive cancelled events).</li>
+ *       whether the outer event was already cancelled then.</li>
  * </ul>
- * Only the immediate parent frame of the other family is credited, so a listener that triggers some other event
- * (a tick that spawns an entity) credits that event's own dispatch, not the tick. And only a post the KERNEL made
- * is a forward: the first frame below the bus and the hook facades must be kernel code. A mod listener that
- * builds four thousand item tooltips inside a NeoForge event posts four thousand MinecraftForge tooltip events;
- * those are counted as incidental, not as a bridge that fired four thousand times.
+ * Only the immediate parent frame is credited, so a listener that triggers some other event (a tick that spawns
+ * an entity) credits that event's own dispatch, not the tick. And only a post the KERNEL made is a forward: the
+ * first frame below the bus and the hook facades must be kernel code. A mod listener that posts incidental
+ * events inside a NeoForge event is counted as incidental, not as a bridge that fired.
  *
- * <p>Double delivery is judged per NeoForge listener: two listeners of one dispatch forwarding the same event is
- * a bridge installed twice (or two bridges for one event). One listener posting several is a fan-out when it
- * always does (one event per item), and multiplicity drift when that forward is otherwise one to one.
- *
- * <p>What this does not see: composites that call both families' hooks one after the other at a call site
- * (portal, spawner, loot, fuel, tooltips) are not nested posts; their chains have their own gates. Result fields
- * other than cancellation are not compared.
+ * <p>What this does not see: composites that call the family's hooks one after the other at a call site are not
+ * nested posts; those chains have their own gates. Result fields other than cancellation are not compared.
  *
  * <p>Off unless {@code -Dforbric.eventChainAudit=<report.json>} names where the report goes; it is written when the
  * JVM exits and on {@link #write()}.
@@ -93,9 +87,9 @@ public final class EventChainAudit {
 	/** Hook facades: a post they make is the post of whoever called them. */
 	private static final Set<String> FACADES = facades();
 	private static Set<String> facades() {
-		Set<String> facades = new HashSet<>(Set.of("net.minecraftforge.client.event.ForgeEventFactoryClient", "net.neoforged.neoforge.common.CommonHooks"));
+		Set<String> facades = new HashSet<>(Set.of("net.neoforged.neoforge.common.CommonHooks"));
 		for (ForeignType pair : List.of(ForeignType.EVENT_FACTORY, ForeignType.EVENT_HOOKS, ForeignType.CLIENT_HOOKS, ForeignType.SERVER_LIFECYCLE_HOOKS))
-			for (Ecosystem family : List.of(Ecosystem.FORGE, Ecosystem.NEOFORGE)) facades.add(pair.binary(family));
+			facades.add(pair.binary(Ecosystem.NEOFORGE));
 		return Set.copyOf(facades);
 	}
 	private static final Map<Class<?>, Optional<Method>> CANCEL_PROBES = new ConcurrentHashMap<>();
@@ -110,13 +104,9 @@ public final class EventChainAudit {
 
 	public static void neoEnter(Object bus, Object event) { enter(true, event); }
 	public static void neoExit(Object event, Throwable failure) { exit(true, event, cancelled(event), cancellable(event), failure); }
-	public static void forgeEnter(Object bus, Object event) { enter(false, event); }
 	/** NeoForge's dispatch loop is about to call listener {@code index} of the innermost NeoForge dispatch. */
 	public static void neoListener(int index) { Frame top = STACK.get().peek(); if (top != null && top.neo) top.listener = index; }
 	public static void neoListenerDone() { Frame top = STACK.get().peek(); if (top != null && top.neo) top.listener = -1; }
-	public static void forgeExit(Object event, boolean cancellable, boolean cancelled, Throwable failure) {
-		exit(false, event, cancelled, cancellable, failure);
-	}
 
 	private static void enter(boolean neo, Object event) {
 		if (event == null) return;
@@ -131,7 +121,7 @@ public final class EventChainAudit {
 	/** Whether the first frame below the buses, the hook facades and this class is kernel code. */
 	static boolean postedByKernel() {
 		return WALKER.walk(frames -> frames.map(StackWalker.StackFrame::getClassName).filter(name -> !name.equals(EventChainAudit.class.getName())
-				&& !name.startsWith("net.minecraftforge.eventbus.") && !name.startsWith("net.neoforged.bus.") && !name.startsWith("java.")
+				&& !name.startsWith("net.neoforged.bus.") && !name.startsWith("java.")
 				&& !name.startsWith("jdk.") && !name.startsWith("sun.") && !FACADES.contains(name)).findFirst()
 				.map(name -> name.startsWith("net.forbric.kernel.")).orElse(false));
 	}

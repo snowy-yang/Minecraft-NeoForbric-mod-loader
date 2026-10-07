@@ -190,9 +190,7 @@ class EventChainAuditTest {
 				byte[] bytes = generated.get(name);
 				if (bytes == null) bytes = fromJars(name);
 				if (bytes == null) return super.loadClass(name, resolve);
-				if (name.equals("net.neoforged.bus.EventBus")) bytes = EventChainAuditInjector.rewrite(bytes, true, false);
-				if (name.equals("net.minecraftforge.eventbus.internal.CancellableEventBusImpl")) bytes = EventChainAuditInjector.rewrite(bytes, false, true);
-				if (name.equals("net.minecraftforge.eventbus.internal.EventBusImpl")) bytes = EventChainAuditInjector.rewrite(bytes, false, false);
+				if (name.equals("net.neoforged.bus.EventBus")) bytes = EventChainAuditInjector.rewrite(bytes);
 				return defineClass(name, bytes, 0, bytes.length);
 			}
 		}

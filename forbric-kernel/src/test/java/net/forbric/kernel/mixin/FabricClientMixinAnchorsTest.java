@@ -101,7 +101,7 @@ class FabricClientMixinAnchorsTest {
    assertEquals(SCREEN_DRAW,MixinFit.value(StagedFabricMixinFixture.at(mixin,"hookScreenRender"),"target"));
   }
   // MinecraftForge's own Gui draws through its drawScreen, and a NeoForge mod was written against NeoForge's call.
-  for(net.forbric.api.Ecosystem owner:Arrays.asList(net.forbric.api.Ecosystem.FORGE,net.forbric.api.Ecosystem.NEOFORGE,null)){
+  for(net.forbric.api.Ecosystem owner:Arrays.asList(net.forbric.api.Ecosystem.NEOFORGE,net.forbric.api.Ecosystem.NEOFORGE,null)){
    ClassNode mixin=drawHook("Owner"+owner,"Lorg/spongepowered/asm/mixin/injection/Inject;","AFTER",owner);assertEquals(0,FabricClientMixinAnchors.adapt(mixin,n->merged),String.valueOf(owner));
   }
   // Where the host still makes vanilla's call the injector binds as written.

@@ -42,7 +42,7 @@ class PortalDirectRestorationTest {
 		Path runtime = Path.of(System.getProperty("forbric.test.runtimeClasses", "build/classes/java/runtime"));
 		TestFixtures.requireFiles(TestFixtures.Fixture.GAME_SIDE, "compiled game side", runtime.resolve(binary.replace('.', '/') + ".class"));
 		byte[] compiled = Files.readAllBytes(runtime.resolve(binary.replace('.', '/') + ".class"));
-		byte[] nativeCaller = ForgeSpawnFixture.staged("merged-base/patched-mc-merged-26.2.jar", TARGET);
+		byte[] nativeCaller = TestFixtures.stagedClass("neoforge-base/patched-mc-neoforge-26.2.jar", TARGET);
 		for (byte[] caller : List.of(adapt(nativeCaller), adapt(write(restoredCaller())))) {
 			for (MethodInsnNode injected : injectedCalls(caller)) {
 				ClassNode definition = new ClassNode(); new ClassReader(compiled).accept(definition, 0);
@@ -224,7 +224,7 @@ class PortalDirectRestorationTest {
 	private static byte[] write(ClassNode caller) { ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS); caller.accept(writer); return writer.toByteArray(); }
 	/** The staged caller itself once the merge restores MinecraftForge's call; otherwise that restoration by hand. */
 	private static ClassNode restoredCaller() throws Exception {
-		ClassNode caller = new ClassNode(); new ClassReader(ForgeSpawnFixture.staged("merged-base/patched-mc-merged-26.2.jar", TARGET)).accept(caller, 0);
+		ClassNode caller = new ClassNode(); new ClassReader(TestFixtures.stagedClass("neoforge-base/patched-mc-neoforge-26.2.jar", TARGET)).accept(caller, 0);
 		MethodNode host = host(caller);
 		for (var instruction : host.instructions) if (instruction instanceof MethodInsnNode call && call.owner.equals(FORGE)) return caller;
 		MethodInsnNode neo = neo(host); JumpInsnNode barrier = neoGuard(host);

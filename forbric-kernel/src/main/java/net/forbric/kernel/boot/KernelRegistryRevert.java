@@ -38,16 +38,14 @@ import net.forbric.kernel.util.ForbricLog;
  * <p>This class takes NeoForge's snapshot itself — {@code RegistryManager.takeSnapshot(SYNC_TO_CLIENT)}, the
  * public API the server uses to build the sync — the first time a connection's remap begins, and
  * {@code revertToFrozen()} now applies it back: plain registries through NeoForge's own {@code applySnapshot}
- * loop, the Forge-wrapped ones through the staged path that loop already goes through on connect, and
- * fabric-api's {@code unmap} first, so its own bookkeeping ({@code fabric_prevIndexedEntries}, its remap event)
- * is left the way it would leave it. A snapshot whose ids all still match is not applied at all — the common
- * case, and one where every registry would otherwise be torn down and rebuilt for nothing.
+ * loop, and fabric-api's {@code unmap} first, so its own bookkeeping ({@code fabric_prevIndexedEntries}, its
+ * remap event) is left the way it would leave it. A snapshot whose ids all still match is not applied at all —
+ * the common case, and one where every registry would otherwise be torn down and rebuilt for nothing.
  */
 public final class KernelRegistryRevert {
 	private static final String REGISTRY_MANAGER = ForeignType.REGISTRY_MANAGER.binary(Ecosystem.NEOFORGE);
 	private static final String SNAPSHOT_TYPE = REGISTRY_MANAGER + "$SnapshotType";
 	private static final String REMAPPABLE = "net.fabricmc.fabric.impl.registry.sync.RemappableRegistry";
-	private static final String WRAPPER = "net.minecraftforge.registries.NamespacedWrapper";
 
 	/** {@code Map<Identifier, RegistrySnapshot>} of every synced registry as it was before the connection remapped it. */
 	private static volatile Map<?, ?> originals;
@@ -127,8 +125,8 @@ public final class KernelRegistryRevert {
 
 	/**
 	 * fabric-api's {@code unmap()} on every plain registry that carries it — what its suppressed client mixin would
-	 * have done. The Forge-wrapped registries are skipped: their ids live in the delegate, and the NeoForge pass that
-	 * follows restores those through {@link KernelForgeWrapperSync}. Absent fabric-api, there is nothing to do.
+	 * have done, so its own bookkeeping ({@code fabric_prevIndexedEntries}, its remap event) is left the way it
+	 * would leave it. Absent fabric-api, there is nothing to do.
 	 */
 	private static int unmapFabricPlainRegistries(ClassLoader cl) {
 		Class<?> remappable;
@@ -139,16 +137,10 @@ public final class KernelRegistryRevert {
 		}
 		int done = 0;
 		try {
-			Class<?> wrapper = null;
-			try {
-				wrapper = Class.forName(WRAPPER, false, cl);
-			} catch (ClassNotFoundException noForge) {
-				// no wrappers to skip
-			}
 			Object root = Class.forName("net.minecraft.core.registries.BuiltInRegistries", false, cl).getField("REGISTRY").get(null);
 			Method unmap = remappable.getMethod("unmap");
 			for (Object registry : (Iterable<?>) root) {
-				if (!remappable.isInstance(registry) || (wrapper != null && wrapper.isInstance(registry))) continue;
+				if (!remappable.isInstance(registry)) continue;
 				try {
 					unmap.invoke(registry);
 					done++;

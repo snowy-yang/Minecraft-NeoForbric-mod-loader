@@ -153,15 +153,10 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 			+ "Lnet/minecraft/network/protocol/common/ServerboundCustomPayloadPacket;)V";
 	private static final String CLIENT_HANDLE_PAYLOAD_DESC = "(Lnet/minecraft/network/protocol/common/ClientboundCustomPayloadPacket;)V";
 	private static final String SERVER_HANDLE_PAYLOAD_DESC = "(Lnet/minecraft/network/protocol/common/ServerboundCustomPayloadPacket;)V";
-	private static final String FORGE_DISPATCH_HOOK = "dispatchForgePayload";
-	private static final String FORGE_DISPATCH_HOOK_DESC = "(Ljava/lang/Object;Ljava/lang/Object;)Z";
-
 	/**
-	 * NeoForge's channel police and its register bookkeeping. {@code checkPacket} (client and server overloads)
-	 * refuses any payload whose channel NeoForge did not negotiate — which is every MinecraftForge channel, so a Forge
-	 * mod's client could not send on its own channel. Forge payloads are exempted. {@code onMinecraftRegister} /
-	 * {@code onMinecraftUnregister} are where every peer channel declaration lands on this base, with or without
-	 * fabric-api; Forge's own listener for that channel never runs here, so its bookkeeping is fed from there.
+	 * NeoForge's channel police. {@code checkPacket} (client and server overloads) refuses any payload whose
+	 * channel NeoForge did not negotiate — which is every channel another ecosystem negotiated, so a Fabric mod's
+	 * client could not send on its own channel. Foreign payloads are exempted.
 	 */
 	private static final String NEO_NETWORK_REGISTRY = ForeignType.NETWORK_REGISTRY.binary(Ecosystem.NEOFORGE);
 	private static final String CHECK_PACKET = "checkPacket";
@@ -170,8 +165,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 	private static final String REGISTER_DESC = "(Lnet/minecraft/network/Connection;Ljava/util/Set;)V";
 	private static final String IS_FORGE_PACKET = "isForgePayloadPacket";
 	private static final String IS_FORGE_PACKET_DESC = "(Ljava/lang/Object;)Z";
-	private static final String ON_NEO_REGISTRATION = "onNeoChannelRegistration";
-	private static final String ON_NEO_REGISTRATION_DESC = "(Ljava/lang/Object;Ljava/lang/Object;Z)V";
 	private static final String HANDLE_PAYLOAD = "handleCustomPayload";
 	private static final String HANDLE_PAYLOAD_DESC = "(Lnet/minecraft/network/protocol/common/ClientboundCustomPayloadPacket;)V";
 	private static final String NEO_PACKAGE = "net/neoforged/";
@@ -200,60 +193,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 	private static final String INITIALIZED_FLAG = "initializedConnection";
 	private static final String IS_OTHER = "isOther";
 
-	/**
-	 * MinecraftForge's login/configuration handshake — the five tasks that exchange mod and channel lists and push
-	 * the server's SERVER-type configs to the client. Three links lost the byte-merge and are re-tied here:
-	 * <ul>
-	 * <li>{@code Connection.channelActive} no longer invokes the activation handler that installs Forge's
-	 *     per-connection packet handler, so on a client the {@code forge:handshake} channel attribute was null and
-	 *     every handler on that channel would have died on it;</li>
-	 * <li>the merged {@code runConfiguration} is NeoForge's body, which never posts Forge's
-	 *     {@code GatherLoginConfigurationTasksEvent} — the sole producer of Forge's tasks;</li>
-	 * <li>the merged {@code startNextTask} dispatches through the vanilla {@code start(Consumer)} overload, and
-	 *     Forge's tasks answer it by throwing: they want the {@code ConfigurationTaskContext} overload, whose
-	 *     default implementation on the same interface delegates straight back to the Consumer one, so every
-	 *     vanilla, NeoForge and Fabric task is unaffected by the swap.</li>
-	 * </ul>
-	 * The fourth is the client's "configuration complete" hook, which Forge only reaches from a code-of-conduct
-	 * handler vanilla rarely calls.
-	 */
-	private static final String CONNECTION = "net.minecraft.network.Connection";
-	private static final String CHANNEL_ACTIVE = "channelActive";
-	private static final String CHANNEL_ACTIVE_DESC = "(Lio/netty/channel/ChannelHandlerContext;)V";
-	private static final String DELAYED_DISCONNECT = "delayedDisconnect";
-	private static final String ON_CONNECTION_ACTIVE = "onConnectionActive";
-	private static final String RUN_CONFIGURATION = "runConfiguration";
-	private static final String NEO_EARLY_TASKS = "configureEarlyTasks";
-	private static final String GATHER_FORGE_TASKS = "gatherForgeConfigurationTasks";
-	private static final String START_NEXT_TASK = "startNextTask";
-	private static final String CONFIGURATION_TASK = "net/minecraft/server/network/ConfigurationTask";
-	private static final String TASK_START = "start";
-	private static final String TASK_START_CONSUMER_DESC = "(Ljava/util/function/Consumer;)V";
-	private static final String FORGE_TASK_CONTEXT = "Lnet/minecraftforge/network/config/ConfigurationTaskContext;";
-	private static final String TASK_CONTEXT_FIELD = "taskContext";
-	private static final String HANDLE_CONFIG_FINISHED = "handleConfigurationFinished";
-	private static final String NEO_CONFIG_FINISHED = "onConfigurationFinished";
-	private static final String ON_CLIENT_CONFIG_FINISHED = "onClientConfigurationFinished";
-	private static final String OBJECT_HOOK_DESC = "(Ljava/lang/Object;)V";
-
-	/**
-	 * MinecraftForge's {@code SyncConfigTask}, the handshake task that pushes each per-world SERVER config to the
-	 * joining client. Its whole body is {@code Files.readAllBytes(config.getFullPath())} inside a
-	 * {@code catch (IOException)} that calls {@code connection.disconnect("Connection closed - Failed to read
-	 * config on server")} — so one absent file on the server's disk ends the join, with no retry, although the
-	 * config it failed to read is a serialisation of a {@code ModConfig} the server is holding in memory.
-	 *
-	 * <p>The read is redirected to {@link net.forbric.kernel.interop.PayloadInterop#readForgeServerConfig}, which
-	 * has the same descriptor and the same behaviour except that a {@code NoSuchFileException} first asks the
-	 * owning {@code ModConfig} to write itself again. Swapping only the INVOKESTATIC's owner leaves the stack
-	 * shape, the frames and the exception table untouched — it is one instruction's constant, not a splice.
-	 */
-	private static final String SYNC_CONFIG_TASK = "net.minecraftforge.network.tasks.SyncConfigTask";
-	private static final String FILES = "java/nio/file/Files";
-	private static final String READ_ALL_BYTES = "readAllBytes";
-	private static final String READ_ALL_BYTES_DESC = "(Ljava/nio/file/Path;)[B";
-	private static final String READ_CONFIG_HOOK = "readForgeServerConfig";
-
 	private static final String SERVER_CONFIG = "net.minecraft.server.network.ServerConfigurationPacketListenerImpl";
 	private static final String FINISH_TASK = "finishCurrentTask";
 	private static final String FINISH_TASK_DESC = "(Lnet/minecraft/server/network/ConfigurationTask$Type;)V";
@@ -280,15 +219,8 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 	static final String CLAIM_FINISH_TASK = "forbric-common-network-interop#finishCurrentTask";
 	static final String CLAIM_CLIENT_COMMON_PAYLOAD = "forbric-common-network-interop#clientCommonHandlePayload";
 	static final String CLAIM_SERVER_COMMON_PAYLOAD = "forbric-common-network-interop#serverCommonHandlePayload";
-	static final String CLAIM_SERVER_GAME_FALL_THROUGH = "forbric-common-network-interop#serverGamePlayFallThrough";
 	static final String CLAIM_CHECK_PACKET = "forbric-common-network-interop#neoCheckPacket";
-	static final String CLAIM_CHANNEL_REGISTRATION = "forbric-common-network-interop#neoChannelRegistration";
-	static final String CLAIM_CHANNEL_ACTIVE = "forbric-common-network-interop#connectionChannelActive";
-	static final String CLAIM_GATHER_TASKS = "forbric-common-network-interop#gatherConfigurationTasks";
-	static final String CLAIM_START_NEXT_TASK = "forbric-common-network-interop#startNextTask";
-	static final String CLAIM_CONFIG_FINISHED = "forbric-common-network-interop#clientConfigurationFinished";
 	static final String CLAIM_GUARD_INITIALISATION = "forbric-common-network-interop#guardOtherConnectionInitialisation";
-	static final String CLAIM_SYNC_CONFIG_READ = "forbric-common-network-interop#forgeSyncConfigRead";
 
 	/**
 	 * One claim per branch. The server-game fall-through is REQUIRED while it is switched on: the merged play
@@ -305,32 +237,12 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 				new Claim(CLAIM_FABRIC_ADDON, new AnchorSet(addons, null)),
 				new Claim(CLAIM_FINISH_TASK, AnchorSet.of(required(SERVER_CONFIG,
 						"Fabric and NeoForge common-networking configuration tasks are not treated as equivalent — one family's configuration never finishes"))),
-				new Claim(CLAIM_CLIENT_COMMON_PAYLOAD, AnchorSet.of(required(CLIENT_COMMON_LISTENER,
-						"MinecraftForge's payloads never reach ForgeHooks.onCustomPayload on the client — Forge mod networking is dead client-side"))),
-				new Claim(CLAIM_SERVER_COMMON_PAYLOAD, AnchorSet.of(required(SERVER_COMMON_LISTENER,
-						"MinecraftForge's payloads never reach ForgeHooks.onCustomPayload on the server — Forge mod networking is dead server-side"))),
-				new Claim(CLAIM_SERVER_GAME_FALL_THROUGH, playFallThroughEnabled()
-						? AnchorSet.of(required(SERVER_GAME_LISTENER,
-								"a NeoForge mod's play-phase packet to the server reaches nobody when MinecraftForge does not take it — its server-side handler never runs"))
-						: AnchorSet.scanned("NeoForge mods' play-phase packets to the server left undelivered with -Dforbric.playPayloadFallThrough=off")),
 				new Claim(CLAIM_CHECK_PACKET, AnchorSet.of(required(NEO_NETWORK_REGISTRY,
-						"NeoForge's channel check rejects every MinecraftForge payload — Forge mods are disconnected for unknown channels"))),
-				new Claim(CLAIM_CHANNEL_REGISTRATION, AnchorSet.of(required(NEO_NETWORK_REGISTRY,
-						"MinecraftForge's channel bookkeeping falls out of step with NeoForge's registrations"))),
-				new Claim(CLAIM_CHANNEL_ACTIVE, AnchorSet.of(required(CONNECTION,
-						"MinecraftForge's per-connection packet handler is never installed — Forge's handshake cannot be answered"))),
-				new Claim(CLAIM_GATHER_TASKS, AnchorSet.of(required(SERVER_CONFIG,
-						"MinecraftForge's configuration tasks are never gathered — its mod list, channel list and server-config sync never run"))),
-				new Claim(CLAIM_START_NEXT_TASK, AnchorSet.of(required(SERVER_CONFIG,
-						"MinecraftForge's configuration tasks refuse the vanilla start overload and never start"))),
-				new Claim(CLAIM_CONFIG_FINISHED, AnchorSet.of(required(CLIENT_CONFIG_LISTENER,
-						"MinecraftForge's configuration-complete hook never runs — a Forge mod never learns the server is modded"))),
+						"NeoForge's channel check rejects every payload another ecosystem negotiated — Fabric mods are disconnected for unknown channels"))),
 				// HEDGE: the merged listener on the current carrier already initialises once, so the guard finds
 				// nothing to do (never applied in any gate log); it is kept for a carrier where it does not.
 				new Claim(CLAIM_GUARD_INITIALISATION, AnchorSet.of(new AnchorSet.Anchor(CLIENT_CONFIG_LISTENER, AnchorSet.Severity.HEDGE,
-						"a non-NeoForge connection is initialised more than once per configuration"))),
-				new Claim(CLAIM_SYNC_CONFIG_READ, AnchorSet.of(required(SYNC_CONFIG_TASK,
-						"a per-world SERVER config file that is not on disk when MinecraftForge's handshake reads it disconnects the joining client instead of being written again"))));
+						"a non-NeoForge connection is initialised more than once per configuration"))));
 	}
 
 	private static AnchorSet.Anchor required(String binaryName, String cost) {
@@ -352,10 +264,8 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 		boolean serverCommon = SERVER_COMMON_LISTENER.equals(className);
 		boolean serverGame = SERVER_GAME_LISTENER.equals(className);
 		boolean neoRegistry = NEO_NETWORK_REGISTRY.equals(className);
-		boolean connection = CONNECTION.equals(className);
-		boolean syncConfigTask = SYNC_CONFIG_TASK.equals(className);
-		if (!fabricAddon && !serverConfig && !clientConfig && !clientCommon && !serverCommon && !serverGame
-				&& !neoRegistry && !connection && !syncConfigTask) return classBytes;
+		if (!fabricAddon && !serverConfig && !clientConfig && !clientCommon && !serverGame
+				&& !neoRegistry) return classBytes;
 
 		ClassNode node = new ClassNode();
 		// EXPAND_FRAMES so every original frame is an absolute F_NEW node; the explicit frames we author at our own
@@ -379,24 +289,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 				reporter.hit(CLAIM_FINISH_TASK);
 				ForbricLog.info("[Forbric/Net] treating Fabric/NeoForge common-networking tasks as equivalent at %s.%s",
 						className, FINISH_TASK);
-			} else if ((clientCommon && m.name.equals(HANDLE_PAYLOAD) && m.desc.equals(CLIENT_HANDLE_PAYLOAD_DESC))
-					|| (serverCommon && m.name.equals(HANDLE_PAYLOAD) && m.desc.equals(SERVER_HANDLE_PAYLOAD_DESC))) {
-				String packetType = org.objectweb.asm.Type.getArgumentTypes(m.desc)[0].getInternalName();
-				m.instructions.insert(forgeDispatchPrologue(node.name, packetType));
-				bumpStack(m, 2);
-				changed = true;
-				reporter.hit(clientCommon ? CLAIM_CLIENT_COMMON_PAYLOAD : CLAIM_SERVER_COMMON_PAYLOAD);
-				ForbricLog.info("[Forbric/Net] handing MinecraftForge's payloads to ForgeHooks.onCustomPayload at %s.%s — "
-						+ "NeoForge won this method in the merge and Forge's dispatch went with it", className, HANDLE_PAYLOAD);
-			} else if (serverGame && m.name.equals(HANDLE_PAYLOAD) && m.desc.equals(SERVER_HANDLE_PAYLOAD_DESC)) {
-				if (playFallThroughEnabled() && letNeoForgePayloadsThrough(m)) {
-					changed = true;
-					reporter.hit(CLAIM_SERVER_GAME_FALL_THROUGH);
-					ForbricLog.info("[Forbric/Net] %s.%s now hands a payload MinecraftForge does not take to "
-							+ "NeoForge's dispatcher — it is Forge's override and never reached NeoForge, so a NeoForge "
-							+ "mod's play-phase packet to the server (Carry On's carry key, a GUI button) reached nobody "
-							+ "(-Dforbric.playPayloadFallThrough=off to leave it)", className, HANDLE_PAYLOAD);
-				}
 			} else if (neoRegistry && m.name.equals(CHECK_PACKET) && (m.access & Opcodes.ACC_STATIC) != 0
 					&& org.objectweb.asm.Type.getArgumentTypes(m.desc).length == 2) {
 				m.instructions.insert(forgePacketExemptionPrologue(m.desc));
@@ -405,47 +297,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 				reporter.hit(CLAIM_CHECK_PACKET);
 				ForbricLog.info("[Forbric/Net] exempting MinecraftForge payloads from NeoForge's channel check at %s.%s%s",
 						className, CHECK_PACKET, m.desc);
-			} else if (neoRegistry && (m.name.equals(ON_REGISTER) || m.name.equals(ON_UNREGISTER)) && m.desc.equals(REGISTER_DESC)) {
-				m.instructions.insert(neoRegistrationPrologue(m.name.equals(ON_REGISTER)));
-				bumpStack(m, 3);
-				changed = true;
-				reporter.hit(CLAIM_CHANNEL_REGISTRATION);
-				ForbricLog.info("[Forbric/Net] keeping MinecraftForge's channel bookkeeping in step at %s.%s", className, m.name);
-			} else if (connection && m.name.equals(CHANNEL_ACTIVE) && m.desc.equals(CHANNEL_ACTIVE_DESC)) {
-				if (startForgeNetworkingOnActivation(m)) {
-					bumpStack(m, 1);
-					changed = true;
-					reporter.hit(CLAIM_CHANNEL_ACTIVE);
-					ForbricLog.info("[Forbric/Net] %s.%s now starts MinecraftForge's networking for the connection — the "
-							+ "merge dropped the activation handler that installed its per-connection packet handler, so a "
-							+ "client had none and Forge's handshake could not be answered", className, CHANNEL_ACTIVE);
-				}
-			} else if (serverConfig && m.name.equals(RUN_CONFIGURATION)) {
-				if (gatherForgeTasksWithNeoForges(m)) {
-					bumpStack(m, 1);
-					changed = true;
-					reporter.hit(CLAIM_GATHER_TASKS);
-					ForbricLog.info("[Forbric/Net] %s.%s now gathers MinecraftForge's configuration tasks alongside "
-							+ "NeoForge's — the merged body is NeoForge's and never posted Forge's gather event, so its "
-							+ "mod list, channel list and server-config sync never ran", className, RUN_CONFIGURATION);
-				}
-			} else if (serverConfig && m.name.equals(START_NEXT_TASK)) {
-				if (startTasksThroughForgesContext(node, m)) {
-					changed = true;
-					reporter.hit(CLAIM_START_NEXT_TASK);
-					ForbricLog.info("[Forbric/Net] %s.%s now starts configuration tasks through MinecraftForge's task "
-							+ "context — its own tasks refuse the vanilla overload, and every other task reaches it "
-							+ "through the interface default that delegates back", className, START_NEXT_TASK);
-				}
-			} else if (clientConfig && m.name.equals(HANDLE_CONFIG_FINISHED)) {
-				if (completeForgeConfiguration(m)) {
-					bumpStack(m, 1);
-					changed = true;
-					reporter.hit(CLAIM_CONFIG_FINISHED);
-					ForbricLog.info("[Forbric/Net] %s.%s now runs MinecraftForge's configuration-complete hook — Forge "
-							+ "reaches it only from a code-of-conduct handler vanilla rarely calls, so a Forge mod never "
-							+ "learned whether the server was modded", className, HANDLE_CONFIG_FINISHED);
-				}
 			}
 			if (clientConfig) {
 				int guarded = guardOtherConnectionInitialisation(node, m);
@@ -468,50 +319,12 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 							+ "expects; leaving it alone", className, HANDLE_PAYLOAD);
 				}
 			}
-			if (syncConfigTask) {
-				int redirected = readServerConfigsThroughTheKernel(m);
-				if (redirected > 0) {
-					changed = true;
-					reporter.hit(CLAIM_SYNC_CONFIG_READ);
-					ForbricLog.info("[Forbric/Net] %s.%s now reads its %d per-world SERVER config file(s) through the "
-							+ "kernel — a file that is not on disk when it reads disconnects the joining client with "
-							+ "\"Failed to read config on server\", and the kernel writes it back from the ModConfig "
-							+ "the server is holding instead", className, m.name, redirected);
-				}
-			}
 		}
 		if (!changed) return classBytes;
 
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
 		return writer.toByteArray();
-	}
-
-	/**
-	 * Points every {@code Files.readAllBytes(Path)} in this method at
-	 * {@link net.forbric.kernel.interop.PayloadInterop#readForgeServerConfig}, and returns how many it moved.
-	 *
-	 * <p>The hook's descriptor is byte-for-byte the one it replaces and it is static, so this changes an
-	 * INVOKESTATIC's owner and nothing else: same operand consumed, same value produced, same checked
-	 * {@code IOException} for the surrounding handler to catch. No frame, no max-stack and no exception-table
-	 * entry moves, which is why this repair needs no explicit {@code FrameNode} while every splice above does.
-	 *
-	 * <p>Returns 0, leaving the class untouched, when Forge stops reading the file this way — a carrier where the
-	 * call is gone is a carrier where the disconnect this repairs cannot happen, and the claim then reports a
-	 * repair that found nothing rather than one that silently did nothing.
-	 */
-	private static int readServerConfigsThroughTheKernel(MethodNode m) {
-		int moved = 0;
-		for (AbstractInsnNode insn : m.instructions.toArray()) {
-			if (!(insn instanceof MethodInsnNode call)) continue;
-			if (call.getOpcode() != Opcodes.INVOKESTATIC) continue;
-			if (!FILES.equals(call.owner) || !READ_ALL_BYTES.equals(call.name)
-					|| !READ_ALL_BYTES_DESC.equals(call.desc)) continue;
-			call.owner = INTEROP;
-			call.name = READ_CONFIG_HOOK;
-			moved++;
-		}
-		return moved;
 	}
 
 	/**
@@ -553,85 +366,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 		body.add(new FrameNode(Opcodes.F_NEW, 2, new Object[] {args[0].getInternalName(), args[1].getInternalName()}, 0,
 				new Object[] {}));
 		return body;
-	}
-
-	/**
-	 * {@code interop.onConnectionActive(this);} once {@code channelActive} has stored the channel — Forge's own
-	 * moment, before any packet. Anchored on the first read of {@code delayedDisconnect}, which directly follows the
-	 * channel/address stores in both the merged and the pristine bodies; the insertion is straight-line, so no frame
-	 * is authored and no existing branch target moves.
-	 */
-	private static boolean startForgeNetworkingOnActivation(MethodNode m) {
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() != Opcodes.GETFIELD) continue;
-			if (!DELAYED_DISCONNECT.equals(((org.objectweb.asm.tree.FieldInsnNode) insn).name)) continue;
-			AbstractInsnNode loadThis = previousOpcode(insn);
-			if (loadThis == null || loadThis.getOpcode() != Opcodes.ALOAD || ((VarInsnNode) loadThis).var != 0) return false;
-			InsnList call = new InsnList();
-			call.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			call.add(new MethodInsnNode(Opcodes.INVOKESTATIC, INTEROP, ON_CONNECTION_ACTIVE, OBJECT_HOOK_DESC, false));
-			m.instructions.insertBefore(loadThis, call);
-			return true;
-		}
-		return false;
-	}
-
-	/** {@code interop.gatherForgeConfigurationTasks(this);} right after NeoForge queues its own early tasks. */
-	private static boolean gatherForgeTasksWithNeoForges(MethodNode m) {
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() != Opcodes.INVOKESTATIC) continue;
-			MethodInsnNode call = (MethodInsnNode) insn;
-			if (!NEO_EARLY_TASKS.equals(call.name) || !call.owner.startsWith(NEO_PACKAGE)) continue;
-			InsnList hook = new InsnList();
-			hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, INTEROP, GATHER_FORGE_TASKS, OBJECT_HOOK_DESC, false));
-			m.instructions.insert(call, hook);
-			return true;
-		}
-		return false;
-	}
-
-	/**
-	 * Swaps {@code task.start(this::send)} for {@code task.start(this.taskContext)} — the dispatch the pristine
-	 * Forge body uses. Both are one interface call on the same task reference, so the stack depth is unchanged; the
-	 * lambda that built the consumer becomes unreachable and is removed with it.
-	 */
-	private static boolean startTasksThroughForgesContext(ClassNode node, MethodNode m) {
-		boolean hasContext = false;
-		for (org.objectweb.asm.tree.FieldNode f : node.fields) {
-			if (TASK_CONTEXT_FIELD.equals(f.name) && FORGE_TASK_CONTEXT.equals(f.desc)) hasContext = true;
-		}
-		if (!hasContext) return false;
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() != Opcodes.INVOKEINTERFACE) continue;
-			MethodInsnNode call = (MethodInsnNode) insn;
-			if (!CONFIGURATION_TASK.equals(call.owner) || !TASK_START.equals(call.name)
-					|| !TASK_START_CONSUMER_DESC.equals(call.desc)) continue;
-			AbstractInsnNode consumer = previousOpcode(call);
-			if (!(consumer instanceof InvokeDynamicInsnNode)) return false;
-			AbstractInsnNode loadThis = previousOpcode(consumer);
-			if (loadThis == null || loadThis.getOpcode() != Opcodes.ALOAD || ((VarInsnNode) loadThis).var != 0) return false;
-			m.instructions.set(consumer, new org.objectweb.asm.tree.FieldInsnNode(Opcodes.GETFIELD, node.name,
-					TASK_CONTEXT_FIELD, FORGE_TASK_CONTEXT));
-			call.desc = "(" + FORGE_TASK_CONTEXT + ")V";
-			return true;
-		}
-		return false;
-	}
-
-	/** {@code interop.onClientConfigurationFinished(this);} after NeoForge's own finish, before the reply goes out. */
-	private static boolean completeForgeConfiguration(MethodNode m) {
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() != Opcodes.INVOKESTATIC) continue;
-			MethodInsnNode call = (MethodInsnNode) insn;
-			if (!NEO_CONFIG_FINISHED.equals(call.name) || !call.owner.startsWith(NEO_PACKAGE)) continue;
-			InsnList hook = new InsnList();
-			hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, INTEROP, ON_CLIENT_CONFIG_FINISHED, OBJECT_HOOK_DESC, false));
-			m.instructions.insert(call, hook);
-			return true;
-		}
-		return false;
 	}
 
 	/**
@@ -691,117 +425,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 			if (insn.getOpcode() >= 0) return insn;
 		}
 		return null;
-	}
-
-	/** {@code interop.onNeoChannelRegistration(connection, set, register);} at the head of the static register hooks — no branch. */
-	private static InsnList neoRegistrationPrologue(boolean register) {
-		InsnList body = new InsnList();
-		body.add(new VarInsnNode(Opcodes.ALOAD, 0)); // the connection
-		body.add(new VarInsnNode(Opcodes.ALOAD, 1)); // the channel set
-		body.add(new InsnNode(register ? Opcodes.ICONST_1 : Opcodes.ICONST_0));
-		body.add(new MethodInsnNode(Opcodes.INVOKESTATIC, INTEROP, ON_NEO_REGISTRATION, ON_NEO_REGISTRATION_DESC, false));
-		return body;
-	}
-
-	/**
-	 * {@code if (interop.dispatchForgePayload(this, packet)) return;} — prepended to the void method. At the
-	 * fall-through label the stack is empty and both params live: locals=[this, packet] / stack=[], the entry frame.
-	 */
-	/**
-	 * Makes MinecraftForge's play-phase override fall through to NeoForge's dispatcher.
-	 *
-	 * <p>The merged {@code ServerGamePacketListenerImpl.handleCustomPayload} is MinecraftForge's patch and it is
-	 * three instructions long (javap):
-	 *
-	 * <pre>
-	 *    0  ALOAD 1 ; INVOKEVIRTUAL packet.payload()
-	 *    4  ALOAD 0 ; GETFIELD connection
-	 *    8  INVOKESTATIC ForgeHooks.onCustomPayload(payload, connection)Z
-	 *   11  POP
-	 *   12  RETURN
-	 * </pre>
-	 *
-	 * <p>The {@code POP} is the bug. Forge's hook answers "was this mine, and did I take it" and the override
-	 * throws the answer away, then returns — without ever calling {@code super}. NeoForge's own dispatch lives on
-	 * {@code ServerCommonPacketListenerImpl}, which is exactly that super, so a NeoForge mod's play-phase packet
-	 * to the server arrived, was offered to MinecraftForge, declined, and stopped. No exception, no log: the
-	 * mod's server-side handler simply never ran, while clientbound traffic and both other families' packets
-	 * worked. Every GUI button, keybind action and config-sync request a NeoForge mod sends upward was dead, in
-	 * singleplayer too, because the integrated server takes the same path.
-	 *
-	 * <p>So the {@code POP} becomes a branch: if MinecraftForge took it, return; otherwise, if NeoForge registered
-	 * it, call {@code NetworkRegistry.handleModdedPayload(this, packet)} — the call NeoForge's own super body makes
-	 * for a mod payload, with NeoForge's own channel check and handler lookup inside it. NOT {@code super} itself:
-	 * fabric-api injects into that super a handler that serves only the configuration listener and throws
-	 * {@code IllegalStateException: Unknown addon} for this one, so reaching it disconnects the player the first
-	 * time a NeoForge mod sends anything — measured, with Carry On's key packet and fabric-api installed. Written
-	 * against the POP that FOLLOWS the hook rather than against an offset, so a carrier that adds an instruction
-	 * before it does not silently land the branch somewhere else — and if that pattern is not found, nothing is
-	 * rewritten and the caller reports no change.
-	 *
-	 * @return whether the method was rewritten
-	 */
-	private static boolean letNeoForgePayloadsThrough(MethodNode m) {
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC) continue;
-			if (!FORGE_HOOKS.equals(call.owner) || !ON_CUSTOM_PAYLOAD.equals(call.name)) continue;
-
-			AbstractInsnNode next = call.getNext();
-			while (next != null && (next instanceof LabelNode || next instanceof LineNumberNode
-					|| next instanceof FrameNode)) {
-				next = next.getNext();
-			}
-			if (next == null || next.getOpcode() != Opcodes.POP) continue;
-
-			LabelNode taken = new LabelNode();
-			InsnList fallThrough = new InsnList();
-			fallThrough.add(new JumpInsnNode(Opcodes.IFNE, taken));
-			// GATED, and the gate is not optional. NeoForge's dispatcher is strict about ids it does not know: it
-			// disconnects with "No Channel for ...". A payload nobody else took and NeoForge never registered — a
-			// Fabric payload with no receiver, say, which vanilla's empty override would simply drop — must keep
-			// being dropped. The question that makes it safe is whether NeoForge registered this payload at all; if
-			// it did not, the method returns exactly as it did before.
-			fallThrough.add(new VarInsnNode(Opcodes.ALOAD, 1));
-			fallThrough.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
-					org.objectweb.asm.Type.getArgumentTypes(SERVER_HANDLE_PAYLOAD_DESC)[0].getInternalName(),
-					"payload", "()L" + CUSTOM_PAYLOAD + ";", false));
-			fallThrough.add(new MethodInsnNode(Opcodes.INVOKESTATIC, INTEROP, NEO_OWNS_HOOK,
-					NEO_OWNS_HOOK_DESC, false));
-			fallThrough.add(new JumpInsnNode(Opcodes.IFEQ, taken));
-			fallThrough.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			fallThrough.add(new VarInsnNode(Opcodes.ALOAD, 1));
-			// Straight to NeoForge's dispatcher, not through super: see the javadoc for the fabric-api handler that
-			// waits in super and ends the connection.
-			fallThrough.add(new MethodInsnNode(Opcodes.INVOKESTATIC, NEO_NETWORK_REGISTRY.replace('.', '/'),
-					NEO_DISPATCH, NEO_DISPATCH_DESC, false));
-			fallThrough.add(taken);
-			// The class is read with EXPAND_FRAMES, so every frame here is absolute and this one has to be too.
-			// Both arms reach the label with the same state: this and the packet, nothing on the stack.
-			fallThrough.add(new FrameNode(Opcodes.F_NEW, 2,
-					new Object[] {SERVER_GAME_LISTENER.replace('.', '/'),
-							org.objectweb.asm.Type.getArgumentTypes(SERVER_HANDLE_PAYLOAD_DESC)[0]
-									.getInternalName()},
-					0, new Object[0]));
-
-			m.instructions.insertBefore(next, fallThrough);
-			m.instructions.remove(next);
-			bumpStack(m, 2);
-			return true;
-		}
-		return false;
-	}
-
-	private static InsnList forgeDispatchPrologue(String owner, String packetType) {
-		InsnList body = new InsnList();
-		LabelNode notForge = new LabelNode();
-		body.add(new VarInsnNode(Opcodes.ALOAD, 0)); // this (the listener; its `connection` field is what Forge needs)
-		body.add(new VarInsnNode(Opcodes.ALOAD, 1)); // the packet
-		body.add(new MethodInsnNode(Opcodes.INVOKESTATIC, INTEROP, FORGE_DISPATCH_HOOK, FORGE_DISPATCH_HOOK_DESC, false));
-		body.add(new JumpInsnNode(Opcodes.IFEQ, notForge));
-		body.add(new InsnNode(Opcodes.RETURN));
-		body.add(notForge);
-		body.add(new FrameNode(Opcodes.F_NEW, 2, new Object[] {owner, packetType}, 0, new Object[] {}));
-		return body;
 	}
 
 	/**

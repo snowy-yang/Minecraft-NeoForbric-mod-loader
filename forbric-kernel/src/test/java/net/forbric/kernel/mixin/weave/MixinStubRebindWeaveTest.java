@@ -69,7 +69,7 @@ class MixinStubRebindWeaveTest {
 		RUNS.put("fabric", run("fabric", Ecosystem.FABRIC, Map.of()));
 		RUNS.put("fabric-off", run("fabric-off", Ecosystem.FABRIC, Map.of(MixinStubRebind.PROPERTY, "off")));
 		RUNS.put("neoforge", run("neoforge", Ecosystem.NEOFORGE, Map.of()));
-		RUNS.put("forge", run("forge", Ecosystem.FORGE, Map.of()));
+		RUNS.put("forge", run("forge", Ecosystem.NEOFORGE, Map.of()));
 	}
 
 	@Test void aFabricModsInjectorsLeaveTheStubForTheBody() throws Exception {

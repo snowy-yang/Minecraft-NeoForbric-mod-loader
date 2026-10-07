@@ -34,8 +34,8 @@ import java.util.stream.Stream;
  *
  * <p>The bar is {@value #MINIMUM_FEATURE}, and it is set by NeoFormRuntime: every class under
  * {@code net/neoforged/neoform/runtime/} in {@code neoform-runtime-2.0.18-all.jar} is class-file major 65.
- * Nothing else in the chain asks for more — the merge tools are compiled to 17, and every other tool runs as a
- * subprocess of whichever JVM we hand it. In particular <strong>no step needs {@code javac}</strong>: that was
+ * Nothing else in the chain asks for more — the link-check tools are compiled to 17, and every other tool runs
+ * as a subprocess of whichever JVM we hand it. In particular <strong>no step needs {@code javac}</strong>: that was
  * only ever true of NeoForm's {@code recompile} node, which calls {@code ToolProvider.getSystemJavaCompiler()}
  * in-process, and Forbric takes the {@code gameJarNoRecomp} result instead — binary patches, no compiler.
  *
@@ -67,6 +67,11 @@ final class JdkLocator {
 	private static final int PROBE_TIMEOUT_SECONDS = 20;
 
 	private JdkLocator() {
+	}
+
+	/** Absolute path to the {@code java} launcher of the JVM this process is running under. */
+	static String javaBin() {
+		return System.getProperty("java.home") + java.io.File.separator + "bin" + java.io.File.separator + exeName();
 	}
 
 	/** A usable JVM: the {@code java} launcher and the feature version it reported. */
@@ -101,7 +106,7 @@ final class JdkLocator {
 		//    launcher's runtime, which keeps every tool on one Java.
 		int own = Runtime.version().feature();
 		if (own >= MINIMUM_FEATURE) {
-			return found(new Jvm(Path.of(ForgeTool.javaBin()), own, "the JVM running this installer"), log);
+			return found(new Jvm(Path.of(javaBin()), own, "the JVM running this installer"), log);
 		}
 		rejected.add("this installer's own JVM (Java " + own + ")");
 

@@ -90,13 +90,13 @@ public final class KernelClientPackSource {
 	/** The readers, in order, over one pack's resources: {@link #buildPack}'s body once the jar is opened. */
 	private static Pack readPack(PackLocationInfo location, Pack.ResourcesSupplier resources,
 			PackSelectionConfig selection, boolean vanillaReader) {
-		// Vanilla's reader for a jar NeoForge does not own: it is the one MinecraftForge and fabric-api build their
+		// Vanilla's reader for a jar NeoForge does not own: it is the one fabric-api builds its
 		// mods' packs with, and so the one their mods hook (fusion mounts its overrides folder as an overlay there).
 		Pack pack = vanillaReader ? readThroughVanilla(location, resources, selection) : null;
 		if (vanillaReader) countVanillaRead(location.id(), pack != null);
 		// NeoForge's own reader otherwise: it opens the jar's real pack.mcmeta and builds the Metadata from it,
 		// which is where a pack's OVERLAYS live. The kernel synthesised that record with an empty overlay list, so
-		// a Forge-family mod declaring overlays — the mechanism a mod uses to ship one set of assets per game
+		// a Fabric mod declaring overlays — the mechanism a mod uses to ship one set of assets per game
 		// version — had them dropped without a word. It fills in the feature flags too.
 		if (pack == null) pack = readWithTheJarsOwnMeta(location, resources, selection);
 		if (pack == null) {

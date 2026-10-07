@@ -52,8 +52,8 @@ import net.forbric.kernel.util.ForbricLog;
  *
  * <h2>What native Mixin does with an injector whose selector matches nothing</h2>
  *
- * <p>Read from sponge-mixin 0.17.3 (the kernel's, and native NeoForge 26.2.0.88's), 0.17.4 (Fabric Loader 0.19.5's)
- * and upstream Mixin 0.8.7 (MinecraftForge 26.2-65.0.1's), which agree here. {@code InjectionInfo.parseRequirements}
+ * <p>Read from sponge-mixin 0.17.3 (the kernel's, and native NeoForge 26.2.0.88's) and 0.17.4 (Fabric Loader 0.19.5's),
+ * which agree here. {@code InjectionInfo.parseRequirements}
  * takes the injector's own {@code require} when it is 0 or more, else — for an injector in no {@code @Group} — the
  * config's {@code injectors.defaultRequire}, which is 0 unless the config says otherwise.
  * {@code TargetSelectors.validate} then throws only when that count is above 0 ("Critical injection failure: … could
@@ -76,24 +76,24 @@ import net.forbric.kernel.util.ForbricLog;
  *
  * <h2>Whose native: the mod's own platform</h2>
  *
- * <p>A Fabric mod's native game is vanilla 26.2. A MinecraftForge or NeoForge mod's is its own platform's patched
- * game, which declares methods vanilla does not — {@code KeyMapping.getKeyModifier()}, {@code AxeItem.canPerformAction},
- * NeoForge's {@code EnderDragon.getParts()} — and some of those the merge dropped or retyped. For such a mod "vanilla
+ * <p>A Fabric mod's native game is vanilla 26.2. A NeoForge mod's is its own platform's patched
+ * game, which declares methods vanilla does not — NeoForge's {@code EnderDragon.getParts()} — and some of those the
+ * merge dropped or retyped. For such a mod "vanilla
  * lacks it too" proves nothing: natively the injector applies, and here it cannot, which is the merge's loss. So the
  * question is asked of the owning mod's platform ({@link MixinConfigOwners#ecosystemOf}), and a config no single mod
  * claims is not asked at all. The patched jars are the whole of what those platforms declare in vanilla's packages:
- * neither runtime ships a class there, and their own transformers add no method there (MinecraftForge 65.0.1's
- * coremods are one redirect list, {@code finalize_spawn_targets.json}; NeoForge 26.2.0.88's coremods jar holds
+ * neither runtime ships a class there, and their own transformers add no method there (NeoForge 26.2.0.88's coremods
+ * jar holds
  * {@code MethodRedirector}, {@code ReplaceFieldWithGetterAccess} and {@code ReplaceFieldComparisonWithInstanceOf},
  * which rewrite instructions only).
  *
  * <h2>Which misses the platform shares</h2>
  *
- * <p>The kernel sees only the merged base at run time, and none of the three platform jars is shipped with it. What is
+ * <p>The kernel sees only the merged base at run time, and neither platform jar is shipped with it. What is
  * shipped is the difference: {@value #TABLE}, which NativeOnlyMethodsCensusTest re-derives from vanilla 26.2's own jar,
- * the staged MinecraftForge and NeoForge patched jars and the staged merged base, and pins. Measured, every class the
- * three declare in vanilla's packages is in the merged base, and only 565 of vanilla's methods, 424 of
- * MinecraftForge's and 14 of NeoForge's are not (most of them lambdas and anonymous classes the merge renumbered), so a
+ * the staged NeoForge patched jar and the staged merged base, and pins. Measured, every class the
+ * two declare in vanilla's packages is in the merged base, and only 565 of vanilla's methods and 14 of
+ * NeoForge's are not (most of them lambdas and anonymous classes the merge renumbered), so a
  * platform's declared methods are the merged class's own minus what the merge added, plus that platform's rows for
  * that class. A method the merged class does not declare and no row of the platform names is a method the platform
  * does not declare either.
@@ -120,7 +120,7 @@ import net.forbric.kernel.util.ForbricLog;
  * <p>{@code com/mojang/} is also where Minecraft's libraries live — brigadier, DataFixerUpper, authlib and five more —
  * and the kernel loads those from their own jars, beside the merged base, so a mod can mixin into them as it can
  * natively. Their raw bytes are what every platform loads: vanilla 26.2 lists them in its version JSON, and
- * MinecraftForge 65.0.1's and NeoForge 26.2.0.88's launcher profiles both inherit that list and add no
+ * NeoForge 26.2.0.88's launcher profile inherits that list and adds no
  * {@code com.mojang} library (measured on their installers), and no platform jar or merged base ships one of their
  * classes. So the table also records each of those jars' members digest ({@code library} lines, re-derived from the
  * version JSON), and a class served by one of exactly those jars is answered from its raw bytes, as the merged base's
@@ -128,9 +128,9 @@ import net.forbric.kernel.util.ForbricLog;
  *
  * <h2>Whose native: the version the mod asks for</h2>
  *
- * <p>The rows describe one game per platform: vanilla 26.2, MinecraftForge 65.0.1's patched 26.2 and NeoForge
- * 26.2.0.88's, which the table's {@code platform} lines record ({@code minecraft=}, {@code forge=}, {@code neoforge=}).
- * A mod whose mandatory {@code minecraft} range, or {@code forge}/{@code neoforge} range for its platform, excludes that
+ * <p>The rows describe one game per platform: vanilla 26.2 and NeoForge
+ * 26.2.0.88's, which the table's {@code platform} lines record ({@code minecraft=}, {@code neoforge=}).
+ * A mod whose mandatory {@code minecraft} range, or {@code neoforge} range for its platform, excludes that
  * version is not native to that game: its own loader would refuse it there, and the newer game it was built for may
  * well declare the method this one lacks. Such a mod is not answered for — the miss is the merge's, as before — and
  * one line names the requirement. Nor is a mod whose declared requirements the kernel cannot see (the config's owner
@@ -177,7 +177,7 @@ public final class NativeAbsentTargets {
 
 	/**
 	 * {@code platform <id> <requirement>=<version>...}: the table speaks for this platform, whose game is the one those
-	 * versions name — {@code minecraft=} always, and {@code forge=} or {@code neoforge=} for those two. A platform
+	 * versions name — {@code minecraft=} always, and {@code neoforge=} for that platform. A platform
 	 * without the line is never answered for.
 	 */
 	static final String PLATFORM = "platform ";
@@ -314,7 +314,6 @@ public final class NativeAbsentTargets {
 		if (platform == null) return "the mod's own platform";
 		return switch (platform) {
 			case FABRIC -> "vanilla 26.2";
-			case FORGE -> "MinecraftForge's patched 26.2";
 			case NEOFORGE -> "NeoForge's patched 26.2";
 		};
 	}
@@ -369,7 +368,7 @@ public final class NativeAbsentTargets {
 	 * {@code mixin.debug.countInjections} native Mixin fails on the empty injector too, so nothing is dropped then.
 	 *
 	 * <p>And only for a mod native to the game the rows describe: its manifest known, of that platform, with no
-	 * mandatory {@code minecraft}, {@code forge} or {@code neoforge} range that game's version fails
+	 * mandatory {@code minecraft} or {@code neoforge} range that game's version fails
 	 * ({@link #unmetRequirement}).
 	 */
 	static boolean dropsNatively(MethodNode handler, AnnotationNode injector, List<String> selectors, String owner,
@@ -410,7 +409,7 @@ public final class NativeAbsentTargets {
 	/**
 	 * The mandatory requirement of {@code mod}'s that the game {@code rows} describe fails, as
 	 * {@code "<id> <constraint>"}, or null when there is none. A requirement is held against the versions on the table's
-	 * {@code platform} line ({@code minecraft}, and {@code forge} or {@code neoforge} for those two) and must be shown to
+	 * {@code platform} line ({@code minecraft}, and {@code neoforge} for that platform) and must be shown to
 	 * admit them ({@link VersionPredicate#matchesStrictly}): a range nobody could read is not one that admits the game.
 	 */
 	static String unmetRequirement(Rows rows, DiscoveredMod mod) {

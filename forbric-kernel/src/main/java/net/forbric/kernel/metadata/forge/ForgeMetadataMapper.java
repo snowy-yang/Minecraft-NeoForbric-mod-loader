@@ -64,7 +64,7 @@ public final class ForgeMetadataMapper {
 	public static List<DiscoveredMod> toDiscoveredMods(ForgeModsToml toml, String jarVersion, String source,
 			List<String> accessTransformers, List<String> extraMixinConfigs, java.util.function.Predicate<String> mixinConfigPresent) {
 		return toDiscoveredMods(toml, jarVersion, source, accessTransformers, extraMixinConfigs, mixinConfigPresent,
-				Ecosystem.FORGE);
+				Ecosystem.NEOFORGE);
 	}
 
 	/**

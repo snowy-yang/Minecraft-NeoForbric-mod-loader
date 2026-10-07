@@ -210,12 +210,12 @@ public final class ForgeModRemapper {
 			List<String> forgeClasses, List<String> mixinConfigs, List<UnifiedDependency> dependencies,
 			List<String> nestedJarPaths, Set<String> presentModIds) throws IOException {
 		wrapAsFabricMod(remappedJar, modId, version, forgeClasses, mixinConfigs, dependencies, nestedJarPaths,
-				presentModIds, net.forbric.loader.impl.metadata.ModEcosystem.FORGE);
+				presentModIds, net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE);
 	}
 
 	/**
 	 * As above, but stamping which Forge-family ecosystem the wrap belongs to under the
-	 * {@code forbric:ecosystem} custom key ({@code "forge"} / {@code "neoforge"}), so each Knot-loaded runtime
+	 * {@code forbric:ecosystem} custom key ({@code "neoforge"}), so the Knot-loaded runtime
 	 * driver (and the synthetic module layer) only picks up its own family's mods. A wrap without the key
 	 * (produced before this format) matches whichever single runtime is present.
 	 */
@@ -268,7 +268,7 @@ public final class ForgeModRemapper {
 		}
 
 		String first = forgeClasses == null || forgeClasses.isEmpty() ? "" : forgeClasses.get(0);
-		String family = (ecosystem == null ? net.forbric.loader.impl.metadata.ModEcosystem.FORGE : ecosystem).familyId();
+		String family = (ecosystem == null ? net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE : ecosystem).familyId();
 		json.append("  \"custom\": {\n");
 		json.append("    \"forbric:forgeClass\": \"").append(first).append("\",\n");
 		json.append("    \"forbric:forgeClasses\": ").append(jsonStringArray(forgeClasses)).append(",\n");
@@ -366,25 +366,19 @@ public final class ForgeModRemapper {
 
 	/** @see #automaticModuleName(String, net.forbric.loader.impl.metadata.ModEcosystem) */
 	public static String automaticModuleName(String modId) {
-		return automaticModuleName(modId, net.forbric.loader.impl.metadata.ModEcosystem.FORGE);
+		return automaticModuleName(modId, net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE);
 	}
 
 	/**
-	 * Deterministic, always-valid module name for a wrapped Forge-family mod. The two runtimes resolve a mod's
-	 * module differently, so the name must match what each looks up:
-	 * <ul>
-	 *   <li><b>MinecraftForge</b> — {@code FMLModContainer} resolves by the ModFile's {@code moduleName()}
-	 *       (the securejar name); Forbric namespaces it {@code forbricmod.<id>} to avoid collisions.</li>
-	 *   <li><b>NeoForge</b> — {@code FMLModContainer} resolves by {@code IModFile.getId()}, which is the mod's
-	 *       toml {@code modId}; the layer module must therefore be named EXACTLY that id (NeoForge modIds match
-	 *       {@code [a-z][a-z0-9_]*}, already valid Java module names — no prefix, no sanitize needed).</li>
-	 * </ul>
+	 * Deterministic, always-valid module name for a wrapped Forge-family mod. The runtime resolves a mod's
+	 * module by {@code IModFile.getId()}, which is the mod's toml {@code modId}; the layer module must
+	 * therefore be named EXACTLY that id (NeoForge modIds match {@code [a-z][a-z0-9_]*}, already valid Java
+	 * module names — no prefix, no sanitize needed).
 	 */
 	public static String automaticModuleName(String modId, net.forbric.loader.impl.metadata.ModEcosystem ecosystem) {
 		String seg = modId == null || modId.isEmpty() ? "mod" : modId.replaceAll("[^A-Za-z0-9_]", "_");
 		if (Character.isDigit(seg.charAt(0))) seg = "_" + seg;
-		if (ecosystem == net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE) return seg;
-		return "forbricmod." + seg;
+		return seg;
 	}
 
 	private static String jsonStringObject(Map<String, String> entries) {

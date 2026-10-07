@@ -100,8 +100,8 @@ import net.forbric.kernel.util.ForbricLog;
 final class LaunchInputCheck {
 	static final String SWITCH = "forbric.launchInputCheck";
 
-	/** The two families the merged base is built from, in the order a problem list names them. */
-	static final List<Ecosystem> FAMILIES = List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE);
+	/** The family the game base is built from. */
+	static final List<Ecosystem> FAMILIES = List.of(Ecosystem.NEOFORGE);
 
 	/**
 	 * The class both families patch an extension interface onto ({@code IBlockExtension}, {@code IForgeBlock}), so its
@@ -131,12 +131,12 @@ final class LaunchInputCheck {
 
 	/** The family's manifest. Its runtime carries one, and so does every one of its mods. */
 	static String manifest(Ecosystem family) {
-		return family == Ecosystem.NEOFORGE ? "META-INF/neoforge.mods.toml" : "META-INF/mods.toml";
+		return "META-INF/neoforge.mods.toml";
 	}
 
 	/** The package root a family's extension interfaces on {@code Block} live under. */
 	private static String root(Ecosystem family) {
-		return family == Ecosystem.NEOFORGE ? "net/neoforged/" : "net/minecraftforge/";
+		return "net/neoforged/";
 	}
 
 	/**
@@ -158,8 +158,8 @@ final class LaunchInputCheck {
 						: "the game is likely to crash, because -D" + SWITCH + "=off launches it anyway"));
 		for (String problem : problems) log(enforced, "[Forbric/Install]   - " + problem);
 		log(enforced, "[Forbric/Install] to fix it: close the launcher, run the Forbric installer again with the same "
-				+ "Game directory and leave \"Built artifacts\" EMPTY — the installer then builds the merged game and both "
-				+ "runtime jars itself instead of copying them from a folder. Developers: run `python3 tools/dev.py "
+				+ "Game directory and leave \"Built artifacts\" EMPTY — the installer then builds the game base and the "
+				+ "runtime jar itself instead of copying it from a folder. Developers: run `python3 tools/dev.py "
 				+ "prepare`, or point FORBRIC_OLD / -Pforbric.stagedRoot at a complete staged tree");
 		if (enforced) throw new Rejected(problems);
 	}
@@ -223,8 +223,8 @@ final class LaunchInputCheck {
 				problems.add("runtime jar " + jar.getFileName() + " " + String.join("; and ", partial) + " ("
 						+ described(jar) + ")");
 			} else {
-				problems.add("runtime jar " + jar.getFileName() + " contains neither NeoForge nor MinecraftForge: none of "
-						+ markers(Ecosystem.NEOFORGE) + " and none of " + markers(Ecosystem.FORGE) + " ("
+				problems.add("runtime jar " + jar.getFileName() + " contains no NeoForge: none of "
+						+ markers(Ecosystem.NEOFORGE) + " ("
 						+ described(jar) + ")");
 			}
 		}
@@ -240,7 +240,7 @@ final class LaunchInputCheck {
 		return problems;
 	}
 
-	/** Why {@code jar} is not the merged base, or {@code null} if it is. */
+	/** Why {@code jar} is not the game base, or {@code null} if it is. */
 	static String baseProblem(Path jar) {
 		String name = "game jar " + jar.getFileName();
 		if (!Files.isRegularFile(jar)) return name + " does not exist (" + jar + ")";
@@ -265,12 +265,12 @@ final class LaunchInputCheck {
 		}
 		if (patched.size() == FAMILIES.size()) return null;
 		if (patched.isEmpty()) {
-			return name + " is plain Minecraft, not Forbric's merged game: its Block carries neither NeoForge's nor "
-					+ "MinecraftForge's changes (" + described(jar) + ")";
+			return name + " is plain Minecraft, not Forbric's game: its Block carries none of "
+					+ "NeoForge's changes (" + described(jar) + ")";
 		}
 		Ecosystem missing = FAMILIES.stream().filter(f -> !patched.contains(f)).findFirst().orElseThrow();
 		return name + " carries only " + patched.get(0).displayName() + "'s changes and not " + missing.displayName()
-				+ "'s, so it is not Forbric's merged game (" + described(jar) + ")";
+				+ "'s, so it is not Forbric's game (" + described(jar) + ")";
 	}
 
 	/**

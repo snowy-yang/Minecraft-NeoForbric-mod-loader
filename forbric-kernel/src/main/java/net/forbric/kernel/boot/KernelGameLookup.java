@@ -24,7 +24,7 @@ import net.forbric.kernel.classloading.ForbricClassLoader;
 /**
  * A full-power {@link MethodHandles.Lookup} whose lookup class lives on the GAME side.
  *
- * <p>Some ecosystem code (Forge's EventBus, which spins listener lambdas with {@code LambdaMetafactory}) requires
+ * <p>Some ecosystem code (NeoForge's EventBus, which spins listener lambdas with {@code LambdaMetafactory}) requires
  * a full-power lookup — one holding the MODULE bit — over a class it is registering. A boot-side
  * {@code MethodHandles.lookup()} cannot produce that for a game class: teleporting it with
  * {@code privateLookupIn} across the boot→game module boundary drops the MODULE bit, and

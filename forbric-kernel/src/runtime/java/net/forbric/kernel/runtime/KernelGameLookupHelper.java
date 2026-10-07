@@ -21,7 +21,7 @@ import java.lang.invoke.MethodHandles;
 /**
  * Mints a full-power {@link MethodHandles.Lookup} whose lookup class is GAME-side.
  *
- * <p>Forge's EventBus spins its listeners with {@code LambdaMetafactory}, which demands a full-power lookup —
+ * <p>NeoForge's EventBus spins its listeners with {@code LambdaMetafactory}, which demands a full-power lookup —
  * one still holding the MODULE bit — over the class being registered. A boot-side {@code MethodHandles.lookup()}
  * cannot produce one for a game class: teleporting it with {@code privateLookupIn} crosses the boot→game module
  * boundary and drops that bit, and {@code LambdaMetafactory} then rejects the caller outright

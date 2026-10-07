@@ -26,21 +26,20 @@ import java.nio.file.Path;
  *
  * <p><b>Why this exists.</b> Every builder's reuse test used to be "the output file exists and is not empty", and
  * none of the artifacts carries its version in its filename — {@code neoforge-runtime.jar},
- * {@code patched-mc-neoforge-26.2.jar}, {@code patched-mc-merged-26.2.jar}. So moving the NeoForge pin from
- * {@code 26.2.0.38-beta} to {@code 26.2.0.88} and re-running the installer on a machine that had built before
- * printed {@code neoforge=26.2.0.88} in its own pin line and then {@code [neoforge-runtime] up-to-date} — and
- * installed the OLD carrier. Nothing failed; the install said "Installed." and the game came up. What it came up
- * with was a kernel built against one NeoForge and a carrier built from another, which is the silent-mismatch
- * shape the kernel spends most of its transformers defending against.
+ * {@code patched-mc-neoforge-26.2.jar}. So moving the NeoForge pin from {@code 26.2.0.38-beta} to
+ * {@code 26.2.0.88} and re-running the installer on a machine that had built before printed {@code
+ * neoforge=26.2.0.88} in its own pin line and then {@code [neoforge-runtime] up-to-date} — and installed the OLD
+ * carrier. Nothing failed; the install said "Installed." and the game came up. What it came up with was a kernel
+ * built against one NeoForge and a carrier built from another, which is the silent-mismatch shape the kernel
+ * spends most of its transformers defending against.
  *
  * <p>It only ever surfaced on a user's machine because the gate wipes its install directory first, so every gated
  * install was a cold one and the cache path was never exercised at a bump.
  *
  * <p><b>Every artifact is stamped with the WHOLE pin set</b>, not with the subset that feeds it. A per-artifact
- * key would avoid rebuilding the MinecraftForge half when only NeoForge moves, and would also be a second place
- * to get wrong — omit one input and the cache is silently stale again, which is the bug being fixed. The cost of
- * over-invalidating is one rebuild of a few minutes on a pin bump; the cost of under-invalidating is an install
- * that is wrong and says nothing.
+ * key would also be a second place to get wrong — omit one input and the cache is silently stale again, which
+ * is the bug being fixed. The cost of over-invalidating is one rebuild of a few minutes on a pin bump; the cost
+ * of under-invalidating is an install that is wrong and says nothing.
  *
  * <p>A missing stamp counts as a miss: artifacts built by an installer older than this class have no stamp and
  * cannot be shown to match, so they are rebuilt once.
@@ -51,11 +50,11 @@ final class BuildStamp {
 	}
 
 	/**
-	 * The key an artifact is stamped with: the pins, plus a digest of the merge tools that ride in this installer.
+	 * The key an artifact is stamped with: the pins, plus a digest of the tools jar that rides in this installer.
 	 *
-	 * <p>The tools are not a pin and they change without one — the merge tool's lambda-realignment pass changed no
-	 * version at all and changed every merged class it fixed. Keying only on pins would have served the old merged
-	 * base out of the cache to exactly the people who needed the new one.
+	 * <p>The tools are not a pin and they change without one — the link checker's baseline grows when a reviewed
+	 * loss is accepted, changing no version at all. Keying only on pins would have kept serving artifacts judged
+	 * against the previous baseline to exactly the people who needed the new one.
 	 */
 	private static String key() {
 		return Pins.stamp() + " tools=" + toolsDigest();

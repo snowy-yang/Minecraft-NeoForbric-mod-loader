@@ -29,10 +29,10 @@ import net.forbric.kernel.transform.VanillaEarlyReturns;
 import net.forbric.kernel.util.ForbricLog;
 
 /**
- * Keeps a NeoForge or MinecraftForge mod's {@code @At("TAIL")} on the paths it ran on before
+ * Keeps a NeoForge mod's {@code @At("TAIL")} on the paths it ran on before
  * {@link VanillaEarlyReturns} gave a method back vanilla's early returns.
  *
- * <p>Those mods were compiled against their carrier's recompiled body, where the guard clause is folded into the last
+ * <p>Such mods were compiled against their carrier's recompiled body, where the guard clause is folded into the last
  * return and TAIL therefore runs on every path — the early-exit ones included. A mod pairing a HEAD push with a TAIL
  * pop is balanced there and would not be once the early paths return on their own. After the split, the returns those
  * paths reach are the blocks the split placed immediately before the tail: returns {@code inline} to
@@ -55,7 +55,7 @@ public final class MixinNativeTail {
 	public static int adapt(ClassNode mixin, Function<String, ClassNode> targets) {
 		if (!VanillaEarlyReturns.enabled() || mixin == null || mixin.methods == null || targets == null) return 0;
 		Ecosystem ecosystem = MixinStubRebind.ecosystemOf(mixin.name);
-		if (ecosystem != Ecosystem.NEOFORGE && ecosystem != Ecosystem.FORGE) return 0;
+		if (ecosystem != Ecosystem.NEOFORGE) return 0;
 		List<String> owners = MixinFit.mixinTargets(mixin);
 		if (owners.isEmpty()) return 0;
 

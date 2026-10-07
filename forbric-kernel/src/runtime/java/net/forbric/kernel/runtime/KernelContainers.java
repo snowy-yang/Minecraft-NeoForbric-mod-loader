@@ -22,10 +22,10 @@ import java.util.HashMap;
 
 import net.forbric.api.DiscoveredMod;
 import net.forbric.kernel.util.ForbricLog;
-import net.minecraftforge.unsafe.UnsafeHacks;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.javafmlmod.FMLModContainer;
+import net.neoforged.fml.unsafe.UnsafeHacks;
 import net.neoforged.fml.mclanguageprovider.MinecraftModContainer;
 import net.neoforged.neoforgespi.language.IModInfo;
 

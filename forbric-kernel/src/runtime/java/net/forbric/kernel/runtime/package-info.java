@@ -15,8 +15,8 @@
  */
 
 /**
- * The kernel's GAME-side half — the only kernel code that may name {@code net.minecraft.*},
- * {@code net.minecraftforge.*} and {@code net.neoforged.*} as TYPES rather than as strings.
+ * The kernel's GAME-side half — the only kernel code that may name {@code net.minecraft.*} and
+ * {@code net.neoforged.*} as TYPES rather than as strings.
  *
  * <h2>Why this package exists</h2>
  *
@@ -28,26 +28,23 @@
  * three frames away, or worse a {@link java.lang.reflect.Proxy} whose {@code switch} on method NAMES silently
  * falls through to a default and answers "nothing" forever.
  *
- * <p>Classes compiled into this package are compiled AGAINST the staged jars (the merged base plus the two
- * ecosystem runtime carriers) and loaded BY {@code ForbricClassLoader}, so javac checks them. A renamed SPI
+ * <p>Classes compiled into this package are compiled AGAINST the staged jars (the game base plus the ecosystem
+ * runtime carriers) and loaded BY {@code ForbricClassLoader}, so javac checks them. A renamed SPI
  * method becomes a build failure here instead of a silent wrong answer at runtime.
  *
  * <h2>What may and may not live here</h2>
  *
- * <p>Only what the staged jars actually define. The compile classpath of this source set is the three staged
- * jars and the boot-side output — nothing else. In particular:
+ * <p>Only what the staged jars actually define. The compile classpath of this source set is the staged jars
+ * and the boot-side output — nothing else. In particular:
  *
  * <ul>
- *   <li><b>Yes:</b> public types of the merged base, and public types of the two carriers
+ *   <li><b>Yes:</b> public types of the game base, and public types of the carriers
  *       ({@code net.neoforged.fml.ModContainer}, {@code net.neoforged.neoforgespi.language.IModInfo},
- *       {@code net.neoforged.bus.api.IEventBus}, {@code net.minecraftforge.*} equivalents).
+ *       {@code net.neoforged.bus.api.IEventBus}).</li>
  *   <li><b>No:</b> anything from fabric-api. It is a mod the USER installs, not a staged artifact, so it is not
  *       on this classpath and never will be. A class that must implement a fabric-api interface (the HUD layer
  *       that is simultaneously a fabric-api {@code HudElement} and a NeoForge {@code GuiLayer}) still has to be
- *       synthesized with ASM — see {@code KernelHudBridge}. That is not technical debt, it is the boundary.
- *   <li><b>No:</b> package-private carrier types. {@code net.minecraftforge.registries.NamespacedWrapper} and
- *       {@code NamespacedDefaultedWrapper} carry no {@code public} modifier, so outside code cannot name them
- *       at all; the registry-parity work stays bytecode surgery for that reason.
+ *       synthesized with ASM — see {@code KernelHudBridge}. That is not technical debt, it is the boundary.</li>
  * </ul>
  *
  * <h2>How it is delivered</h2>

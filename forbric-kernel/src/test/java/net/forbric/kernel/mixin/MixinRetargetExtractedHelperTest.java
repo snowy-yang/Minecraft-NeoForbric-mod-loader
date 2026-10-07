@@ -55,7 +55,7 @@ class MixinRetargetExtractedHelperTest {
 
 	@Test
 	void anInjectAfterTheMovedCallFollowsItToTheHelperCall() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		Function<String, byte[]> resolver = resolver(screen(1, false));
 		byte[] mixin = mixin(INJECT, HANDLER, "AFTER", false, false);
 		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(mixin, resolver).verdict(), "premise");
@@ -76,7 +76,7 @@ class MixinRetargetExtractedHelperTest {
 	/** BEFORE the call is not before the helper call: the helper draws the item first. */
 	@Test
 	void anInjectBeforeACallThatIsNotTheHelpersFirstActStays() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin(INJECT, HANDLER, null, false, false)), resolver(screen(1, false))).isEmpty());
 	}
 
@@ -90,7 +90,7 @@ class MixinRetargetExtractedHelperTest {
 	/** Locals are extractSlot's, and the ones vanilla had at that point are not the merged method's. */
 	@Test
 	void anInjectCapturingLocalsOrSugarStays() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		Function<String, byte[]> resolver = resolver(screen(1, false));
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin(INJECT, HANDLER, "AFTER", true, false)), resolver).isEmpty());
 		String withLocal = "(" + G + SLOT + "II" + MixinRetarget.CALLBACK_INFO + STACK + ")V";
@@ -100,7 +100,7 @@ class MixinRetargetExtractedHelperTest {
 	/** A helper called twice, or a call that is no longer the helper's last act, is not the one program point. */
 	@Test
 	void theLiveBytesMustStillBeTheRowsShape() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		byte[] mixin = mixin(INJECT, HANDLER, "AFTER", false, false);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver(screen(2, false))).isEmpty(), "called twice");
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver(screen(1, true))).isEmpty(), "work after the call");
@@ -109,7 +109,7 @@ class MixinRetargetExtractedHelperTest {
 	/** A @Redirect's handler IS the call; moving it would need the protected helper to have no other caller. */
 	@Test
 	void aRedirectOfTheMovedCallStays() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		String desc = "(" + G + "Lnet/minecraft/client/gui/Font;" + STACK + "IILjava/lang/String;)V";
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin(REDIRECT, desc, null, false, false)), resolver(screen(1, false))).isEmpty());
 	}
@@ -120,7 +120,7 @@ class MixinRetargetExtractedHelperTest {
 	 */
 	@Test
 	void aMixinWithASecondTargetKeepsItsPoint() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		Map<String, byte[]> classes = new HashMap<>(Map.of(SCREEN + ".class", screen(1, false)));
 		classes.put(OTHER + ".class", other());
 		Function<String, byte[]> resolver = classes::get;
@@ -135,7 +135,7 @@ class MixinRetargetExtractedHelperTest {
 
 	@Test
 	void theSwitchLeavesThePointAsCompiled() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		System.setProperty(MixinRetarget.EXTRACTED_HELPER_PROPERTY, "off");
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin(INJECT, HANDLER, "AFTER", false, false)), resolver(screen(1, false))).isEmpty());
 	}

@@ -48,7 +48,6 @@ import org.junit.jupiter.api.Test;
  */
 class ForeignTypeCarrierTest {
 	private static final Path NEOFORGE = staged("neoforge-runtime", "neoforge-runtime.jar");
-	private static final Path FORGE = staged("forge-runtime", "forge-runtime.jar");
 
 	private static Path staged(String dir, String jar) {
 		return TestFixtures.stagedRoot().resolve(dir).resolve(jar);
@@ -57,11 +56,6 @@ class ForeignTypeCarrierTest {
 	@Test
 	void everyNeoForgeNameIsInTheStagedNeoForgeCarrier() throws IOException {
 		assertNamesResolve(Ecosystem.NEOFORGE, NEOFORGE);
-	}
-
-	@Test
-	void everyMinecraftForgeNameIsInTheStagedForgeCarrier() throws IOException {
-		assertNamesResolve(Ecosystem.FORGE, FORGE);
 	}
 
 	private static void assertNamesResolve(Ecosystem eco, Path carrier) throws IOException {

@@ -152,7 +152,7 @@ class MixinStubRebindTest {
 		ClassNode player = merged("net/minecraft/world/entity/player/Player");
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
 		assertEquals(0, MixinStubRebind.adapt(mixin, name -> player), "compiled against the stub-first shape: native behaviour");
-		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
 		assertEquals(0, MixinStubRebind.adapt(mixin, name -> player), "MinecraftForge keeps the same stub: native behaviour too");
 		MixinStubRebind.forget();
 		assertEquals(0, MixinStubRebind.adapt(mixin, name -> player), "no known owner: no move");
@@ -176,7 +176,7 @@ class MixinStubRebindTest {
 	@Test void fusionsSpriteCaptureMovesToTheBodyMinecraftForgeRan() throws Exception {
 		ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
 		ClassNode manager = merged(MODEL_MANAGER);
-		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
 		MixinStubRebind.adapt(mixin, name -> manager);
 		MethodNode outer = mixin.methods.stream().filter(m -> m.name.equals("captureBlockItemSprites")).findFirst().orElseThrow();
 		assertEquals(List.of(LOAD_MODELS_BODY), MixinFit.stringList(MixinFit.value(MixinFit.injectorOf(outer), "method")));
@@ -186,13 +186,13 @@ class MixinStubRebindTest {
 		assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 8), loads, "the stub's seven arguments, then the callback past the pending animations");
 		new Analyzer<>(new BasicVerifier()).analyze(mixin.name, outer);
 
-		for (Ecosystem stays : List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE)) {
+		for (Ecosystem stays : List.of(Ecosystem.NEOFORGE, Ecosystem.NEOFORGE)) {
 			ClassNode again = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
 			MixinStubRebind.noteEcosystem(again.name, stays);
-			if (stays == Ecosystem.FORGE) System.setProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY, "off");
+			if (stays == Ecosystem.NEOFORGE) System.setProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY, "off");
 			MixinStubRebind.adapt(again, name -> manager);
 			assertEquals(List.of("loadModels"), selectors(again, "captureBlockItemSprites"),
-					stays == Ecosystem.FORGE ? "the switch: Fabric mods only" : "a NeoForge mod was compiled against that very stub");
+					stays == Ecosystem.NEOFORGE ? "the switch: Fabric mods only" : "a NeoForge mod was compiled against that very stub");
 			System.clearProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY);
 		}
 	}
@@ -211,7 +211,7 @@ class MixinStubRebindTest {
 	@Test void fusionsOverlayHookMovesWithTheOnlyModelDiscoveryInTheBody() throws Exception {
 		ClassNode manager = merged(MODEL_MANAGER);
 		ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
-		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
 		assertEquals(2, MixinStubRebind.adapt(mixin, name -> manager), "the sprite capture and the overlay hook");
 		assertEquals(List.of(DISCOVER_BODY), selectors(mixin, "registerBlockModelOverlays"));
 
@@ -260,7 +260,7 @@ class MixinStubRebindTest {
 				default -> body.localVariables = null;
 			}
 			ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
-			MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FORGE);
+			MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
 			MixinStubRebind.adapt(mixin, name -> manager);
 			assertEquals(List.of(DISCOVER_STUB), selectors(mixin, "registerBlockModelOverlays"), why);
 		}
@@ -343,7 +343,7 @@ class MixinStubRebindTest {
 				fit -> fit.unresolved().stream().anyMatch(u -> u.contains("<init>") && u.contains("discoverModelDependencies"));
 		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.NEOFORGE);
 		assertTrue(resolvedModelsMissing.test(MixinFit.evaluate(mixin, resolver)), "premise: bound to the stub");
-		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.NEOFORGE);
 		MixinFit.Result fit = MixinFit.evaluate(mixin, resolver);
 		assertFalse(resolvedModelsMissing.test(fit), fit.toString());
 	}
@@ -489,7 +489,7 @@ class MixinStubRebindTest {
 	@Test void aNeoForgeModMovesOffAStubOnlyMinecraftForgeHas() throws Exception {
 		String owner = "net/minecraft/server/packs/repository/PackDetector";
 		ClassNode detector = merged(owner);
-		for (Ecosystem ecosystem : List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE)) {
+		for (Ecosystem ecosystem : List.of(Ecosystem.NEOFORGE, Ecosystem.NEOFORGE)) {
 			ClassNode mixin = synthetic("com/example/PackDetectorMixin", owner, "onDetect", "(" + CALLBACK_INFO_RETURNABLE + ")V", false,
 					injector(INJECT, "detectPackResources", List.of(at("HEAD"))));
 			MixinStubRebind.noteEcosystem(mixin.name, ecosystem);
@@ -510,22 +510,22 @@ class MixinStubRebindTest {
 				"another overload binds the name first, and nothing has the descriptor");
 		assertEquals(MixinStubRebind.Shape.ABSENT, MixinStubRebind.Shape.of(null, "f", stub, overload));
 
-		MixinStubRebind.Row neoAdded = new MixinStubRebind.Row(MixinStubRebind.Shape.BODY, MixinStubRebind.Shape.STUB);
+		MixinStubRebind.Row neoAdded = new MixinStubRebind.Row(MixinStubRebind.Shape.BODY);
 		assertTrue(neoAdded.moves(Ecosystem.FABRIC, true));
-		assertTrue(neoAdded.moves(Ecosystem.FORGE, true));
-		assertTrue(neoAdded.moves(Ecosystem.FORGE, false));
+		assertTrue(neoAdded.moves(Ecosystem.NEOFORGE, true));
+		assertTrue(neoAdded.moves(Ecosystem.NEOFORGE, false));
 		assertFalse(neoAdded.moves(Ecosystem.NEOFORGE, true));
-		MixinStubRebind.Row late = new MixinStubRebind.Row(MixinStubRebind.Shape.DESCRIPTOR_BODY, MixinStubRebind.Shape.OVERLOAD_BODY);
-		assertFalse(late.moves(Ecosystem.FORGE, true), "natively the name bound the other overload");
-		assertTrue(late.moves(Ecosystem.FORGE, false));
+		MixinStubRebind.Row late = new MixinStubRebind.Row(MixinStubRebind.Shape.DESCRIPTOR_BODY);
+		assertFalse(late.moves(Ecosystem.NEOFORGE, true), "natively the name bound the other overload");
+		assertTrue(late.moves(Ecosystem.NEOFORGE, false));
 		assertTrue(late.moves(Ecosystem.NEOFORGE, true));
 		assertFalse(late.moves(Ecosystem.NEOFORGE, false), "natively that descriptor bound nothing");
-		MixinStubRebind.Row both = new MixinStubRebind.Row(MixinStubRebind.Shape.STUB, MixinStubRebind.Shape.ABSENT);
+		MixinStubRebind.Row both = new MixinStubRebind.Row(MixinStubRebind.Shape.STUB);
 		assertTrue(both.moves(Ecosystem.FABRIC, false));
-		assertFalse(both.moves(Ecosystem.FORGE, true));
+		assertFalse(both.moves(Ecosystem.NEOFORGE, true));
 		assertFalse(both.moves(Ecosystem.NEOFORGE, true));
 		System.setProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY, "off");
-		assertFalse(neoAdded.moves(Ecosystem.FORGE, true), "the switch");
+		assertFalse(neoAdded.moves(Ecosystem.NEOFORGE, true), "the switch");
 		assertTrue(neoAdded.moves(Ecosystem.FABRIC, true));
 	}
 

@@ -41,27 +41,25 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 /**
- * Static link-checker for the tri-in-one MERGED game base. The byte-merge that fuses vanilla + Forge-patched +
- * NeoForge-patched Minecraft into one jar (see {@link MergedBaseBuilder}) can, for a class BOTH ecosystems patch
- * with divergent shapes, keep one side's method while the other side's field/nested-class/constructor won — leaving
- * a surviving instruction that references a member the merged class no longer has. At runtime that surfaces only
- * when the exact code path executes ({@code NoSuchFieldError} / {@code NoSuchMethodError} deep inside client init),
- * one crash per boot. This tool finds them ALL in one pass, ahead of any launch.
+ * Static link-checker for the staged game jars. The first jar's classes are the link-checked set — today the
+ * NeoForge-patched Minecraft base — and the remaining jars (the NeoForge runtime carrier, library jars) load as
+ * its classpath so supertypes and library members resolve. A patched/reassembled game jar can ship an instruction
+ * that references a member its own classes no longer declare; at runtime that surfaces only when the exact code
+ * path executes ({@code NoSuchFieldError} / {@code NoSuchMethodError} deep inside client init), one crash per
+ * boot. This tool finds them ALL in one pass, ahead of any launch.
  *
- * <p>It loads the merged jar plus the runtime/library jars given as extra args (so supertypes and library members
- * resolve), then, for every method body in the merged jar AND those runtime jars, checks each field/method
- * instruction whose OWNER is a class defined by the MERGED jar (i.e. a game class the merge could have broken): is
+ * <p>For every method body in the first jar AND those classpath jars, it checks each field/method instruction
+ * whose OWNER is a class defined by the FIRST jar (i.e. a game class the staging pipeline could have broken): is
  * the referenced {@code name+desc} declared on the owner or anywhere up its supertype chain? Unresolved references
- * are reported as {@code referencingClass#method -> owner.member desc}. References whose owner isn't a merged-jar
- * class (pure library/JDK targets) are ignored — those the merge never touched.
+ * are reported as {@code referencingClass#method -> owner.member desc}. References whose owner isn't a first-jar
+ * class (pure library/JDK targets) are ignored.
  *
- * <p>Usage: {@code MergedLinkChecker [--baseline <file>] [--write-baseline] <merged.jar> [<classpath.jar> ...]}.
+ * <p>Usage: {@code MergedLinkChecker [--baseline <file>] [--write-baseline] <base.jar> [<classpath.jar> ...]}.
  *
- * <p><b>Why a baseline rather than a bare count.</b> There are dangling references today that nobody can fix in
- * one sitting — Forge's biome and structure modifiers, its datapack condition context, the capability methods the
- * merge dropped. Failing on the total means nobody can rebuild the base, so for a long time this tool's exit code
- * was thrown away by the caller and the number only ever appeared in scrollback. That makes it a measurement of
- * nothing: a merge change that adds a dangling reference reads exactly like one that does not.
+	 * <p><b>Why a baseline rather than a bare count.</b> There can be dangling references that nobody can fix in
+	 * one sitting. Failing on the total means nobody can rebuild the base, so for a long time this tool's exit code
+	 * was thrown away by the caller and the number only ever appeared in scrollback. That makes it a measurement of
+	 * nothing: a staging change that adds a dangling reference reads exactly like one that does not.
  *
  * <p>With {@code --baseline}, the known set is DATA in a committed file and the exit code means one thing:
  * <b>a reference that is dangling now and was not dangling before</b>. Entries in the baseline that no longer
@@ -172,7 +170,7 @@ public final class MergedLinkChecker {
 		}
 		if (!fresh.isEmpty()) {
 			System.err.println("[link-check] " + fresh.size() + " NEW dangling reference"
-					+ (fresh.size() == 1 ? "" : "s") + " — the merge broke something it did not break before.");
+					+ (fresh.size() == 1 ? "" : "s") + " — the staged jars break something they did not break before.");
 		}
 		System.exit(fresh.isEmpty() ? 0 : 1);
 	}

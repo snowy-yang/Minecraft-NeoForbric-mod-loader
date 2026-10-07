@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -42,15 +43,15 @@ import java.util.function.Consumer;
  * output was verified byte-for-byte against the reference, sha1
  * {@code 5b2970209ee12702117309576b08521aa38ae67b} — but it costs a 4 GB decompiler heap, a JDK new enough to
  * compile {@code --release 25}, and a couple of minutes, and its bytes depend on a compiler version nobody here
- * controls. That last part matters more than it looks: {@code MergedBaseBuilder} downstream was calibrated
- * against one observed NeoForge jar.
+ * controls — which, for the jar the whole game now runs on, would be a silent drift source.
  *
  * <p>{@link Pins#NFRT_RESULT} takes {@code gameJarNoRecomp} instead — {@code preProcessJar → binaryPatch →
- * copyUnpatchedClasses → applyDevTransforms}, no decompiler and no compiler. Measured: six seconds, the same
- * 10,963 classes, and a merge whose conflict report is identical <em>as a set</em> to the recompile path's with a
- * merged base carrying the same 30,471 entries. The class bytes do differ from the recompile path's, in one
- * systematic way — the binary-patched classes keep Mojang's {@code MethodParameters} attribute, which
- * {@code javac} drops without {@code -parameters} — which is metadata, not semantics.
+ * copyUnpatchedClasses → applyDevTransforms}, no decompiler and no compiler. Measured: six seconds, and the same
+ * 10,963 classes. The class bytes do differ from the recompile path's, in one systematic way — the binary-patched
+ * classes keep Mojang's {@code MethodParameters} attribute, which {@code javac} drops without
+ * {@code -parameters} — which is metadata, not semantics. What the recompile path would add on top of that is
+ * bytes that depend on a compiler version nobody here controls, and this jar is now the game base itself: every
+ * gate in the tree is calibrated against the binary-patch shape, not against whatever javac produced that day.
  */
 final class NfrtRunner {
 
@@ -63,6 +64,7 @@ final class NfrtRunner {
 	private final Path toolsDir;
 	private final Path nfrtHome;
 	private final Path workDir;
+	private final Path dlDir;
 	private final Consumer<String> log;
 
 	/**
@@ -70,12 +72,15 @@ final class NfrtRunner {
 	 * @param nfrtHome NFRT's own artifact cache — deliberately inside the install's build directory rather than
 	 *                 {@code ~/.neoformruntime}, so one directory holds everything an install created and a
 	 *                 developer's own NeoForge work is never disturbed
+	 * @param workDir  NFRT's scratch space
+	 * @param dlDir    the install's shared download cache, where the Mojang server jar is kept
 	 */
-	NfrtRunner(Http http, Path toolsDir, Path nfrtHome, Path workDir, Consumer<String> log) {
+	NfrtRunner(Http http, Path toolsDir, Path nfrtHome, Path workDir, Path dlDir, Consumer<String> log) {
 		this.http = http;
 		this.toolsDir = toolsDir;
 		this.nfrtHome = nfrtHome;
 		this.workDir = workDir;
+		this.dlDir = dlDir;
 		this.log = log;
 	}
 
@@ -84,10 +89,10 @@ final class NfrtRunner {
 	 *
 	 * @param jvm   a JVM to run NFRT under; NFRT's own classes are class-file major 65, so this must be Java 21+
 	 * @param mcDir the Minecraft directory, handed to NFRT as a {@code --launcher-dir} so it reuses the client
-	 *              and server jars the launcher already downloaded instead of fetching its own
+	 *              and server jars the launcher already fetched
 	 */
-	ArtifactResult run(JdkLocator.Jvm jvm, Path mcDir, Path outJar, String coordinate, String mcVersion,
-			Path serverJar) throws IOException {
+	ArtifactResult run(JdkLocator.Jvm jvm, Path mcDir, Path outJar, String coordinate, String mcVersion)
+			throws IOException {
 		if (BuildStamp.isFresh(outJar)) {
 			log.accept("[neoform] up-to-date: " + outJar.getFileName());
 			return new ArtifactResult(coordinate, outJar, Util.sha1(outJar), Files.size(outJar));
@@ -95,7 +100,7 @@ final class NfrtRunner {
 		Files.createDirectories(outJar.getParent());
 		Files.createDirectories(nfrtHome);
 		Files.createDirectories(workDir);
-		seedArtifacts(mcDir, mcVersion, serverJar);
+		seedArtifacts(mcDir, mcVersion, serverJar(mcDir, mcVersion));
 
 		Path tool = fetchTool();
 
@@ -142,17 +147,16 @@ final class NfrtRunner {
 		return new ArtifactResult(coordinate, outJar, Util.sha1(outJar), size);
 	}
 
-	/** NeoFormRuntime's own fat jar, cached beside the other tools. */
 	/**
 	 * Hands NFRT the two Minecraft jars this install already has, instead of letting it fetch them again.
 	 *
 	 * <p>NFRT is a separate process with its own downloader and its own (absent) read timeout. It wants
 	 * {@code minecraft_<version>_{client,server}.jar}; the client jar is the user's own installed one and the
-	 * server jar has already been downloaded and SHA-1 verified by {@code PatchedMcBuilder} a step earlier. So
-	 * the second fetch buys nothing and can cost everything: measured on a real machine, NFRT's own copy of that
-	 * 58 MB server jar sat at zero bytes for eleven minutes behind a proxy, with the installer's completed copy
-	 * on disk a few directories away. Nothing in the installer's own timeout work reaches inside a subprocess —
-	 * the only way to make that download safe is not to make it.
+	 * server jar is downloaded and SHA-1 verified here, from the URL in the version JSON Mojang's own format
+	 * names. So the second fetch buys nothing and can cost everything: measured on a real machine, NFRT's own
+	 * copy of that 58 MB server jar sat at zero bytes for eleven minutes behind a proxy, with the installer's
+	 * completed copy on disk a few directories away. Nothing in the installer's own timeout work reaches inside
+	 * a subprocess — the only way to make that download safe is not to make it.
 	 *
 	 * <p>Best-effort and never fatal: a jar that cannot be linked or copied leaves NFRT to fetch it as before,
 	 * which is exactly the behaviour this replaces.
@@ -163,6 +167,47 @@ final class NfrtRunner {
 		Path client = mcDir.resolve("versions").resolve(mcVersion).resolve(mcVersion + ".jar");
 		seedOne(artifacts, client, "minecraft_" + mcVersion + "_client.jar");
 		seedOne(artifacts, serverJar, "minecraft_" + mcVersion + "_server.jar");
+	}
+
+	/**
+	 * The Mojang server jar, from {@code downloads.server} in the installed version JSON, verified against its
+	 * published SHA-1 and cached in the install's download tree.
+	 */
+	private Path serverJar(Path mcDir, String mcVersion) throws IOException {
+		Path dest = dlDir.resolve("server.jar");
+		Path versionJson = mcDir.resolve("versions").resolve(mcVersion).resolve(mcVersion + ".json");
+		if (!Files.isRegularFile(versionJson)) {
+			throw new IOException("version json not found: " + versionJson + " — the base " + mcVersion
+					+ " must be installed before its server jar can be fetched");
+		}
+		Map<String, Object> root;
+		try {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> parsed = (Map<String, Object>) Json.parse(Files.readString(versionJson));
+			root = parsed;
+		} catch (RuntimeException e) {
+			throw new IOException("malformed " + versionJson.getFileName() + ": " + e.getMessage(), e);
+		}
+		Object downloads = root.get("downloads");
+		Map<String, Object> server = downloads instanceof Map<?, ?> d
+				? (Map<String, Object>) d.get("server") : null;
+		if (server == null || server.get("url") == null) {
+			throw new IOException(mcVersion + ".json has no downloads.server.url (a client-only version cannot be"
+					+ " patched)");
+		}
+		String url = (String) server.get("url");
+		String sha1 = (String) server.get("sha1");
+		if (Files.isRegularFile(dest) && Files.size(dest) > 0) {
+			// trust a cached server jar only if its sha1 still matches
+			if (sha1 == null || sha1.equalsIgnoreCase(Util.sha1(dest))) return dest;
+		}
+		log.accept("[neoform] downloading the " + mcVersion + " server jar …");
+		http.downloadToFile(url, dest);
+		if (sha1 != null && !sha1.equalsIgnoreCase(Util.sha1(dest))) {
+			throw new IOException("sha1 mismatch on " + mcVersion + " server.jar (expected " + sha1 + ", got "
+					+ Util.sha1(dest) + ")");
+		}
+		return dest;
 	}
 
 	private void seedOne(Path artifacts, Path source, String name) {
@@ -180,6 +225,7 @@ final class NfrtRunner {
 		}
 	}
 
+	/** NeoFormRuntime's own fat jar, cached beside the other tools. */
 	private Path fetchTool() throws IOException {
 		String coordinate = Pins.nfrtCoordinate();
 		String rel = Util.coordinateToPath(coordinate);

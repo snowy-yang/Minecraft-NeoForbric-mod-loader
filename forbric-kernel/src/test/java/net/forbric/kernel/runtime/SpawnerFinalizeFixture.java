@@ -1,6 +1,8 @@
 /* Copyright 2026 The Forbric Project. Licensed under the Apache License, Version 2.0. */
 package net.forbric.kernel.runtime;
 
+import net.forbric.kernel.TestFixtures;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
@@ -86,7 +88,7 @@ final class SpawnerFinalizeFixture implements AutoCloseable {
 	@Override public void close() throws Exception { loader.close(); }
 
 	private static void copyHook(Path classes, String jar, String owner, String method) throws Exception {
-		ClassNode original = new ClassNode(); new ClassReader(ForgeSpawnFixture.staged(jar, owner)).accept(original, 0);
+		ClassNode original = new ClassNode(); new ClassReader(TestFixtures.stagedClass(jar, owner)).accept(original, 0);
 		var hook = original.methods.stream().filter(m -> m.name.equals(method)).findFirst().orElseThrow();
 		ClassWriter writer = new ClassWriter(0); writer.visit(original.version, original.access, original.name, null, "java/lang/Object", null);
 		hook.accept(writer); writer.visitEnd(); Path path = classes.resolve(owner.replace('.', '/') + ".class");

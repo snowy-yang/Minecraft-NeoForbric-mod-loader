@@ -97,7 +97,7 @@ class MixinFitLivenessTest {
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(redirect(HUD, HOTBAR, HAS_EXPERIENCE), resolver(Map.of(HUD, hud(false)))).verdict());
 		MixinStubRebind.forget();
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(redirect(HUD, HOTBAR, HAS_EXPERIENCE), resolver(Map.of(HUD, hud(false)))).verdict());
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(redirect(HUD, HOTBAR, HAS_EXPERIENCE), resolver(Map.of(HUD, hud(false)))).verdict());
 	}
 

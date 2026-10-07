@@ -44,15 +44,11 @@ import net.forbric.kernel.transform.ChunkExecutorGuardInjector;
 import net.forbric.kernel.transform.ClientPackHookInjector;
 import net.forbric.kernel.transform.ClientSmokeTickInjector;
 import net.forbric.kernel.transform.CommonNetworkInteropInjector;
-import net.forbric.kernel.transform.ForgeOverlayNeuterInjector;
 import net.forbric.kernel.transform.SodiumConfigUserBridgeInjector;
 import net.forbric.kernel.transform.DataPackHookInjector;
 import net.forbric.kernel.transform.DuplicateLambdaPruneInjector;
-import net.forbric.kernel.transform.ExitHookInjector;
 import net.forbric.kernel.transform.ForbricMergedBaseCompatTransformer;
 import net.forbric.kernel.transform.ForeignModPresenceInjector;
-import net.forbric.kernel.transform.ForgeBindingsLookupInjector;
-import net.forbric.kernel.transform.ForgeLoadingListHolderInjector;
 import net.forbric.kernel.transform.GuestMixinPluginGuard;
 import net.forbric.kernel.transform.HudElementBridgeInjector;
 import net.forbric.kernel.transform.LifecycleHookInjector;
@@ -64,8 +60,6 @@ import net.forbric.kernel.transform.NeoEnumExtensionInjector;
 import net.forbric.kernel.transform.NullPackGuardInjector;
 import net.forbric.kernel.transform.PackMetadataFailSoftInjector;
 import net.forbric.kernel.transform.PackOverlayMutabilityInjector;
-import net.forbric.kernel.transform.RegistryAliasParityInjector;
-import net.forbric.kernel.transform.RegistryHookRedirector;
 import net.forbric.kernel.transform.TransformChain;
 import net.forbric.kernel.transform.TransformContext;
 import net.forbric.kernel.transform.TransformPhase;
@@ -102,8 +96,7 @@ public final class KernelBoot {
 		 * The class whose loading means "far enough along that the anchor census is worth reading".
 		 *
 		 * <p>Server: vanilla's own Main builds the PackRepository and the WorldStem BEFORE constructing this, so
-		 * every server-side target the kernel cares about has already been through the chain. ExitHookInjector
-		 * already treats this class as the server's end-of-life owner.
+		 * every server-side target the kernel cares about has already been through the chain.
 		 *
 		 * <p>Client: the title screen is the moment the player starts looking, and by then Minecraft, Options,
 		 * ClientModLoader, PackRepository, Pack, ModList and GuiLayerManager have all been defined.
@@ -452,19 +445,6 @@ public final class KernelBoot {
 		// a real implementation from one that bypasses nothing. Reads a RESOURCE rather than loading a class, for
 		// the same reason MergedBaseFrameRecomputer does — loading one here would define it before the chain that
 		// is still being built can see it.
-		// MinecraftForge's capability provider, composed into Entity/BlockEntity/Level the way Forge composes it into
-		// LevelChunk. BEFORE the compat transformer: its bare-return invalidateCaps/reviveCaps stubs then stand down
-		// on their own, and remain the fallback when this is switched off.
-		boolean forgeCapabilities = net.forbric.kernel.transform.ForgeCapabilityCompositionTransformer.enabled();
-		if (forgeCapabilities) {
-			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeCapabilityCompositionTransformer());
-			if (transferInterop) chain.register(TransformPhase.COREMOD,
-					new net.forbric.kernel.transform.ForgeTransferCapabilityFallback());
-		} else {
-			ForbricLog.warn("[Forbric/Capabilities] -D%s=off — MinecraftForge capabilities are not composed into the merged "
-					+ "root types and ForgeCapabilities cannot initialise; storage, pipe and machine mods stay inert",
-					net.forbric.kernel.transform.ForgeCapabilityCompositionTransformer.PROPERTY);
-		}
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.FabricModelContextTransformer(path -> {
 			try (var in = loader.getGameResourceAsStream(path)) { return in == null ? null : in.readAllBytes(); }
 			catch (java.io.IOException unavailable) { return null; }
@@ -529,19 +509,6 @@ public final class KernelBoot {
 		if (net.forbric.kernel.transform.ForbricBrandingInjector.enabled()) {
 			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForbricBrandingInjector());
 		}
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeBlockTintInjector());
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeOptionsInjector());
-
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeClientConsumersInjector());
-
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeCreativeTabsInjector());
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeSpawnPlacementsInjector());
-		// A client freezes once before its MinecraftForge mods exist; that freeze's attribute validation waits for
-		// their (held) attribute events, or it runs first and Better Nether's lazy entity registration fails.
-		if (net.forbric.kernel.transform.ForgeAttributeValidationInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeAttributeValidationInjector());
-		}
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeWorldModifierInjector());
 
 		// Client only: hand the kernel the live PackRepository at the vanilla-woven
 		// ClientModLoader.setupModResourcePacks call inside Minecraft.<init>, so it can serve the ecosystem jars'
@@ -589,10 +556,6 @@ public final class KernelBoot {
 		// leaves ModList.modFiles empty, so NeoForge's own mod-pack finder walks an empty list and adds nothing.
 		chain.register(TransformPhase.COREMOD, new DataPackHookInjector());
 
-		// …and the ids in that data only resolve if the Forge registry wrappers honour aliases, which their overrides
-		// of fabric-api's mixin targets silently stopped them doing.
-		chain.register(TransformPhase.COREMOD, new RegistryAliasParityInjector());
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.SoundRegistryIdentityInjector());
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ServerReloadListenerNamesInjector());
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.CreateWorkerWaitInjector());
 		if (loader.getResource("com/zurrtum/create/mixin/LivingEntityMixin.class") != null) {
@@ -601,21 +564,6 @@ public final class KernelBoot {
 			if (side == Side.CLIENT) chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.CreateHudContextInjector());
 		}
 
-		// …and NeoForge's configuration-phase registry sync remaps a registry through MappedRegistry fields those same
-		// wrappers never fill, so the first real client to connect was dropped with "Failed to sync registries from the
-		// server: NullPointerException". The wrapper gets NeoForge's remap contract and Forge's own injectSnapshot
-		// does the work. fabric-api's remap is added only when its types are on this loader: getMethod resolves the
-		// types of the public methods of each class it searches, so one naming an absent class makes a mod's
-		// registry.getClass().getMethod throw whenever the search reaches the wrapper (forGameLoader decides it).
-		chain.register(TransformPhase.COREMOD, net.forbric.kernel.transform.RegistrySyncParityInjector.forGameLoader(loader));
-		// …and their register never reaches MappedRegistry.register, where fabric-registry-sync fires
-		// RegistryEntryAddedCallback, so fabric-menu-api had no codec for a Fabric mod's menu registered after its own
-		// main entrypoint, and Farmer's Delight's cooking pot never opened. The wrapper fires the event itself.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.WrapperEntryAddedInjector());
-		// …and they are not public, where the MappedRegistry they stand in for is: a registry method a mod looks up on
-		// registry.getClass() is declared by a class it cannot access, and invoking it threw. Meow Anti-Xray resolves its
-		// ores that way and took the server down the moment it was Done. The wrappers are public, as vanilla's are.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.RegistryWrapperAccessInjector());
 
 		// A Fabric mod's registry reads its data where native Fabric reads it. The merged Registries body is
 		// NeoForge's, which prefixes the namespace itself; Fabric prefixes in a return-value mixin instead, and
@@ -661,21 +609,6 @@ public final class KernelBoot {
 		chain.register(TransformPhase.COREMOD, new PackOverlayMutabilityInjector());
 		chain.register(TransformPhase.COREMOD, new NullPackGuardInjector());
 
-		// The merged SessionSearchTrees kept MinecraftForge's bodies for vanilla's two search-tree producers, which file
-		// their trees in a private map the (NeoForge) creative screen never reads; a mod that refreshes the search that
-		// way (TCDCommons, on every join) left every creative search empty. They file into NeoForge's registry instead.
-		// Client only: a dedicated server never loads the class, so it carries no anchor for it. Registered before
-		// DuplicateLambdaPruneInjector (same phase, ties go by registration order): the rewrite leaves MinecraftForge's
-		// two lambdas unreachable beside NeoForge's live ones of the same name, and only a prune that runs after it
-		// sees them as the orphans they now are.
-		if (side == Side.CLIENT && net.forbric.kernel.transform.CreativeSearchTreesInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.CreativeSearchTreesInjector());
-		} else if (side == Side.CLIENT) {
-			ForbricLog.warn("[Forbric/CreativeSearch] -D%s=off — a mod that refreshes the creative search through "
-					+ "vanilla's SessionSearchTrees methods leaves every creative search empty for the session",
-					net.forbric.kernel.transform.CreativeSearchTreesInjector.PROPERTY);
-		}
-
 		// A merged method keeps ONE body but BOTH ecosystems' lambdas, and a mixin's `method = "lambda$x$0"`
 		// carries no descriptor because javac never lets one class have two. Drop the orphaned half before Mixin
 		// looks, or it binds to dead code and the injection silently does nothing.
@@ -701,26 +634,9 @@ public final class KernelBoot {
 		}));
 		// Each LootPool constructor fills the other family's fields too, so a pool built one way encodes the other.
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.LootPoolFieldsInjector());
-		// And a MinecraftForge pool condition is kept by the builder and judged by the pool decoder, as natively.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeLootPoolConditionsInjector());
 		// MinecraftForge's ItemStack.useOn posts NeoForge's ITEM_AFTER_BLOCK phase again, and its Item.useOn calls go
 		// through one ItemStack relay that Fabric's ItemEvents.USE_ON wraps (MixinRelocatedCall moves the injector).
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ItemUseOnInjector());
-		// NeoForge's furnace tick calls MinecraftForge's instance canBurn/consumeFuel/burn as static; the ticked furnace
-		// is the receiver MinecraftForge's own tick uses.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.FurnaceTickCallsInjector());
-		// The Ender Dragon's parts are NeoForge PartEntitys, as every part consumer in the merged game casts them.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.DragonPartsInjector());
-		// The client's onTrackingStart is MinecraftForge's body: it read only MinecraftForge's getParts(), which a NeoForge
-		// mod's multipart entity leaves null, and the client disconnected on sight of one. NeoForge's parts are tracked too.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ClientPartTrackingInjector());
-		// The mirror image: the server's tracking callbacks, the client's onTrackingEnd and the debug hitboxes are NeoForge-
-		// typed, and a MinecraftForge mod's multipart entity leaves NeoForge's getParts() null — adding one to a world, or
-		// removing it, threw. Its parts are tracked in MinecraftForge's partEntities, and Level.getEntities finds them there.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgePartTrackingInjector(name -> {
-			try (var in = loader.getGameResourceAsStream(name + ".class")) { return in == null ? null : in.readAllBytes(); }
-			catch (java.io.IOException unavailable) { return null; }
-		}));
 		// A Fabric or MinecraftForge mod's fluid has no NeoForge type; it gets the one its fluid tags imply.
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForeignFluidTypeInjector());
 		// …and a tag a Fabric mod gave a fluid behaviour has that behaviour's fluid type where the merged
@@ -730,30 +646,11 @@ public final class KernelBoot {
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.AxeStripCallbacksInjector());
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.CompatPluginPlatformInjector());
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.SpectreConfigContractInjector());
-		// Lava placed or flowing next to water: the merged LiquidBlock.onPlace (MinecraftForge's) asked MinecraftForge's
-		// registry, which the neuter below used to empty, so only water arriving next to lava reacted. It asks it whole
-		// now, as on MinecraftForge (vanilla's rules and MinecraftForge mods'; NeoForge's own placement runs no mod's).
-		// neighborChanged (NeoForge's) asks NeoForge's registry, and at each neighbour its rules miss, MinecraftForge
-		// mods' — once one adds a rule. Off, the neuter is registered again and placement is as broken as before.
-		boolean fluidInteractions = net.forbric.kernel.transform.FluidInteractionsInjector.enabled();
-		if (fluidInteractions) {
-			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.FluidInteractionsInjector());
-		} else {
-			ForbricLog.warn("[Forbric/Fluid] -D%s=off — LiquidBlock.onPlace asks MinecraftForge's neutered FluidInteractionRegistry: "
-					+ "lava placed or flowing next to water stays lava", net.forbric.kernel.transform.FluidInteractionsInjector.PROPERTY);
-		}
-		// MinecraftForge's ParticleEngine.registerParticleGroup against NeoForge's engine: its statics, merged in on build.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ParticleGroupsInjector());
-		// MinecraftForge's Hurt, Damage and player-Attack events have no NeoForge event at their positions to bridge
-		// from; seams in the merged actuallyHurt and Player.hurtServer post them where MinecraftForge did.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeDamageSeamsInjector());
-		// After the seams: vanilla's pre-armour read of actuallyHurt's damage goes back AHEAD of MinecraftForge's Hurt seam,
+		// Vanilla's pre-armour read of actuallyHurt's damage goes back where vanilla has it,
 		// so a Fabric mod rewriting the damage there (TaCZ) rewrites what NeoForge applies instead of throwing on every hit.
 		if (net.forbric.kernel.transform.VanillaDamageReadInjector.enabled()) {
 			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.VanillaDamageReadInjector());
 		}
-		// The merged Gui.setScreen is MinecraftForge's; NeoForge's ScreenEvent.Opening and Closing go in after its hooks.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.NeoScreenEventsInjector());
 		// fabric-api's class tweaker injects FabricCreativeModeInventoryScreen into the creative screen, and the mixin that
 		// implements it is pinned (MergedBaseMixinCompat), so every call threw AssertionError — owo-lib makes one the
 		// moment the creative inventory opens. The screen answers it from NeoForge's pager instead. Client only: a
@@ -775,8 +672,6 @@ public final class KernelBoot {
 						net.forbric.kernel.transform.CreativePagerBridgeInjector.PROPERTY);
 			}
 		}
-		// A MinecraftForge brewing recipe goes into the merged builder's NeoForge-typed list wrapped as NeoForge's.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeBrewingRecipesInjector());
 		// The merged game builds its fuels from NeoForge's data map; Fabric's fuel events run on that builder too.
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.FabricFuelValuesInjector());
 		// NeoForge's "Missing FluidModel" check runs inside the bake Fabric wraps, before Fabric adds its fluid models.
@@ -787,10 +682,6 @@ public final class KernelBoot {
 		// Those data-map lookups (and the oxidation, waxing and stripping ones) end in Holder.Reference.getData, which
 		// threw for a value not registered yet; it answers "no data" there, so they fall back to vanilla's maps.
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.UnboundHolderDataInjector());
-		// The merged Zombie converts through MinecraftForge's lambdas; NeoForge's conversion Post is posted there too.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.NeoConversionPostInjector());
-		// NeoForge's tooltip registration event goes to each mod on its own, not through ModLoader's aborting fan-out.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.NeoTooltipAppendersInjector());
 		// NeoForge's coremods never run on the merged base; NativeCoremodParity does their rewrites after Mixin. These
 		// are the parts that must come before it: the flower pot's constructor, lookup and addPlant; the biome modifier
 		// pass starting from the biome's current climate, and the biome's getters yielding to a later replacement.
@@ -802,57 +693,12 @@ public final class KernelBoot {
 		// The only performance measurement in the tree. Beside the smoke tick because it is the same shape:
 		// one static call at the head of a tick, no mixin config, nothing new in the list a gate asserts on.
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ServerTickSamplerInjector());
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ServerCompatibilityTickInjector());
 
-		// The loader's own Minecraft.close mixin never applies under the kernel, so its stop of the two loaders'
-		// config file-watchers (non-daemon executors once a config file changes) is injected here: on the client at
-		// Minecraft.close, on the dedicated server at DedicatedServer.onServerExit, which has no System.exit behind it.
-		chain.register(TransformPhase.COREMOD, new ExitHookInjector());
-
-		// …and RESOLVE its target now, rather than at the moment it is called.
-		//
-		// The hook is spliced into Minecraft.close, so without this the first and only attempt to load
-		// ClientShutdown happens while the game is shutting down. Measured on a real install: three
-		// "Game shutdown / NoClassDefFoundError: net/forbric/kernel/interop/ClientShutdown" crash reports, from
-		// sessions whose kernel jar had been REPLACED on disk while they were running (a developer redeploying
-		// mid-session); a session started after the last write exited clean. The class was in both jars the whole
-		// time — it simply was not loaded yet when the file underneath it changed.
-		//
-		// A jar swapped under a live JVM is one way to reach that. A jar on a network or removable volume is
-		// another, and so is anything that closes the loader early. None of them should be able to turn a quit into
-		// a crash report, and a class the shutdown path cannot do without has no business being resolved for the
-		// first time during shutdown.
-		//
-		// The exit hook is not the only one. Every hook the chain splices into the game is read from the kernel jar at
-		// its first use, and gate M22 measured two more after the jar was truncated: ForgeRuntimeInterop at the first
-		// lava flow (a server crash report) and KernelRegistryRevert on leaving a world. So the whole jar is defined
-		// now, while it is readable; the exit hook is still initialized by name below, as before.
+		// Every hook the chain splices into the game is read from the kernel jar at its first use; a jar replaced
+		// or unreadable mid-session breaks that use. Gate M22 measured it (KernelRegistryRevert on leaving a
+		// world), so the whole jar is defined now, while it is readable.
 		KernelJarPreload.run(KernelBoot.class);
-		try {
-			Class.forName(ExitHookInjector.HOOK_OWNER.replace('/', '.'), true, KernelBoot.class.getClassLoader());
-		} catch (Throwable t) {
-			ForbricLog.warn("[Forbric/Boot] could not preload the exit hook — a quit will still work, but if the "
-					+ "kernel jar becomes unreadable before then it will end as a crash report instead", t);
-		}
 
-		// MinecraftForge's Bindings resolves its service provider through FML's module layer, which the kernel does
-		// not build — so every use of its config events (registering one, loading one on a world, syncing one to a
-		// client) died in that class initializer.
-		chain.register(TransformPhase.COREMOD, new ForgeBindingsLookupInjector());
-		// FMLLoader's three ModLauncher-backed methods. The kernel replaces ModLauncher, so Launcher.INSTANCE is
-		// null and all three NPE — getNameFunction most of all, because ObfuscationReflectionHelper goes through
-		// it and mods call that from static initialisers, which turns one NPE into a permanently erroneous class.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeLauncherInfoInjector());
-		// MinecraftForge's ClearableLazy.concurrentOf(...).get() returns its first, null read to a thread that waited for the
-		// lock while another computed the value. ChunkGenerator.featuresPerStep is one, invalidated at server start, so a
-		// worldgen thread that lost that race failed its chunk on a null feature list (C2ME made it ~1 start in 10).
-		if (net.forbric.kernel.transform.ForgeClearableLazyInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.ForgeClearableLazyInjector());
-		} else {
-			ForbricLog.warn("[Forbric/Forge] -D%s=off — ClearableLazy keeps MinecraftForge's double-checked lock, which hands a "
-					+ "waiting thread null; parallel worldgen can fail a chunk on a null feature list",
-					net.forbric.kernel.transform.ForgeClearableLazyInjector.PROPERTY);
-		}
 		// Each family's ModList.isLoaded can only see its own family's mods, and that answer is a compatibility
 		// branch far more often than a display string — a wrong "no" disables an integration in silence.
 		chain.register(TransformPhase.COREMOD, new ForeignModPresenceInjector());
@@ -860,12 +706,6 @@ public final class KernelBoot {
 		// carrier's copy wins, and the port's own compiled call sites then meet an API it was not built against.
 		// PortingLayerAudit reports every such skew; this adapts the one that is fatal.
 		chain.register(TransformPhase.COREMOD, new PortingLayerAbiInjector());
-		// MinecraftForge builds its LoadingModList in a lazy holder that reads a field the genuine loader would have
-		// filled. A class initializer is a ONE-SHOT with no exception table, so the first caller to arrive before the
-		// kernel seeds that field NPE'd inside it and left the class permanently erroneous -- while the seeder, which
-		// only ever touches the write side, went on logging success. Make the holder read the kernel's published list
-		// instead, so WHEN it is first touched stops mattering. See PassiveSeeder.publishForgeLoadingList.
-		chain.register(TransformPhase.COREMOD, new ForgeLoadingListHolderInjector());
 
 		// Client only: NeoForge won Hud.extractRenderState, so the call sites fabric-rendering-v1's HudMixin anchors
 		// on no longer exist — as METHOD REFERENCES in the layer manager they exist as no bytecode at all, so no
@@ -928,7 +768,6 @@ public final class KernelBoot {
 		if (!"off".equalsIgnoreCase(System.getProperty("forbric.commonNetworkInterop", "on"))) {
 			chain.register(TransformPhase.COREMOD, new CommonNetworkInteropInjector());
 			chain.register(TransformPhase.COREMOD, new SodiumConfigUserBridgeInjector());
-			chain.register(TransformPhase.COREMOD, new ForgeOverlayNeuterInjector());
 		} else {
 			ForbricLog.warn("[Forbric/Net] common-networking arbitration DISABLED — a tri-in-one client will be "
 					+ "kicked \"invalid packet\" when Fabric's addon is handed a NeoForge payload");
@@ -944,11 +783,6 @@ public final class KernelBoot {
 					+ "stopped server's executor will park its caller forever instead of being refused");
 		}
 
-		if (Boolean.getBoolean("forbric.kernel.registryRedirect")) {
-			chain.register(TransformPhase.COREMOD, new RegistryHookRedirector());
-			ForbricLog.info("[Forbric/Boot] registry-wrapper redirect ENABLED (experimental)");
-		}
-
 		// Two targets used to sit above this one and no longer do, because their reasons stopped being true:
 		//   NeoForge ServerLifecycleHooks.runModifiers — "needs neoforge:biome_modifier datapack registry". The
 		//     kernel declares it now, and the pass is guarded at its call site instead
@@ -961,7 +795,7 @@ public final class KernelBoot {
 		// merged fluids answered MinecraftForge's getFluidType() (the per-class bridge, ForeignFluidTypeInjector), and the
 		// "vanilla fluid behaviour proceeds" it promised did not: the merged LiquidBlock.onPlace asks exactly this method,
 		// so placing lava next to water never reacted. It runs whole with FluidInteractionsInjector; off, it is put back.
-		MethodBodyNeuter neuter = neuters(side, fluidInteractions);
+		MethodBodyNeuter neuter = neuters(side);
 		chain.register(TransformPhase.COREMOD, neuter);
 
 		// A NeoForge mod adds constants to vanilla enums by declaring them in META-INF/enumextensions.json; FML
@@ -979,22 +813,6 @@ public final class KernelBoot {
 		if (NeoEnumExtensions.load(loader, modJars) > 0) {
 			NeoEnumExtensionInjector enumExtensions = NeoEnumExtensionInjector.create(loader);
 			if (enumExtensions != null) chain.register(TransformPhase.COREMOD, enumExtensions);
-		}
-
-		// The traditional-MinecraftForge twin. Unconditional, unlike the NeoForge one above: NeoForge's model is a
-		// declaration file per mod, so "did anyone declare anything" is answerable up front, while MinecraftForge's
-		// is a mod calling create(...) at runtime — there is nothing to count beforehand. Their own processor
-		// declines every class outside two packages, and declines everything unless MinecraftForge's mod list holds
-		// more than two mods, so this is inert on a pack without traditional-Forge mods by their rule.
-		net.forbric.kernel.transform.ForgeEnumExtensionInjector forgeEnums =
-				net.forbric.kernel.transform.ForgeEnumExtensionInjector.create(loader);
-		if (forgeEnums != null) chain.register(TransformPhase.COREMOD, forgeEnums);
-		// MinecraftForge's CapabilityTokenSubclass plugin, driven the same way: without it every capability token's
-		// getType() throws and ForgeCapabilities.<clinit> dies for every Forge mod that names it.
-		if (forgeCapabilities) {
-			net.forbric.kernel.transform.ForgeCapabilityTokenInjector tokens =
-					net.forbric.kernel.transform.ForgeCapabilityTokenInjector.create(loader);
-			if (tokens != null) chain.register(TransformPhase.COREMOD, tokens);
 		}
 
 		// LAST in the chain, because it has to see every edit the coremod phase made: a transformer that adds a
@@ -1045,9 +863,8 @@ public final class KernelBoot {
 		// Seeding here is safe precisely because the loader has no mixin transformer yet, so these loads cannot
 		// recurse into select(). The cost is that these few classes are never weavable — measured and acceptable:
 		// across every mod jar in the gates and the client, the only net/neoforged/fml class any guest mixin so much
-		// as names is ImmediateWindowHandler, which is not on this path. seedAll repeats three of the four calls
-		// below — seedNeoForgePaths, seedNeoForgeLoader and seedForgeFmlLoader, all idempotent — and does NOT
-		// repeat publishForgeLoadingList.
+		// as names is ImmediateWindowHandler, which is not on this path. seedAll repeats the calls
+		// below — seedNeoForgePaths and seedNeoForgeLoader, both idempotent.
 		//
 		// WHERE THE RACE ACTUALLY IS, because it is not where it looks: the transformer goes in inside
 		// KernelMixinBootstrap.init, but gotoPhase(INIT)/gotoPhase(DEFAULT) there does NOT prepare configs. Mixin
@@ -1059,19 +876,6 @@ public final class KernelBoot {
 		// must describe the SAME jars this boot decided to load — see discoverForgeFamilyModJars above, which walks
 		// exactly this directory. Two independent derivations of "where the mods are" is how they drift apart.
 		PassiveSeeder.seedNeoForgeLoader(loader, gameDir, gameDir.resolve("mods"), side.api(), gameVersion);
-		// MinecraftForge's FMLLoader identity, for a reason its NeoForge twin does not have: NeoForge's
-		// FMLEnvironment is stateless, so seeding it late could only THROW, which is loud. MinecraftForge's
-		// CACHES FMLLoader's answers into four public static final fields in a <clinit> that cannot throw — every
-		// getter it calls is a bare getstatic — so whoever touches it first decides `dist` FOREVER, and a guest
-		// mixin plugin's own <clinit> during prepareConfigs is exactly such a toucher. Seeded afterwards, dist is
-		// permanently null: AutomaticEventSubscriber's Set.contains(null) then skips every @EventBusSubscriber,
-		// and ModLoader/ConfigTracker/RuntimeDistCleaner all take the wrong branch. Nothing throws.
-		PassiveSeeder.seedForgeFmlLoader(loader, gameDir, side.api());
-		// MinecraftForge's twin, and it has to be HERE rather than in the mod-loading window where its seed lives:
-		// its list is built by a one-shot class initializer, so the answer must exist before anything can ask. The
-		// most likely early asker is a guest mixin plugin during prepareConfigs, which is the next line but one.
-		PassiveSeeder.publishForgeLoadingList(loader, gameDir.resolve("mods"));
-
 		// Mixin LAST in the pipeline but FIRST in time: installed before anything defines a targeted class.
 		//
 		// Fabric first, Forge-family APPENDED. Within one environment Mixin selects by priority (the config's, then
@@ -1096,11 +900,8 @@ public final class KernelBoot {
 		if (!forgeConfigs.isEmpty() || !forgeMixinDecls.isEmpty()) {
 			List<String> described = new ArrayList<>();
 			for (MixinConfigOwners.Owned one : forgeConfigs) described.add(MixinConfigOwners.describe(one.config()));
-			ForbricLog.info("[Forbric/Mixin] mixin configs: %d Fabric + %d Forge-family (%d NeoForge, %d "
-					+ "MinecraftForge) — %s", fabricConfigs.size(), forgeConfigs.size(),
-					KernelForgeFamilyMixins.count(forgeMixinDecls, forgeConfigs, Ecosystem.NEOFORGE),
-					KernelForgeFamilyMixins.count(forgeMixinDecls, forgeConfigs, Ecosystem.FORGE),
-					described.isEmpty() ? "none kept" : String.join(", ", described));
+			ForbricLog.info("[Forbric/Mixin] mixin configs: %d Fabric + %d NeoForge — %s", fabricConfigs.size(),
+					forgeConfigs.size(), described.isEmpty() ? "none kept" : String.join(", ", described));
 		}
 		KernelMixinBootstrap.init(loader, side.envType, mixinConfigs);
 		reportMixinExtrasSource(loader);
@@ -1153,20 +954,10 @@ public final class KernelBoot {
 
 	/**
 	 * Every method the kernel empties on {@code side}: built here, outside {@link #launch}, so a test can read the list
-	 * KernelBoot really registers. MinecraftForge's {@code FluidInteractionRegistry.canInteract} is on it only with
-	 * {@code -Dforbric.fluidInteractions=off} ({@code fluidInteractions} false): with the repair on, a MinecraftForge
-	 * mod's fluid rules run through exactly that method, and a neuter there silences them with every test still green.
+	 * KernelBoot really registers.
 	 */
-	static MethodBodyNeuter neuters(Side side, boolean fluidInteractions) {
+	static MethodBodyNeuter neuters(Side side) {
 		MethodBodyNeuter neuter = new MethodBodyNeuter();
-		if (!fluidInteractions) {
-			neuter.add(new MethodBodyNeuter.Target("net.minecraftforge.fluids.FluidInteractionRegistry",
-					"canInteract", "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Z",
-					"MinecraftForge fluid-interaction hook calls its own getFluidType() (net.minecraftforge FluidType) "
-					+ "but the merged Fluid implements only NeoForge's IFluidExtension (getFluidType returns the "
-					+ "neoforged FluidType) → AbstractMethodError on WaterFluid.getFluidType during worldgen fluid "
-					+ "ticking. Return false so vanilla fluid behavior proceeds (Forge/Neo FluidType ABI split)"));
-		}
 		addSideNeuters(side, neuter);
 		return neuter;
 	}
@@ -1184,13 +975,11 @@ public final class KernelBoot {
 		// Leaving a world, Minecraft.disconnect calls NeoForge's RegistryManager.revertToFrozen — the client-only
 		// undo of server-synced registry ids back to a "frozen" snapshot. NeoForge's own body cannot run here: the
 		// kernel owns the freeze, so GameData.freezeData never took the snapshot it re-applies (frozenSnapshot null
-		// → NPE). It used to be neutered for that; it is no longer, because RegistrySyncParityInjector REWRITES the
-		// body to apply the kernel's own pre-connection snapshot (KernelRegistryRevert) — and this neuter, registered
-		// after that injector, was emptying the rewritten body again. Do not add it back.
+		// → NPE). It used to be neutered for that; it is no longer, because the body instead applies the
+		// kernel's own pre-connection snapshot (KernelRegistryRevert). Do not add the neuter back.
 
 		for (String owner : new String[] {
-				ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.NEOFORGE),
-				ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.FORGE)}) {
+				ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.NEOFORGE)}) {
 			// begin() is NOT neutered: its call at Main.main bc 814 is the redirect target (→ onClientModLoading), so
 			// its genuine body is never reached from there. Neutering it instead defers registration to a point never
 			// reached and hangs the boot (empirically). The LATER client mod-loading calls in Minecraft.<init> are the
@@ -1661,8 +1450,8 @@ public final class KernelBoot {
 		boolean forgeFamily = false;
 		java.util.Map<Ecosystem, net.forbric.kernel.metadata.forge.ForgeModsToml> tomls = new java.util.HashMap<>();
 		try (java.util.jar.JarFile zip = new java.util.jar.JarFile(jar.toFile())) {
-			for (Ecosystem family : List.of(Ecosystem.NEOFORGE, Ecosystem.FORGE)) {
-				var entry = zip.getJarEntry(family == Ecosystem.NEOFORGE ? "META-INF/neoforge.mods.toml" : "META-INF/mods.toml");
+			for (Ecosystem family : List.of(Ecosystem.NEOFORGE)) {
+				var entry = zip.getJarEntry("META-INF/neoforge.mods.toml");
 				if (entry != null) try (var in = zip.getInputStream(entry)) {
 					tomls.put(family, net.forbric.kernel.metadata.forge.ModsTomlParser.parse(in));
 				} catch (RuntimeException unreadable) {

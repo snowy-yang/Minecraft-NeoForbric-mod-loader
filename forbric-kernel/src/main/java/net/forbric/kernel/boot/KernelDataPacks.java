@@ -266,8 +266,7 @@ public final class KernelDataPacks {
 		List<Path> serve = new ArrayList<>();
 		for (Path jar : jars) {
 			Ecosystem owner = MultiLoaderArbiter.ownerOf(jar);
-			if (owner != Ecosystem.NEOFORGE
-					&& owner != Ecosystem.FORGE) {
+			if (owner != Ecosystem.NEOFORGE) {
 				continue;
 			}
 			if (!carriesData(jar)) continue;

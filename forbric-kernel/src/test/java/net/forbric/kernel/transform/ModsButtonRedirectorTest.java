@@ -66,7 +66,6 @@ class ModsButtonRedirectorTest {
 
 	private static final String PAUSE = "net/minecraft/client/gui/screens/PauseScreen";
 	private static final String NEO = ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE);
-	private static final String FORGE = ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.FORGE);
 
 	@Test
 	void theStagedGameStillOpensAFamilysOwnModListSomewhere() throws Exception {
@@ -123,7 +122,7 @@ class ModsButtonRedirectorTest {
 			for (AbstractInsnNode insn : method.instructions) {
 				if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKESPECIAL
 						&& "<init>".equals(call.name)) {
-					assertTrue(!NEO.equals(call.owner) && !FORGE.equals(call.owner),
+					assertTrue(!NEO.equals(call.owner),
 							"a family's ModListScreen constructor is still called in " + method.name);
 				}
 			}
@@ -240,9 +239,8 @@ class ModsButtonRedirectorTest {
 	}
 
 	@Test
-	void theTwoFamiliesAreNamedThroughForeignTypeAndDiffer() {
+	void theScreenIsNamedThroughForeignType() {
 		assertEquals("net/neoforged/neoforge/client/gui/modlist/ModListScreen", NEO);
-		assertEquals("net/minecraftforge/client/gui/ModListScreen", FORGE);
 	}
 
 	// --- helpers ---------------------------------------------------------------------------------------------
@@ -270,10 +268,10 @@ class ModsButtonRedirectorTest {
 			if (method.instructions == null) continue;
 			for (AbstractInsnNode insn : method.instructions) {
 				if (insn instanceof TypeInsnNode type && type.getOpcode() == Opcodes.NEW
-						&& (NEO.equals(type.desc) || FORGE.equals(type.desc))) {
+						&& NEO.equals(type.desc)) {
 					out.add(type.desc);
 				} else if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKESTATIC
-						&& (NEO.equals(call.owner) || FORGE.equals(call.owner))
+						&& NEO.equals(call.owner)
 						&& call.desc.startsWith("(Lnet/minecraft/client/gui/screens/Screen;)")) {
 					out.add(call.owner);
 				}
@@ -317,7 +315,7 @@ class ModsButtonRedirectorTest {
 				for (ZipEntry entry : zip.stream().toList()) {
 					if (!entry.getName().endsWith(".class")) continue;
 					String internal = entry.getName().substring(0, entry.getName().length() - 6);
-					if (NEO.equals(internal) || FORGE.equals(internal)) continue;
+					if (NEO.equals(internal)) continue;
 					byte[] bytes;
 					try (InputStream in = zip.getInputStream(entry)) {
 						bytes = in.readAllBytes();

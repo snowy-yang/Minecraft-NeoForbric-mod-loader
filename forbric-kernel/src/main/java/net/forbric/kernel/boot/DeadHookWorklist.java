@@ -31,17 +31,14 @@ import java.util.TreeSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import net.forbric.api.GameEventBridge;
-
 /**
  * Joins {@link HookCallSiteCensus}'s dead events to the jars that are actually waiting on them.
  *
  * <h2>Why the join, and not the count</h2>
  *
- * <p>The census says 140 of {@code ForgeEventFactory}'s 160 hooks have no call site. That number is true and
+ * <p>The census says how many of a hook class's hooks have no call site. That number is true and
  * almost useless on its own: most of those events nobody in a given pack subscribes to, and the handful that
- * someone does subscribe to are the ones a player experiences as "this mod does nothing". Repairing them in
- * census order would be repairing them in an order chosen by the merge.
+ * someone does subscribe to are the ones a player experiences as "this mod does nothing".
  *
  * <p>So this asks the second question — for each dead event, which jars name it? — and sorts by the answer. The
  * evidence rule is the one {@code fapi-usage.py} settled on for the same shape of question: a reference in the
@@ -49,8 +46,7 @@ import net.forbric.api.GameEventBridge;
  * count with their parent, because a bundled library waiting on a dead event fails exactly as loudly.
  *
  * <p>This is deliberately a REPORT, not an assertion. What it lists depends on which mods are installed, so
- * pinning it would go red on every pack change while saying nothing about the kernel. The assertions live in
- * {@code HookCallSiteCensusStagedTest}, on the relationships that do not depend on a pack.
+ * pinning it would go red on every pack change while saying nothing about the kernel.
  */
 public final class DeadHookWorklist {
 
@@ -88,51 +84,11 @@ public final class DeadHookWorklist {
 	}
 
 	/**
-	 * Whether a bridge already delivers this event, and from which of the two records that say so.
-	 *
-	 * <p>There are two, and they answer different questions. {@link DeadEventAudit}'s {@code BRIDGED} map is an
-	 * audit-suppression table: it exists to stop the audit reporting an event whose bridge is in. {@link
-	 * GameEventBridge} is the bridge INVENTORY. They are not the same set — the level-lifecycle and tick bridges
-	 * are in the inventory and not in the table — so consulting only the table understates coverage and sends
-	 * someone to repair a call site the kernel already replaced.
-	 *
-	 * <p>The inventory match is by display name, because that is all a bridge records about its event: the
-	 * internal name's simple-name chain ({@code LevelEvent$Load} → {@code LevelEvent.Load}) against
-	 * {@link GameEventBridge#event()}. That is a heuristic and is labelled as one; the table's answer is exact.
+	 * Whether something already delivers this event. With the cross-family bridges gone there is nothing to
+	 * consult, so the worklist names every dead event it finds.
 	 */
 	private static String coverage(String event) {
-		if (DeadEventAudit.BRIDGED.containsKey(event)) return "  [BRIDGED — already delivered]";
-		// A redirect into the kernel delivers it just as a bridge would, and a work list that keeps naming
-		// finished work is worse than none.
-		if (DeadEventAudit.REPAIRED.contains(event)) return "  [REPAIRED — the call site is redirected]";
-		String chain = simpleChain(event);
-		for (GameEventBridge bridge : GameEventBridge.values()) {
-			if (namesTheSameEvent(bridge.event(), chain)) {
-				return "  [bridge " + bridge.name() + " looks like it carries this — by name, not by symbol]";
-			}
-		}
 		return "";
-	}
-
-	/**
-	 * Whether a bridge's display name and a class's simple-name chain are the same event.
-	 *
-	 * <p>Either may be the shorter one, and the first version of this only allowed one direction. The bridges
-	 * name the tick events {@code ServerTickEvent.Post}, while the class chain is
-	 * {@code TickEvent.ServerTickEvent.Post} — so three events that ARE bridged came out of the worklist as
-	 * "no bridge at all", which is how a work list grows items that are already done.
-	 */
-	static boolean namesTheSameEvent(String bridgeEvent, String chain) {
-		if (bridgeEvent == null || chain == null) return false;
-		return bridgeEvent.equals(chain)
-				|| bridgeEvent.endsWith("." + chain)
-				|| chain.endsWith("." + bridgeEvent);
-	}
-
-	/** {@code net/minecraftforge/event/level/LevelEvent$Load} -> {@code LevelEvent.Load}. */
-	static String simpleChain(String internalName) {
-		int slash = internalName.lastIndexOf('/');
-		return (slash < 0 ? internalName : internalName.substring(slash + 1)).replace('$', '.');
 	}
 
 	/** Every class named by any class in the jar, recursing into nested mod jars. */

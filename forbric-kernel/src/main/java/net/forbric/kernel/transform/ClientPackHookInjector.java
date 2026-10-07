@@ -59,7 +59,6 @@ public final class ClientPackHookInjector implements ClassTransformer {
 	// BOTH halves of that, so if a carrier ever adds the method the hedge stops being inert and says so.
 	private static final String[] OWNERS = {
 		ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.NEOFORGE),
-		ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.FORGE),
 	};
 
 	@Override

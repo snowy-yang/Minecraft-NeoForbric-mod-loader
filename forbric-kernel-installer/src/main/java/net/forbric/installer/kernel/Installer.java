@@ -34,8 +34,8 @@ import java.util.function.Consumer;
  *
  * <p>The profile inherits from vanilla, which is what lets the launcher resolve assets, natives and the base
  * libraries by itself; on top of that it carries the kernel as {@code mainClass}, Forbric's jars and the kernel's
- * dependencies as libraries, and — as game arguments — the three jars the kernel opens the game with. The
- * kernel's own argument parser takes those four flags out and forwards everything else to the game, so the
+ * dependencies as libraries, and — as game arguments — the two jars the kernel opens the game with. The
+ * kernel's own argument parser takes those three flags out and forwards everything else to the game, so the
  * launcher's own arguments can arrive in any order around them.
  *
  * <p>The Minecraft libraries are listed explicitly rather than left to the classpath: the kernel has to OWN them
@@ -84,8 +84,8 @@ public final class Installer {
 		Map<String, Path> artifacts = artifactDir == null ? null
 				: obtainGameArtifacts(mcDir, mcVersion, artifactDir, explicitJdk);
 
-		// The vanilla base has to exist before the artifacts are built, not after: its jar is one of the merge's
-		// three inputs, and NFRT reuses the client and server the launcher already fetched.
+		// The vanilla base has to exist before the artifacts are built, not after: NFRT reads the client jar the
+		// launcher fetched, and the server jar is downloaded beside it from the same version JSON.
 		Map<String, Object> baseJson = ensureBaseVersion(versions, mcVersion);
 		List<String> mcLibraries = minecraftLibraryPaths(baseJson);
 		log.accept(mcLibraries.size() + " Minecraft libraries the kernel will own");
@@ -106,7 +106,7 @@ public final class Installer {
 		Files.createDirectories(mods);
 		log.accept("");
 		log.accept("Installed. In your launcher, pick the version \"" + id + "\".");
-		log.accept("Fabric, MinecraftForge and NeoForge mods all go in " + mods
+		log.accept("Fabric and NeoForge mods all go in " + mods
 				+ " (a launcher with per-version isolation uses versions/" + id + "/mods instead).");
 		return id;
 	}
@@ -124,13 +124,9 @@ public final class Installer {
 
 		List<Object> game = new ArrayList<>();
 		game.add("--gameJar");
-		game.add(libraryRef(coordinate("net.forbric:patched-mc-merged", mcVersion)));
-		// Both runtimes travel in ONE flag, joined the way a classpath is. A launcher may read game arguments as a
-		// flag-to-value map and keep only the last occurrence of a repeated flag — PCL2 does, and says so — which
-		// would drop MinecraftForge's runtime and kill the game on the first net.minecraftforge class it touches.
+		game.add(libraryRef(coordinate("net.forbric:patched-mc-neoforge", mcVersion)));
 		game.add("--runtimeJar");
-		game.add(libraryRef(coordinate("net.forbric:forge-runtime", mcVersion)) + java.io.File.pathSeparator
-				+ libraryRef(coordinate("net.forbric:neoforge-runtime", mcVersion)));
+		game.add(libraryRef(coordinate("net.forbric:neoforge-runtime", mcVersion)));
 		game.add("--libraryPath");
 		game.add(String.join(java.io.File.pathSeparator, mcLibraries));
 
@@ -162,21 +158,20 @@ public final class Installer {
 	 * downloaded through the launcher landed in a directory the instance does not read, and the path had to be
 	 * corrected by hand every time.
 	 *
-	 * <p>ONE coordinate, not three. A launcher's detection is a first-match chain over one string, so listing all
-	 * three ecosystems would not make it answer "all three" — it would make the answer depend on which branch
-	 * that launcher happens to test first. Fabric is declared because it is the ecosystem most of a Forbric pack
-	 * comes from in practice and because that is the API level the kernel implements most completely; the other
-	 * two are named in {@code ecosystems} below in prose, deliberately NOT as coordinates, so they carry the
-	 * truth without moving the answer. Swap {@link #DECLARED_LOADER} to change which one a launcher sees.
+	 * <p>ONE coordinate, not two. A launcher's detection is a first-match chain over one string, so listing both
+	 * ecosystems would not make it answer "both" — it would make the answer depend on which branch that launcher
+	 * happens to test first. Fabric is declared because it is the ecosystem most of a Forbric pack comes from in
+	 * practice and because that is the API level the kernel implements most completely; NeoForge is named in
+	 * {@code ecosystems} below in prose, deliberately NOT as a coordinate, so it carries the truth without moving
+	 * the answer. Swap {@link #DECLARED_LOADER} to change which one a launcher sees.
 	 */
 	private static Map<String, Object> launcherIdentity() {
 		Map<String, Object> identity = new LinkedHashMap<>();
-		identity.put("comment", "Metadata for launchers, not classpath. Forbric runs Fabric, traditional Forge and "
-				+ "NeoForge mods in one instance; a launcher can only be told about one loader, so it is told "
-				+ "about the one below. Change 'declares' if you want the launcher to offer a different "
-				+ "ecosystem's builds by default.");
+		identity.put("comment", "Metadata for launchers, not classpath. Forbric runs Fabric and NeoForge mods in"
+				+ " one instance; a launcher can only be told about one loader, so it is told about the one below."
+				+ " Change 'declares' if you want the launcher to offer a different ecosystem's builds by default.");
 		identity.put("declares", DECLARED_LOADER);
-		identity.put("ecosystems", List.of("fabric", "forge", "neoforge"));
+		identity.put("ecosystems", List.of("fabric", "neoforge"));
 		return identity;
 	}
 
@@ -343,18 +338,18 @@ public final class Installer {
 	}
 
 	/**
-	 * Gets the three game artifacts: built here when no directory is given, which is what every player gets;
+	 * Gets the two game artifacts: built here when no directory is given, which is what every player gets;
 	 * otherwise taken from {@code --artifacts} ("Built artifacts" in the window), and refused unless that
 	 * directory holds a complete set whose files are what their names say.
 	 *
 	 * <p>A supplied directory is a fast path for developers, not a requirement. It used to be the only path —
 	 * the installer looked for prebuilt jars and refused to continue without them, which worked on the machine
 	 * that had built them and nowhere else — and the window still described it that way long after, which is
-	 * how a player came to fill it with three unrelated jars (#13).
+	 * how a player came to fill it with unrelated jars (#13).
 	 *
 	 * <p>A supplied set is opened and checked for content ({@link GameArtifacts#verifyContents}), then
 	 * link-checked exactly as a built one is, against the same packaged baseline, before the profile can be
-	 * written. It used to be staged unchecked: a merged base with a new dangling reference, or one built with
+	 * written. It used to be staged unchecked: a game base with a new dangling reference, or one built with
 	 * {@code LINK_CHECK=warn}, installed without a verdict and failed in game instead.
 	 */
 	Map<String, Path> obtainGameArtifacts(Path mcDir, String mcVersion, Path artifactDir, Path explicitJdk)
@@ -364,21 +359,20 @@ public final class Installer {
 			GameArtifacts supplied = GameArtifacts.locate(mcVersion, artifactDir);
 			Map<String, Path> found = supplied.all();
 			for (Map.Entry<String, Path> e : found.entrySet()) log.accept("  using " + e.getValue());
-			// Content before links: the link check cannot tell a real merged base from any jar that refers to
-			// nothing outside itself, and that is how #13 installed three unrelated jars "successfully".
+			// Content before links: the link check cannot tell a real game base from any jar that refers to
+			// nothing outside itself, and that is how #13 installed unrelated jars "successfully".
 			supplied.verifyContents(mcVersion);
 			log.accept("  each file holds what its name says");
 			JdkLocator.Jvm jvm = JdkLocator.locate(mcDir, explicitJdk, line -> log.accept("link-check JVM: " + line));
 			try {
 				new MergedBaseTool(mcDir.resolve(".forbric-build").resolve("tools"), log).linkCheck(jvm,
-						found.get(ArtifactBuilder.MERGED), found.get(ArtifactBuilder.NEOFORGE_RUNTIME),
-						found.get(ArtifactBuilder.FORGE_RUNTIME));
+						found.get(ArtifactBuilder.NEOFORGE_BASE), found.get(ArtifactBuilder.NEOFORGE_RUNTIME));
 			} catch (MergedBaseTool.Failed doNotLink) {
 				// Each file is the right kind of file, or the content check would have said so; together they still
-				// do not make one game — one of them damaged, or the three from different builds. This used to
+				// do not make one game — one of them damaged, or the two from different builds. This used to
 				// reach the player as the link checker's own output, a stack trace with no way out in it.
 				throw new IOException("Built artifacts: the files in " + artifactDir + " do not fit together: each"
-						+ " is the right kind of file, but the link check of the three failed (one may be damaged, or"
+						+ " is the right kind of file, but the link check of the two failed (one may be damaged, or"
 						+ " they come from different builds).\n" + GameArtifacts.LEAVE_EMPTY + "\n"
 						+ doNotLink.getMessage(), doNotLink);
 			}
@@ -388,7 +382,7 @@ public final class Installer {
 		return new ArtifactBuilder(log).build(mcDir, mcVersion, jvm);
 	}
 
-	/** The three locally built jars, copied under net.forbric coordinates so the profile can name them. */
+	/** The two locally built jars, copied under net.forbric coordinates so the profile can name them. */
 	private List<Map<String, Object>> stageGameArtifacts(Path libraries, Map<String, Path> artifacts,
 			String mcVersion) throws IOException {
 		List<Map<String, Object>> written = new ArrayList<>();

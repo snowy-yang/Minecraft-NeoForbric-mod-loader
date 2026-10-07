@@ -60,7 +60,7 @@ class MixinRetargetAbsorbedCallTest {
 		assertEquals(HOOK, plan.rewrites().get(0).to());
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(MixinRetarget.rewritten(mixin, plan), resolver).verdict());
 
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertEquals(1, MixinRetarget.plan(MixinFit.parse(mixin), resolver).rewrites().size(),
 				"MinecraftForge's jar sets dest as its last act too, after its own hook");
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);

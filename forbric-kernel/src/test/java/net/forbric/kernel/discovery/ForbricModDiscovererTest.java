@@ -115,34 +115,44 @@ class ForbricModDiscovererTest {
 	}
 
 	@Test
-	void dualTomlJarReportsBothFamilies(@TempDir Path mods) throws Exception {
-		// A multiloader build shipping one toml per Forge family: BOTH are reported truthfully, each under
-		// its own ecosystem — the boot policy (active game base) picks which one loads.
+	void aDualTomlJarYieldsOnlyTheNeoForgeMod(@TempDir Path mods) throws Exception {
+		// A legacy multiloader build shipping one toml per Forge family: only the neoforge.mods.toml side is an
+		// ecosystem this loader runs, so only that one is reported.
 		Map<String, String> entries = entry("META-INF/mods.toml", FORGE_TOML);
 		entries.put("META-INF/neoforge.mods.toml", FORGE_TOML.replace("mandatory=true", "type=\"required\""));
 		Path jar = writeJar(mods, "dual-mod.jar", entries, "5.6.7");
 
 		List<DiscoveredMod> found = new ForbricModDiscoverer().discoverJar(jar);
 
-		assertEquals(2, found.size());
-		assertEquals(1, found.stream().filter(m -> m.getEcosystem() == Ecosystem.NEOFORGE).count());
-		assertEquals(1, found.stream().filter(m -> m.getEcosystem() == Ecosystem.FORGE).count());
-		assertTrue(found.stream().allMatch(m -> "exampleforge".equals(m.getId())));
+		assertEquals(1, found.size());
+		assertEquals(Ecosystem.NEOFORGE, found.get(0).getEcosystem());
+		assertEquals("exampleforge", found.get(0).getId());
+	}
+
+	@Test
+	void aTraditionalForgeOnlyJarIsSkipped(@TempDir Path mods) throws Exception {
+		// mods.toml alone means traditional MinecraftForge, which this loader no longer runs: the jar is named
+		// and skipped rather than half-loaded, so nothing at all is reported for it.
+		Path jar = writeJar(mods, "forge-mod.jar", entry("META-INF/mods.toml", FORGE_TOML), "5.6.7");
+
+		List<DiscoveredMod> found = new ForbricModDiscoverer().discoverJar(jar);
+
+		assertEquals(List.of(), found);
 	}
 
 	@Test
 	void discoversBothEcosystemsInOneFolder(@TempDir Path mods) throws Exception {
 		writeJar(mods, "fabric-mod.jar", entry("fabric.mod.json", FABRIC_JSON), null);
-		Map<String, String> forgeEntries = entry("META-INF/mods.toml", FORGE_TOML);
-		forgeEntries.put("exampleforge.mixins.json", "{ \"package\": \"com.example.mixin\" }"); // declared configs must exist in the jar
-		writeJar(mods, "forge-mod.jar", forgeEntries, "5.6.7");
+		Map<String, String> neoEntries = entry("META-INF/neoforge.mods.toml", FORGE_TOML);
+		neoEntries.put("exampleforge.mixins.json", "{ \"package\": \"com.example.mixin\" }"); // declared configs must exist in the jar
+		writeJar(mods, "neo-mod.jar", neoEntries, "5.6.7");
 
 		// A jar that ships nothing recognizable must be ignored.
 		writeJar(mods, "not-a-mod.jar", entry("com/example/Thing.class", "noise"), null);
 
 		List<DiscoveredMod> found = new ForbricModDiscoverer().discover(mods);
 
-		assertEquals(2, found.size(), "should find exactly the Fabric and Forge mods");
+		assertEquals(2, found.size(), "should find exactly the Fabric and NeoForge mods");
 
 		DiscoveredMod fabric = byId(found, "examplefabric");
 		assertNotNull(fabric);
@@ -154,23 +164,23 @@ class ForbricModDiscovererTest {
 		assertTrue(fabric.getDependencies().stream()
 				.anyMatch(d -> d.getModId().equals("fabricloader") && d.getVersionConstraint().equals(">=0.15.0")));
 
-		DiscoveredMod forge = byId(found, "exampleforge");
-		assertNotNull(forge);
-		assertEquals(Ecosystem.FORGE, forge.getEcosystem());
-		assertEquals("5.6.7", forge.getVersion(), "${file.jarVersion} should resolve from the manifest");
-		assertTrue(forge.getMixinConfigs().contains("exampleforge.mixins.json"));
+		DiscoveredMod neo = byId(found, "exampleforge");
+		assertNotNull(neo);
+		assertEquals(Ecosystem.NEOFORGE, neo.getEcosystem());
+		assertEquals("5.6.7", neo.getVersion(), "${file.jarVersion} should resolve from the manifest");
+		assertTrue(neo.getMixinConfigs().contains("exampleforge.mixins.json"));
 
-		UnifiedDependency forgeDep = forge.getDependencies().get(0);
-		assertEquals("forge", forgeDep.getModId());
-		assertEquals(">=47", forgeDep.getVersionConstraint(), "Maven range [47,) should translate to >=47");
-		assertTrue(forgeDep.isMandatory());
+		UnifiedDependency neoDep = neo.getDependencies().get(0);
+		assertEquals("forge", neoDep.getModId());
+		assertEquals(">=47", neoDep.getVersionConstraint(), "Maven range [47,) should translate to >=47");
+		assertTrue(neoDep.isMandatory());
 	}
 
 	@Test
 	void aSingleJarMayDeclareBothLoaders(@TempDir Path mods) throws Exception {
 		Map<String, String> both = new LinkedHashMap<>();
 		both.put("fabric.mod.json", FABRIC_JSON);
-		both.put("META-INF/mods.toml", FORGE_TOML);
+		both.put("META-INF/neoforge.mods.toml", FORGE_TOML);
 
 		Path jar = writeJar(mods, "multi-loader.jar", both, "9.9.9");
 
@@ -178,7 +188,7 @@ class ForbricModDiscovererTest {
 
 		assertEquals(2, found.size());
 		assertEquals(1, found.stream().filter(m -> m.getEcosystem() == Ecosystem.FABRIC).count());
-		assertEquals(1, found.stream().filter(m -> m.getEcosystem() == Ecosystem.FORGE).count());
+		assertEquals(1, found.stream().filter(m -> m.getEcosystem() == Ecosystem.NEOFORGE).count());
 	}
 
 	@Test
@@ -197,15 +207,15 @@ class ForbricModDiscovererTest {
 				+ "[[mixins]]\n"
 				+ "config=\"multimixin.neoforge.mixins.json\"\n"; // absent -> dropped
 
-		Map<String, String> entries = entry("META-INF/mods.toml", toml);
+		Map<String, String> entries = entry("META-INF/neoforge.mods.toml", toml);
 		entries.put("multimixin.mixins.json", "{ \"package\": \"com.example.mixin\" }");
 
 		Path jar = writeJar(mods, "multimixin.jar", entries, "1.0.0");
-		DiscoveredMod forge = byId(new ForbricModDiscoverer().discoverJar(jar), "multimixin");
+		DiscoveredMod neo = byId(new ForbricModDiscoverer().discoverJar(jar), "multimixin");
 
-		assertNotNull(forge);
-		assertTrue(forge.getMixinConfigs().contains("multimixin.mixins.json"), "present config kept");
-		assertFalse(forge.getMixinConfigs().contains("multimixin.neoforge.mixins.json"), "absent config dropped");
+		assertNotNull(neo);
+		assertTrue(neo.getMixinConfigs().contains("multimixin.mixins.json"), "present config kept");
+		assertFalse(neo.getMixinConfigs().contains("multimixin.neoforge.mixins.json"), "absent config dropped");
 	}
 
 	/**

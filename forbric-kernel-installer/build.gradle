@@ -15,9 +15,9 @@ tasks.withType(JavaCompile).configureEach {
 	options.release = 17
 }
 
-// The installer carries Forbric's OWN jars and nothing else. The merged game base and the two Forge-family
-// runtimes embed Mojang, MinecraftForge and NeoForge code, so they are never bundled — the installer takes them
-// from a build on this machine (see ArtifactSource), which is also what the project's own scripts produce.
+// The installer carries Forbric's OWN jars and nothing else. The NeoForge-patched game base and the NeoForge
+// runtime embed Mojang and NeoForge code, so they are never bundled — the installer takes them from a build on
+// this machine (see ArtifactSource), which is also what the project's own scripts produce.
 def kernelDir = file('../forbric-kernel')
 def loaderDir = file('../forbric-loader')
 // Read from each module's own build file rather than spelled out here. The four literals this replaces named
@@ -38,7 +38,7 @@ def genResources = layout.buildDirectory.dir('generated-resources')
 // would add a way for the build step to fail before it starts, to save a quarter of a megabyte.
 def genTools = layout.buildDirectory.dir('generated-tools')
 def isWindows = System.getProperty('os.name').toLowerCase().contains('win')
-// The reviewed link baseline the merge-tools jar carries: the same file build-merged-base.sh and gate-m0 read.
+// The reviewed link baseline the tools jar carries: the same file the loader's gates read.
 def linkBaseline = file("${loaderDir}/src/test/resources/merge/link-check-baseline.txt")
 def mergeToolsJar = file("${loaderDir}/build/libs/forbric-merge-tools-0.1.0.jar")
 
@@ -64,8 +64,8 @@ tasks.register('buildLoaderJars', Exec) {
 	outputs.dir("${loaderDir}/build/libs")
 }
 
-// The byte-merge tools, shaded with the ASM they need. Not a library of the installer's — it is run as a
-// subprocess (4 GB heap, which this JVM cannot grant itself), so it travels as a resource and is unpacked.
+// The link-check tools, shaded with the ASM they need. Not a library of the installer's — they are run as a
+// subprocess, so they travel as a resource and are unpacked next to the build.
 tasks.register('buildMergeTools', Exec) {
 	description = "Build the merge-tools jar the installer ships and runs."
 	workingDir loaderDir
@@ -81,8 +81,8 @@ tasks.register('buildMergeTools', Exec) {
 	outputs.file(mergeToolsJar)
 }
 
-// Development preparation needs the artifact builder and merge tools, not a player payload or Fabric substrate.
-// Avoid processResources here: that task intentionally builds the complete player installer payload.
+// Development preparation needs the artifact builder and the link-check tools, not a player payload or Fabric
+// substrate. Avoid processResources here: that task intentionally builds the complete player installer payload.
 tasks.register('devToolsJar', Jar) {
 	group = 'development'
 	description = 'Build the portable development artifact preparer without the player payload.'
@@ -108,7 +108,7 @@ def linkGateClasses = tasks.register('compileLinkGateTest', JavaCompile) {
 }
 tasks.register('linkGateTest', JavaExec) {
 	group = 'verification'
-	description = 'Exercise the packaged merge link gate with synthetic positive and negative controls.'
+	description = 'Exercise the packaged link gate with synthetic positive and negative controls.'
 	dependsOn linkGateClasses, 'devToolsJar'
 	classpath = files(linkGateClasses.flatMap { it.destinationDirectory },
 			tasks.named('devToolsJar').flatMap { it.archiveFile })

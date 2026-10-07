@@ -16,14 +16,18 @@
 
 package net.forbric.installer.kernel;
 
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 /**
- * Where NeoForge's artifacts live, and what Forbric calls the things it builds out of them.
+ * Where NeoForge's artifacts live, what Forbric calls the things it builds out of them, and the reader for the
+ * {@code config.json} inside NeoForge's {@code -userdev} jar.
  *
- * <p>The counterpart to {@link ForgeArtifacts}, and deliberately thin: the <em>contents</em> of a NeoForge
- * release are described by the {@code config.json} inside its {@code -userdev} jar, which
- * {@link ForgeArtifacts#readConfig} already parses — that file is a NeoForm userdev config on both sides, and the
- * two fields this half needs ({@code libraries} and {@code universal}) are present in both. Re-parsing it here
- * would be a second place to fix when a field moves.
+ * <p>Everything version-specific is read from that {@code config.json} — its {@code libraries} above all, which is
+ * the input list the runtime jar is assembled from — so retargeting a different NeoForge build is data, not code.
  */
 final class NeoForgeArtifacts {
 
@@ -39,11 +43,11 @@ final class NeoForgeArtifacts {
 	}
 
 	String neoforgedUrl(String coordinate) {
-		return NEOFORGED_MVN + "/" + Util.coordinateToPath(ForgeArtifacts.stripExtension(coordinate));
+		return NEOFORGED_MVN + "/" + Util.coordinateToPath(stripExtension(coordinate));
 	}
 
 	String centralUrl(String coordinate) {
-		return CENTRAL + "/" + Util.coordinateToPath(ForgeArtifacts.stripExtension(coordinate));
+		return CENTRAL + "/" + Util.coordinateToPath(stripExtension(coordinate));
 	}
 
 	/** The jar carrying {@code config.json}, the patches and the library list. */
@@ -68,8 +72,46 @@ final class NeoForgeArtifacts {
 		return "net.forbric:neoforge-runtime:" + mcVersion;
 	}
 
-	/** What Forbric stages NeoForm's patched Minecraft under. */
+	/** What Forbric stages NeoForm's patched Minecraft — the game base itself — under. */
 	String patchedMcCoordinate() {
 		return "net.forbric:patched-mc-neoforge:" + mcVersion;
+	}
+
+	/** Strip a Maven {@code @extension} suffix (e.g. {@code :universal@jar} → {@code :universal}). */
+	static String stripExtension(String coordinate) {
+		int at = coordinate.indexOf('@');
+		return at >= 0 ? coordinate.substring(0, at) : coordinate;
+	}
+
+	// ---- userdev config.json ----
+
+	/** The subset of {@code config.json} the runtime builder needs: the runtime library coordinates. */
+	static final class UserdevConfig {
+		final List<String> libraries;
+
+		UserdevConfig(List<String> libraries) {
+			this.libraries = libraries;
+		}
+	}
+
+	/** Read {@code config.json} out of a downloaded NeoForge {@code -userdev} jar. */
+	static UserdevConfig readConfig(Path userdevJar) throws IOException {
+		byte[] bytes = Zips.readEntry(userdevJar, "config.json");
+		if (bytes == null) throw new IOException("no config.json in " + userdevJar.getFileName()
+				+ " (not a NeoForge userdev jar?)");
+		Map<String, Object> root;
+		try {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> parsed = (Map<String, Object>) Json.parse(
+					new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+			root = parsed;
+		} catch (RuntimeException e) {
+			throw new IOException("malformed config.json in " + userdevJar.getFileName() + ": " + e.getMessage(), e);
+		}
+		List<String> libraries = new ArrayList<>();
+		if (root.get("libraries") instanceof List<?> list) {
+			for (Object e : list) if (e instanceof String s) libraries.add(s);
+		}
+		return new UserdevConfig(libraries);
 	}
 }

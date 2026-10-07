@@ -93,8 +93,6 @@ public final class LoaderProbePolicy {
 	public enum Family {
 		/** Loaded from a jar that declares only {@code fabric.mod.json}. */
 		FABRIC,
-		/** Loaded from a jar that declares only a traditional MinecraftForge {@code mods.toml}. */
-		FORGE,
 		/** Loaded from a jar that declares only a {@code neoforge.mods.toml}. */
 		NEOFORGE
 	}
@@ -104,7 +102,6 @@ public final class LoaderProbePolicy {
 		if (ecosystem == null) return null;
 		return switch (ecosystem) {
 			case FABRIC -> Family.FABRIC;
-			case FORGE -> Family.FORGE;
 			case NEOFORGE -> Family.NEOFORGE;
 		};
 	}
@@ -120,8 +117,7 @@ public final class LoaderProbePolicy {
 			// no here, as it always was by their absence; a Fabric class is told yes, as on Fabric.
 			"net.fabricmc.loader.impl.FabricLoaderImpl", Family.FABRIC,
 			"net.fabricmc.loader.FabricLoader", Family.FABRIC,
-			ForeignType.FML_LOADER.binary(Ecosystem.FORGE), Family.FORGE,
-			ForeignType.FML_LOADER.binary(Ecosystem.NEOFORGE), Family.NEOFORGE);
+						ForeignType.FML_LOADER.binary(Ecosystem.NEOFORGE), Family.NEOFORGE);
 
 	private static final boolean ENABLED = !"off".equalsIgnoreCase(System.getProperty("forbric.loaderProbes", "on"));
 

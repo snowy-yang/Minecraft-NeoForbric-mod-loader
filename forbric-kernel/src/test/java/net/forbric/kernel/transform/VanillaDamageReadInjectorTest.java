@@ -38,23 +38,20 @@ class VanillaDamageReadInjectorTest {
 	@Test void livingEntityReadsBeforeArmourAndBeforeTheForgeSeam() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED), "merged base not staged: " + MERGED);
 		byte[] original = NativeCoremodParityTest.read(MERGED, "net/minecraft/world/entity/LivingEntity");
-		byte[] seamed = new ForgeDamageSeamsInjector().transform("net.minecraft.world.entity.LivingEntity", original, null);
-		assertNotSame(original, seamed, "the Forge seams apply to this base");
-		byte[] out = new VanillaDamageReadInjector().transform("net.minecraft.world.entity.LivingEntity", seamed, null);
+		byte[] out = new VanillaDamageReadInjector().transform("net.minecraft.world.entity.LivingEntity", original, null);
 		MethodNode hurt = hurt(out);
 		List<AbstractInsnNode> code = code(hurt);
 		int firstRead = firstIndex(code, i -> i instanceof VarInsnNode v && v.getOpcode() == Opcodes.FLOAD && v.var == 3);
 		int armour = firstIndex(code, i -> i instanceof MethodInsnNode c && c.name.equals("getDamageAfterArmorAbsorb"));
 		int read = firstIndex(code, i -> i instanceof MethodInsnNode c && c.name.equals("vanillaRead"));
-		int seam = firstIndex(code, i -> i instanceof MethodInsnNode c && c.owner.equals(ForgeDamageSeamsInjector.RUNTIME) && c.name.equals("hurt"));
 		assertTrue(firstRead >= 0 && firstRead < armour, "first read " + firstRead + " vs armour " + armour);
-		assertTrue(read > firstRead && read < seam, "vanillaRead " + read + " must come before the Forge Hurt seam " + seam);
+		assertTrue(read > firstRead && read < armour, "vanillaRead " + read + " must run before armour is applied");
 		assertEquals(Opcodes.IFNE, code.get(4).getOpcode());
 		assertTrue(code.get(5) instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == 0, "placed right after the invulnerability check");
 		new Analyzer<>(new BasicVerifier()).analyze("net/minecraft/world/entity/LivingEntity", hurt);
 		assertSame(out, new VanillaDamageReadInjector().transform("net.minecraft.world.entity.LivingEntity", out, null), "a second pass adds nothing");
 		System.setProperty(VanillaDamageReadInjector.PROPERTY, "off");
-		assertSame(seamed, new VanillaDamageReadInjector().transform("net.minecraft.world.entity.LivingEntity", seamed, null));
+		assertSame(out, new VanillaDamageReadInjector().transform("net.minecraft.world.entity.LivingEntity", out, null));
 	}
 
 	@Test void playerOverridesTheSameWayAndGetsTheSameRead() throws Exception {

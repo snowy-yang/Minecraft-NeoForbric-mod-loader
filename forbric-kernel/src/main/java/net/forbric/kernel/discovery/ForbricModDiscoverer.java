@@ -43,13 +43,12 @@ import net.forbric.kernel.util.ForbricLog;
  * <p>A jar is classified by which descriptors it carries:
  * <ul>
  *   <li>{@code fabric.mod.json} (jar root) &rarr; a Fabric mod,</li>
- *   <li>{@code META-INF/mods.toml} or {@code META-INF/neoforge.mods.toml} &rarr; one or more Forge mods,</li>
+ *   <li>{@code META-INF/neoforge.mods.toml} &rarr; one or more NeoForge mods,</li>
  *   <li>a jar carrying both yields both (a multi-loader jar) &mdash; each side enters the unified list.</li>
  * </ul>
  *
- * <p>This is the structural skeleton of the final discoverer. In the integrated build it is fused with
- * Fabric Loader's reused {@code ModDiscoverer} (parallel scan, nested JarInJar) and feeds the single SAT
- * resolver; here it establishes the dual-manifest recognition and the unified output shape.
+ * <p>A jar whose ONLY manifest is {@code META-INF/mods.toml} is a traditional MinecraftForge mod: this loader no
+ * longer runs that ecosystem, so the jar is reported and skipped rather than half-loaded.
  */
 public final class ForbricModDiscoverer {
 	public static final String FABRIC_MANIFEST = "fabric.mod.json";
@@ -141,11 +140,13 @@ public final class ForbricModDiscoverer {
 				}
 			}
 
-			// Forge / NeoForge side — a jar may carry either or both (multiloader builds ship one toml per
-			// family). Each present manifest is reported truthfully under its own ecosystem; which family
-			// actually loads is a boot-time policy (the active game base), not a discovery concern.
+			// NeoForge side. A jar whose only Forge-family manifest is the traditional mods.toml is a MinecraftForge
+			// mod — not an ecosystem this loader runs — and is named and skipped here rather than loaded.
 			discoverForgeFamily(jarPath, jar, NEOFORGE_MANIFEST, Ecosystem.NEOFORGE, jarVersion, source, result, failures);
-			discoverForgeFamily(jarPath, jar, FORGE_MANIFEST, Ecosystem.FORGE, jarVersion, source, result, failures);
+			if (result.isEmpty() && jar.getEntry(FORGE_MANIFEST) != null) {
+				ForbricLog.warn("[Forbric] skipping %s — its only mod manifest is %s, a traditional MinecraftForge "
+						+ "mod; this loader runs Fabric and NeoForge mods", source, FORGE_MANIFEST);
+			}
 		}
 
 		return result;
@@ -193,21 +194,14 @@ public final class ForbricModDiscoverer {
 			accessTransformers.add(DEFAULT_AT);
 		}
 
-		// Most real MinecraftForge mods declare mixins via the manifest MixinConfigs attribute, not [[mixins]] —
-		// GeckoLib ships exactly `MixinConfigs: geckolib.mixins.json` and nothing in its toml. That attribute is a
-		// MinecraftForge/ModLauncher convention: NeoForge reads [[mixins]] from the toml and never looks at the
-		// manifest. Feeding it to BOTH families made a universal jar's NeoForge mod claim the Forge-side config too
-		// (collective would have registered collective_forge.mixins.json AND collective_neoforge.mixins.json).
+		// The manifest MixinConfigs attribute is a MinecraftForge/ModLauncher convention: NeoForge reads
+		// [[mixins]] from the toml and never looks at the manifest, so the attribute is ignored with a note.
 		List<String> manifestMixins = new ArrayList<>();
 		Manifest manifest = jar.getManifest();
 		String attr = manifest == null ? null : manifest.getMainAttributes().getValue("MixinConfigs");
-		if (attr != null && ecosystem == Ecosystem.FORGE) {
-			for (String config : attr.split(",")) {
-				if (!config.strip().isEmpty()) manifestMixins.add(config.strip());
-			}
-		} else if (attr != null) {
-			ForbricLog.debug("[Forbric] ignoring manifest MixinConfigs '%s' for the %s side of %s — that attribute "
-					+ "is a MinecraftForge convention; NeoForge declares mixins in [[mixins]]", attr, ecosystem, source);
+		if (attr != null) {
+			ForbricLog.debug("[Forbric] ignoring manifest MixinConfigs '%s' in %s — that attribute is a "
+					+ "MinecraftForge convention; NeoForge declares mixins in [[mixins]]", attr, source);
 		}
 
 		return ForgeMetadataMapper.toDiscoveredMods(toml, jarVersion, source, accessTransformers,

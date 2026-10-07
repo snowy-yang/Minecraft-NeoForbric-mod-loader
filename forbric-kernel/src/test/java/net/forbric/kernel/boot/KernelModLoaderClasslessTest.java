@@ -82,7 +82,7 @@ class KernelModLoaderClasslessTest {
 		declared.put("translate", declared("translate", Ecosystem.NEOFORGE, "b.jar"));
 		declared.put("lowcode", declared("lowcode", Ecosystem.NEOFORGE, "c.jar"));
 		declared.put("kotlin", declared("kotlin", Ecosystem.NEOFORGE, "d.jar"));
-		declared.put("forge_only", declared("forge_only", Ecosystem.FORGE, "e.jar"));
+		declared.put("forge_only", declared("forge_only", Ecosystem.NEOFORGE, "e.jar"));
 		declared.put("aliased", declared("aliased", Ecosystem.NEOFORGE, "f.jar"));
 		Map<String, String> languages = Map.of("a.jar", "javafml", "b.jar", "javafml", "c.jar", "lowcodefml",
 				"d.jar", "kotlinforforge", "e.jar", "lowcodefml", "f.jar", "javafml");
@@ -128,7 +128,7 @@ class KernelModLoaderClasslessTest {
 	void theLanguageIsReadFromTheFamilysOwnManifest() throws Exception {
 		Path lowcode = KernelModLoaderDeclaredTest.neoJar(tmp.resolve("lowcode.jar"), "lowcodefml", "x", "1", "");
 		assertEquals("lowcodefml", KernelModLoader.languageOf(lowcode, Ecosystem.NEOFORGE));
-		assertNull(KernelModLoader.languageOf(lowcode, Ecosystem.FORGE), "it has no mods.toml at all");
+		assertNull(KernelModLoader.languageOf(lowcode, Ecosystem.NEOFORGE), "it has no mods.toml at all");
 
 		Path unnamed = tmp.resolve("unnamed.jar");
 		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(unnamed))) {
@@ -146,10 +146,10 @@ class KernelModLoaderClasslessTest {
 		Object other = new Object();
 		Object classlessBus = new Object();
 		List<KernelModLoader.ConstructedMod> constructed = List.of(
-				new KernelModLoader.ConstructedMod("balm", "NeoForgeBalm", Ecosystem.NEOFORGE, shared, null),
-				new KernelModLoader.ConstructedMod("balm", "NeoForgeBalmClient", Ecosystem.NEOFORGE, shared, null),
-				new KernelModLoader.ConstructedMod("forge", "ForgeMod", Ecosystem.FORGE, null, null),
-				new KernelModLoader.ConstructedMod("other", "Other", Ecosystem.NEOFORGE, other, null));
+				new KernelModLoader.ConstructedMod("balm", "NeoForgeBalm", Ecosystem.NEOFORGE, shared),
+				new KernelModLoader.ConstructedMod("balm", "NeoForgeBalmClient", Ecosystem.NEOFORGE, shared),
+				new KernelModLoader.ConstructedMod("forge", "ForgeMod", Ecosystem.NEOFORGE, null),
+				new KernelModLoader.ConstructedMod("other", "Other", Ecosystem.NEOFORGE, other));
 
 		List<Object> buses = KernelLifecycle.registrationBuses(constructed,
 				List.of(new KernelModLoader.NeoIdentity(classlessBus, "container")));

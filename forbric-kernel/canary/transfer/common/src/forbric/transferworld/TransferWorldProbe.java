@@ -2,7 +2,6 @@ package forbric.transferworld;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,13 +25,6 @@ import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.capabilities.ICapabilityProvider;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.wrapper.InvWrapper;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.transfer.ResourceHandler;
 import net.neoforged.neoforge.transfer.fluid.FluidResource;
@@ -40,13 +32,13 @@ import net.neoforged.neoforge.transfer.item.ItemResource;
 
 /** Actual public world queries only. No call to a kernel transfer adapter or bridge registration helper. */
 public final class TransferWorldProbe {
-	private static final List<String> FAMILIES = List.of(Machines.FABRIC, Machines.NEO, Machines.FORGE);
+	private static final List<String> FAMILIES = List.of(Machines.FABRIC, Machines.NEO);
 	private static final Map<String, BlockPos> POSITIONS = new LinkedHashMap<>();
 	static { for (int i = 0; i < FAMILIES.size(); i++) POSITIONS.put(FAMILIES.get(i), new BlockPos(16 + i * 2, 80, 16)); }
-	private static final long FLUID_TOTAL = 3 * 200 * 81L + 17;
+	private static final long FLUID_TOTAL = 2 * 200 * 81L + 17;
 	private static final BlockPos DIRTY_PROBE = new BlockPos(112, 80, 16);
-	private static final BlockPos FORGE_CRATE = new BlockPos(28, 80, 16), NEO_CRATE = new BlockPos(30, 80, 16), NEO_CABINET = new BlockPos(32, 80, 16);
-	private static final BlockPos FORGE_BIN = new BlockPos(34, 80, 16), FORGE_KILN = new BlockPos(36, 80, 16), FABRIC_BIN = new BlockPos(38, 80, 16);
+	private static final BlockPos NEO_CRATE = new BlockPos(30, 80, 16), NEO_CABINET = new BlockPos(32, 80, 16);
+	private static final BlockPos FABRIC_BIN = new BlockPos(34, 80, 16), FABRIC_KILN = new BlockPos(36, 80, 16);
 	// A chunk nothing else touches, far from spawn and from every other probe position.
 	private static final BlockPos UNLOAD = new BlockPos(4096, 80, 4096);
 	private static final int UNLOAD_TICKS = 1200;
@@ -77,7 +69,7 @@ public final class TransferWorldProbe {
 				checkPrimaryState(level);
 				checkDirtyProbeReload(level);
 				checkQueriesAndFaces(level);
-				System.out.println("[M33Transfer] PASS save/reload: three primary inventories and components retained");
+				System.out.println("[M33Transfer] PASS save/reload: both primary inventories and components retained");
 			} else {
 				for (String family : FAMILIES) {
 					Machines.Machine be = place(level, POSITIONS.get(family), family);
@@ -96,7 +88,7 @@ public final class TransferWorldProbe {
 				// A separate chunk isolates the bridge notification from native providers and all block placement.
 				checkDirtyCommit(level, server);
 				server.saveEverything(false, true, true);
-				System.out.println("[M33Transfer] PASS save: six public-query routes committed, 17 Fabric fluid units retained");
+				System.out.println("[M33Transfer] PASS save: four public-query routes committed, 17 Fabric fluid units retained");
 				// Last, because it spans server ticks. Its chunk is outside the primary census taken below.
 				unload = new ChunkUnload(level);
 			}
@@ -124,7 +116,7 @@ public final class TransferWorldProbe {
 	private static void finish(MinecraftServer server, Path output, String phase, String token, boolean pass, long items, long fluids, String detail) {
 		try {
 			Files.createDirectories(output.toAbsolutePath().getParent());
-			Files.writeString(output, "{\"schemaVersion\":1,\"scope\":\"three-primary-machines\",\"phase\":" + json(phase) + ",\"runToken\":" + json(token)
+			Files.writeString(output, "{\"schemaVersion\":1,\"scope\":\"two-primary-machines\",\"phase\":" + json(phase) + ",\"runToken\":" + json(token)
 					+ ",\"pass\":" + pass + ",\"itemRoutes\":" + itemRoutes + ",\"fluidRoutes\":" + fluidRoutes
 					+ ",\"items\":" + items + ",\"fluidFabricUnits\":" + fluids + ",\"detail\":" + json(detail) + "}\n");
 		} catch (Exception writeFailure) { System.out.println("[M33Transfer] FAIL result-write " + writeFailure); }
@@ -133,22 +125,21 @@ public final class TransferWorldProbe {
 	}
 
 	/**
-	 * A real chunk unload and reload, not a manual invalidation. Three machines stand in a chunk nothing else
+	 * A real chunk unload and reload, not a manual invalidation. Two machines stand in a chunk nothing else
 	 * touches, every foreign view of them is cached, and the server is left to unload the chunk by itself. While it
-	 * is gone and after it is back, every cached view must move nothing and every cached Forge LazyOptional must be
-	 * empty; the reloaded block entities keep their contents, and fresh public queries reach them.
+	 * is gone and after it is back, every cached view must move nothing; the reloaded block entities keep their
+	 * contents, and fresh public queries reach them.
 	 */
 	private static final class ChunkUnload {
 		final ServerLevel level;
 		final Map<String, Machines.Machine> old = new LinkedHashMap<>();
-		final List<LazyOptional<?>> optionals = new ArrayList<>();
-		final List<IntSupplier> writes = new ArrayList<>();
+		final List<IntSupplier> writes = new java.util.ArrayList<>();
 		int ticks;
 		ChunkUnload(ServerLevel level) {
 			this.level = level;
 			for (String family : FAMILIES) { Machines.Machine be = place(level, unloadPos(family), family); be.seed(tagged(4), 4 * 81L); old.put(family, be); }
 			for (String target : FAMILIES) for (String consumer : FAMILIES) if (!consumer.equals(target)) cache(consumer, unloadPos(target));
-			equal(12, writes.size()); equal(4, optionals.size());
+			equal(4, writes.size());
 			System.out.println("[M33Transfer] cached every foreign view of the unload chunk; waiting for the server to unload it");
 		}
 		private void cache(String consumer, BlockPos pos) {
@@ -166,14 +157,6 @@ public final class TransferWorldProbe {
 					yes(items != null && fluids != null, "missing NeoForge views before the unload at " + pos);
 					writes.add(() -> { try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { int moved = items.insert(0, ItemResource.of(tagged(1)), 1, tx); tx.commit(); return moved; } });
 					writes.add(() -> { try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { int moved = fluids.insert(0, FluidResource.of(Fluids.WATER), 1, tx); tx.commit(); return moved; } });
-				}
-				case Machines.FORGE -> {
-					var itemOptional = forgeProvider(level, pos).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH);
-					var fluidOptional = forgeProvider(level, pos).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.NORTH);
-					IItemHandler items = itemOptional.resolve().orElseThrow(); IFluidHandler fluids = fluidOptional.resolve().orElseThrow();
-					optionals.add(itemOptional); optionals.add(fluidOptional);
-					writes.add(() -> 1 - items.insertItem(0, tagged(1), false).getCount());
-					writes.add(() -> fluids.fill(new FluidStack(Fluids.WATER, 1), IFluidHandler.FluidAction.EXECUTE));
 				}
 				default -> throw new IllegalStateException(consumer);
 			}
@@ -197,49 +180,45 @@ public final class TransferWorldProbe {
 			refused("after reload");
 			for (String family : FAMILIES) { equal(4, reloaded.get(family).itemSnapshot().getCount()); equal(4 * 81L, reloaded.get(family).fluidUnits()); }
 			// Fresh public queries bind to the reloaded block entities, one foreign consumer each.
-			BlockPos fabric = unloadPos(Machines.FABRIC), neo = unloadPos(Machines.NEO), forge = unloadPos(Machines.FORGE);
+			BlockPos fabric = unloadPos(Machines.FABRIC), neo = unloadPos(Machines.NEO);
 			try (Transaction tx = Transaction.openOuter()) {
 				equal(1, ItemStorage.SIDED.find(level, neo, Direction.NORTH).insert(ItemVariant.of(tagged(1)), 1, tx));
 				equal(81, FluidStorage.SIDED.find(level, neo, Direction.NORTH).insert(FluidVariant.of(Fluids.WATER), 81, tx)); tx.commit();
 			}
 			try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) {
-				equal(1, level.getCapability(Capabilities.Item.BLOCK, forge, Direction.NORTH).insert(0, ItemResource.of(tagged(1)), 1, tx));
-				equal(1, level.getCapability(Capabilities.Fluid.BLOCK, forge, Direction.NORTH).insert(0, FluidResource.of(Fluids.WATER), 1, tx)); tx.commit();
+				equal(1, level.getCapability(Capabilities.Item.BLOCK, fabric, Direction.NORTH).insert(0, ItemResource.of(tagged(1)), 1, tx));
+				equal(1, level.getCapability(Capabilities.Fluid.BLOCK, fabric, Direction.NORTH).insert(0, FluidResource.of(Fluids.WATER), 1, tx)); tx.commit();
 			}
-			equal(0, forgeProvider(level, fabric).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow().insertItem(0, tagged(1), false).getCount());
-			equal(1, forgeProvider(level, fabric).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.NORTH).resolve().orElseThrow()
-					.fill(new FluidStack(Fluids.WATER, 1), IFluidHandler.FluidAction.EXECUTE));
 			for (String family : FAMILIES) { equal(5, reloaded.get(family).itemSnapshot().getCount()); equal(5 * 81L, reloaded.get(family).fluidUnits()); }
 			for (Machines.Machine be : old.values()) { equal(4, be.itemSnapshot().getCount()); equal(4 * 81L, be.fluidUnits()); }
 			System.out.println("[M33Transfer] PASS chunk unload: cached views refuse while unloaded and after reload; fresh queries reach the reloaded machines");
 			return true;
 		}
 		private void refused(String when) {
-			for (LazyOptional<?> optional : optionals) yes(!optional.isPresent(), "a cached Forge LazyOptional is still present " + when);
 			for (IntSupplier write : writes) equal(0, write.getAsInt());
 		}
 	}
 	private static BlockPos unloadPos(String family) { return UNLOAD.offset(FAMILIES.indexOf(family) * 2, 0, 0); }
 
 	private static void checkDirtyCommit(ServerLevel level, MinecraftServer server) {
-		Machines.Machine be = place(level, DIRTY_PROBE, Machines.FORGE); be.seed(tagged(1), 81);
+		Machines.Machine be = place(level, DIRTY_PROBE, Machines.NEO); be.seed(tagged(1), 81);
 		server.saveEverything(false, true, true);
 		var chunk = level.getChunk(DIRTY_PROBE.getX() >> 4, DIRTY_PROBE.getZ() >> 4);
-		yes(!chunk.isUnsaved(), "initial placement save did not clear the isolated Forge chunk dirty flag");
+		yes(!chunk.isUnsaved(), "initial placement save did not clear the isolated probe chunk dirty flag");
 		Storage<ItemVariant> items = ItemStorage.SIDED.find(level, DIRTY_PROBE, Direction.NORTH);
 		Storage<FluidVariant> fluids = FluidStorage.SIDED.find(level, DIRTY_PROBE, Direction.NORTH);
-		yes(items != null && fluids != null, "missing foreign Forge providers for dirty notification");
+		yes(items != null && fluids != null, "missing foreign Fabric providers for dirty notification");
 		try (Transaction tx = Transaction.openOuter()) {
 			equal(6, items.insert(ItemVariant.of(tagged(1)), 6, tx));
 			equal(8 * 81L, fluids.insert(FluidVariant.of(Fluids.WATER), 8 * 81L, tx));
 		}
-		yes(!chunk.isUnsaved(), "aborted foreign writes dirtied the isolated Forge chunk");
+		yes(!chunk.isUnsaved(), "aborted foreign writes dirtied the isolated probe chunk");
 		equal(1, be.itemSnapshot().getCount()); equal(81, be.fluidUnits());
 		try (Transaction tx = Transaction.openOuter()) {
 			equal(6, items.insert(ItemVariant.of(tagged(1)), 6, tx));
 			equal(8 * 81L, fluids.insert(FluidVariant.of(Fluids.WATER), 8 * 81L, tx)); tx.commit();
 		}
-		yes(chunk.isUnsaved(), "committed foreign writes did not dirty the isolated Forge chunk");
+		yes(chunk.isUnsaved(), "committed foreign writes did not dirty the isolated probe chunk");
 		equal(7, be.itemSnapshot().getCount()); equal(9 * 81L, be.fluidUnits());
 		// No direct setChanged after the first save. The following save/reload depends on the bridge.
 		System.out.println("[M33Transfer] PASS clean chunk -> abort stays clean -> commit becomes dirty");
@@ -247,12 +226,10 @@ public final class TransferWorldProbe {
 	private static void checkDirtyProbeReload(ServerLevel level) {
 		level.getChunk(DIRTY_PROBE.getX() >> 4, DIRTY_PROBE.getZ() >> 4);
 		Machines.Machine be = machine(level, DIRTY_PROBE);
-		yes(be.loadedFromDisk, "isolated Forge dirty probe was not deserialized");
+		yes(be.loadedFromDisk, "the isolated dirty probe was not deserialized");
 		equal(7, be.itemSnapshot().getCount()); equal(9 * 81L, be.fluidUnits());
 		yes(ItemStack.isSameItemSameComponents(tagged(1), be.itemSnapshot()), "dirty probe item components changed");
-		IItemHandler ownItems = forgeProvider(level, DIRTY_PROBE).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow();
-		IFluidHandler ownFluids = forgeProvider(level, DIRTY_PROBE).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.NORTH).resolve().orElseThrow();
-		equal(7, ownItems.getStackInSlot(0).getCount()); equal(9, ownFluids.getFluidInTank(0).getAmount());
+		equal(7, be.neoItems.getAmountAsLong(0)); equal(9, be.neoFluids.getAmountAsLong(0));
 		System.out.println("[M33Transfer] PASS bridge dirty notification persisted item/fluid changes after a clean baseline save");
 	}
 
@@ -262,32 +239,28 @@ public final class TransferWorldProbe {
 			for (Direction face : new Direction[] {Direction.NORTH, null}) {
 				query(level, pos, target, consumer, face, false, true); query(level, pos, target, consumer, face, true, true);
 				Machines.Machine be = machine(level, pos);
-				Direction received = switch (target) { case Machines.FABRIC -> be.lastFabric; case Machines.NEO -> be.lastNeo; default -> be.lastForge; };
+				Direction received = switch (target) { case Machines.FABRIC -> be.lastFabric; default -> be.lastNeo; };
 				yes(received == face, "face changed on " + consumer + " -> " + target + ": " + face + " -> " + received);
 			}
 			query(level, pos, target, consumer, Direction.SOUTH, false, false); query(level, pos, target, consumer, Direction.SOUTH, true, false);
 		}
-		System.out.println("[M33Transfer] PASS all three public APIs preserve NORTH/null and refuse SOUTH");
+		System.out.println("[M33Transfer] PASS both public APIs preserve NORTH/null and refuse SOUTH");
 	}
 	private static Object query(ServerLevel level, BlockPos pos, String target, String consumer, Direction face, boolean fluid, boolean present) {
 		Object found = switch (consumer) {
 			case Machines.FABRIC -> fluid ? FluidStorage.SIDED.find(level, pos, face) : ItemStorage.SIDED.find(level, pos, face);
 			case Machines.NEO -> fluid ? level.getCapability(Capabilities.Fluid.BLOCK, pos, face) : level.getCapability(Capabilities.Item.BLOCK, pos, face);
-			case Machines.FORGE -> fluid ? forgeProvider(level, pos).getCapability(ForgeCapabilities.FLUID_HANDLER, face).resolve().orElse(null)
-					: forgeProvider(level, pos).getCapability(ForgeCapabilities.ITEM_HANDLER, face).resolve().orElse(null);
 			default -> throw new IllegalStateException(consumer);
 		};
 		yes(present == (found != null), (present ? "missing " : "unexpected ") + consumer + (fluid ? " fluid" : " item") + " provider for " + target + " face=" + face);
 		return found;
 	}
 	private static void checkNativePriority(ServerLevel level) {
-		Machines.Machine fabric = machine(level, POSITIONS.get(Machines.FABRIC)), neo = machine(level, POSITIONS.get(Machines.NEO)), forge = machine(level, POSITIONS.get(Machines.FORGE));
+		Machines.Machine fabric = machine(level, POSITIONS.get(Machines.FABRIC)), neo = machine(level, POSITIONS.get(Machines.NEO));
 		yes(ItemStorage.SIDED.find(level, fabric.getBlockPos(), Direction.NORTH) == fabric.fabricItems, "Fabric native provider was replaced");
 		yes(FluidStorage.SIDED.find(level, fabric.getBlockPos(), Direction.NORTH) == fabric.fabricFluids, "Fabric native fluid provider was replaced");
 		yes(level.getCapability(Capabilities.Item.BLOCK, neo.getBlockPos(), Direction.NORTH) == neo.neoItems, "Neo native provider was replaced");
 		yes(level.getCapability(Capabilities.Fluid.BLOCK, neo.getBlockPos(), Direction.NORTH) == neo.neoFluids, "Neo native fluid provider was replaced");
-		yes(forgeProvider(level, forge.getBlockPos()).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow() == forge.forgeItems, "Forge native provider was replaced");
-		yes(forgeProvider(level, forge.getBlockPos()).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.NORTH).resolve().orElseThrow() == forge.forgeFluids, "Forge native fluid provider was replaced");
 		Machines.Machine competing = place(level, Machines.PRIORITY, Machines.FABRIC); competing.seed(tagged(5), 5 * 81); competing.neoItems.set(0, ItemResource.of(tagged(1)), 41); competing.neoFluids.set(0, FluidResource.of(Fluids.WATER), 41);
 		yes(ItemStorage.SIDED.find(level, Machines.PRIORITY, Direction.NORTH) == competing.fabricItems, "fallback preempted native Fabric storage");
 		yes(level.getCapability(Capabilities.Item.BLOCK, Machines.PRIORITY, Direction.NORTH) == competing.neoItems, "fallback preempted native Neo storage");
@@ -298,81 +271,56 @@ public final class TransferWorldProbe {
 
 	/**
 	 * Container-shaped machines. Fabric API's generic fallback wraps ANY Container as a writable store on every face
-	 * and runs before any bridge; it must not answer for a Forge or NeoForge owner. A face the owner refuses stays
+	 * and runs before any bridge; it must not answer for a NeoForge owner. A face the owner refuses stays
 	 * refused for every foreign consumer, and on the permitted face every consumer reaches the owner's own handler,
 	 * never the Container slots (which count every write).
 	 */
 	private static void checkOwnerPrecedence(ServerLevel level) {
-		Machines.Crate forgeCrate = place(level, FORGE_CRATE, Machines.CRATE_BLOCKS.get(Machines.FORGE), Machines.Crate.class);
 		Machines.Crate neoCrate = place(level, NEO_CRATE, Machines.CRATE_BLOCKS.get(Machines.NEO), Machines.Crate.class);
-		yes(level.getCapability(Capabilities.Item.BLOCK, FORGE_CRATE, Direction.SOUTH) == null, "NeoForge got a generic Container bridge on the Forge crate's refused face");
 		yes(level.getCapability(Capabilities.Item.BLOCK, NEO_CRATE, Direction.SOUTH) == null, "NeoForge got a generic Container bridge on its own crate's refused face");
-		yes(forgeProvider(level, NEO_CRATE).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.SOUTH).resolve().isEmpty(),
-				"Forge got a generic Container bridge on the NeoForge crate's refused face");
-		for (BlockPos pos : List.of(FORGE_CRATE, NEO_CRATE)) {
-			Storage<ItemVariant> fabric = ItemStorage.SIDED.find(level, pos, Direction.NORTH);
-			yes(fabric != null, "missing Fabric view of the crate at " + pos);
-			try (Transaction tx = Transaction.openOuter()) { equal(3, fabric.insert(ItemVariant.of(tagged(1)), 3, tx)); tx.commit(); }
+		Storage<ItemVariant> fabric = ItemStorage.SIDED.find(level, NEO_CRATE, Direction.NORTH);
+		yes(fabric != null, "missing Fabric view of the crate");
+		try (Transaction tx = Transaction.openOuter()) { equal(3, fabric.insert(ItemVariant.of(tagged(1)), 3, tx)); tx.commit(); }
+		try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) {
+			equal(2, level.getCapability(Capabilities.Item.BLOCK, NEO_CRATE, Direction.NORTH).insert(0, ItemResource.of(tagged(1)), 2, tx)); tx.commit();
 		}
-		ResourceHandler<ItemResource> neoOnForge = level.getCapability(Capabilities.Item.BLOCK, FORGE_CRATE, Direction.NORTH);
-		yes(neoOnForge != null, "missing NeoForge view of the Forge crate");
-		try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(2, neoOnForge.insert(0, ItemResource.of(tagged(1)), 2, tx)); tx.commit(); }
-		IItemHandler forgeOnNeo = forgeProvider(level, NEO_CRATE).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow();
-		equal(0, forgeOnNeo.insertItem(0, tagged(2), false).getCount());
-		equal(5, forgeCrate.forgeItems.getStackInSlot(0).getCount()); equal(5, neoCrate.neoItems.getAmountAsLong(0));
-		for (Machines.Crate crate : List.of(forgeCrate, neoCrate)) {
-			equal(0, crate.containerWrites); yes(crate.isEmpty(), "a foreign consumer wrote into the Container slots of " + crate.getBlockPos());
-		}
-		// BaseContainerBlockEntity: the merged Forge override's generic whole-Container wrapper is not the owner.
+		equal(5, neoCrate.neoItems.getAmountAsLong(0));
+		equal(0, neoCrate.containerWrites); yes(neoCrate.isEmpty(), "a foreign consumer wrote into the Container slots of the crate");
+		// BaseContainerBlockEntity: the generic whole-Container view is not the owner.
 		Machines.Cabinet cabinet = place(level, NEO_CABINET, Machines.CABINET_BLOCK.get(), Machines.Cabinet.class);
-		IItemHandler items = forgeProvider(level, NEO_CABINET).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow();
-		equal(0, items.insertItem(0, tagged(4), false).getCount());
-		IFluidHandler fluids = forgeProvider(level, NEO_CABINET).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.NORTH).resolve().orElse(null);
-		yes(fluids != null, "Forge cannot see the NeoForge cabinet's own fluid handler");
-		equal(6, fluids.fill(new FluidStack(Fluids.WATER, 6), IFluidHandler.FluidAction.EXECUTE));
-		yes(forgeProvider(level, NEO_CABINET).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.SOUTH).resolve().isEmpty(),
-				"Forge got a fluid handler on the cabinet's refused face");
 		Storage<ItemVariant> fabricOnCabinet = ItemStorage.SIDED.find(level, NEO_CABINET, Direction.NORTH);
 		try (Transaction tx = Transaction.openOuter()) { equal(1, fabricOnCabinet.insert(ItemVariant.of(tagged(1)), 1, tx)); tx.commit(); }
-		equal(5, cabinet.neoItems.getAmountAsLong(0)); equal(6, cabinet.neoFluids.getAmountAsLong(0));
+		equal(5, cabinet.neoItems.getAmountAsLong(0)); equal(0, cabinet.neoFluids.getAmountAsLong(0));
 		yes(cabinet.isEmpty(), "a foreign consumer wrote into the cabinet's Container slots instead of its owner's handler");
-		System.out.println("[M33Transfer] PASS owner providers precede Fabric's generic Container view and Forge's generic wrapper");
+		System.out.println("[M33Transfer] PASS owner providers precede Fabric's generic Container view");
 	}
 
 	/**
-	 * BaseContainerBlockEntity machines that leave getCapability alone, the shape of most mod chests. Forge answers
-	 * every face with its own InvWrapper over the whole Container. For a Forge owner that is the owner's answer: a
-	 * NeoForge consumer gets NeoForge's own wrapper of the same Container, which writes through the game's setItem,
-	 * and an abort leaves it untouched. A kiln whose Container declares its own setItem is not offered to NeoForge at
-	 * all. For a Fabric mod's bin with no storage of its own, a Forge consumer keeps that native InvWrapper rather
-	 * than a bridge over Fabric's generic view.
+	 * BaseContainerBlockEntity machines that leave their capabilities alone, the shape of most mod chests. A Fabric
+	 * mod's bin with no storage of its own is left to the generic Container view: Fabric API's own fallback for
+	 * Fabric consumers, the kernel's bridge of that same Container for NeoForge consumers, whose committed writes go
+	 * through the game's setItem. A kiln whose Container declares its own setItem is not offered to NeoForge at all.
 	 */
 	private static void checkGenericContainerViews(ServerLevel level) {
-		Machines.Bin forgeBin = place(level, FORGE_BIN, Machines.BIN_BLOCKS.get(Machines.FORGE), Machines.Bin.class);
-		Machines.Kiln kiln = place(level, FORGE_KILN, Machines.KILN_BLOCK.get(), Machines.Kiln.class);
-		place(level, FABRIC_BIN, Machines.BIN_BLOCKS.get(Machines.FABRIC), Machines.Bin.class);
-		for (Direction face : new Direction[] {Direction.NORTH, Direction.SOUTH, null}) {
-			ResourceHandler<ItemResource> neo = level.getCapability(Capabilities.Item.BLOCK, FORGE_BIN, face);
-			yes(neo != null, "NeoForge cannot reach the Forge bin's Container on face " + face);
+		Machines.Bin fabricBin = place(level, FABRIC_BIN, Machines.BIN_BLOCKS.get(Machines.FABRIC), Machines.Bin.class);
+		Machines.Kiln kiln = place(level, FABRIC_KILN, Machines.kilnBlock(), Machines.Kiln.class);
+		for (Direction face : new Direction[] {Direction.NORTH, null}) {
+			ResourceHandler<ItemResource> neo = level.getCapability(Capabilities.Item.BLOCK, FABRIC_BIN, face);
+			yes(neo != null, "NeoForge cannot reach the Fabric bin's Container on face " + face);
 			try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(2, neo.insert(0, ItemResource.of(tagged(1)), 2, tx)); }
-			yes(forgeBin.isEmpty(), "an aborted NeoForge insert stayed in the Forge bin");
+			yes(fabricBin.isEmpty(), "an aborted NeoForge insert stayed in the Fabric bin");
 		}
-		ResourceHandler<ItemResource> neo = level.getCapability(Capabilities.Item.BLOCK, FORGE_BIN, Direction.NORTH);
+		ResourceHandler<ItemResource> neo = level.getCapability(Capabilities.Item.BLOCK, FABRIC_BIN, Direction.NORTH);
 		try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(3, neo.insert(0, ItemResource.of(tagged(1)), 3, tx)); tx.commit(); }
 		try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(1, neo.extract(0, ItemResource.of(tagged(1)), 1, tx)); tx.commit(); }
-		equal(2, forgeBin.getItem(0).getCount());
-		IItemHandler forge = forgeProvider(level, FORGE_BIN).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow();
-		yes(forge.getClass() == InvWrapper.class, "Forge's own view of the Forge bin changed to " + forge.getClass().getName());
-		equal(2, forge.getStackInSlot(0).getCount());
-		Storage<ItemVariant> fabric = ItemStorage.SIDED.find(level, FORGE_BIN, Direction.NORTH);
-		yes(fabric != null, "Fabric cannot reach the Forge bin");
+		equal(2, fabricBin.getItem(0).getCount());
+		Storage<ItemVariant> fabric = ItemStorage.SIDED.find(level, FABRIC_BIN, Direction.NORTH);
+		yes(fabric != null, "Fabric cannot reach its own bin");
 		try (Transaction tx = Transaction.openOuter()) { equal(1, fabric.insert(ItemVariant.of(tagged(1)), 1, tx)); tx.commit(); }
-		equal(3, forgeBin.getItem(0).getCount());
-		yes(level.getCapability(Capabilities.Item.BLOCK, FORGE_KILN, Direction.NORTH) == null, "NeoForge was given the kiln's Container, whose writes are its own");
+		equal(3, fabricBin.getItem(0).getCount());
+		yes(level.getCapability(Capabilities.Item.BLOCK, FABRIC_KILN, Direction.NORTH) == null, "NeoForge was given the kiln's Container, whose writes are its own");
 		equal(0, kiln.restarts);
-		IItemHandler onFabric = forgeProvider(level, FABRIC_BIN).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH).resolve().orElseThrow();
-		yes(onFabric.getClass() == InvWrapper.class, "a Forge consumer of a Fabric mod's plain bin got " + onFabric.getClass().getName() + " instead of Forge's InvWrapper");
-		System.out.println("[M33Transfer] PASS Forge's generic InvWrapper: NeoForge's own Container view for a Forge bin, none for a kiln, native for a Fabric bin");
+		System.out.println("[M33Transfer] PASS the generic Container view of a plain bin commits through the game's setItem; none for a kiln");
 	}
 
 	private static void moveItems(ServerLevel level, String source, String destination, Direction face) {
@@ -386,57 +334,47 @@ public final class TransferWorldProbe {
 				var a = level.getCapability(Capabilities.Item.BLOCK, from, face); var b = level.getCapability(Capabilities.Item.BLOCK, to, face);
 				try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(2, b.insert(0, ItemResource.of(stack), 2, tx)); equal(2, a.extract(0, ItemResource.of(stack), 2, tx)); tx.commit(); }
 			}
-			case Machines.FORGE -> {
-				IItemHandler a = forgeProvider(level, from).getCapability(ForgeCapabilities.ITEM_HANDLER, face).resolve().orElseThrow();
-				IItemHandler b = forgeProvider(level, to).getCapability(ForgeCapabilities.ITEM_HANDLER, face).resolve().orElseThrow();
-				long total = itemTotal(level); equal(2, a.extractItem(0, 2, true).getCount()); equal(0, b.insertItem(0, stack, true).getCount()); equal(total, itemTotal(level));
-				ItemStack extracted = a.extractItem(0, 2, false); equal(2, extracted.getCount()); equal(0, b.insertItem(0, extracted, false).getCount());
-			}
+			default -> throw new IllegalStateException(source);
 		}
-		equal(60, itemTotal(level));
+		equal(40, itemTotal(level));
 	}
 	private static void moveFluids(ServerLevel level, String source, String destination, Direction face) {
 		BlockPos from = POSITIONS.get(source), to = POSITIONS.get(destination);
 		switch (source) {
 			case Machines.FABRIC -> {
 				Storage<FluidVariant> a = FluidStorage.SIDED.find(level, from, face), b = FluidStorage.SIDED.find(level, to, face);
-				try (Transaction tx = Transaction.openOuter()) { long accepted = b.insert(FluidVariant.of(Fluids.WATER), 3 * 81 + 17, tx); equal(3 * 81, accepted); equal(accepted, a.extract(FluidVariant.of(Fluids.WATER), accepted, tx)); tx.commit(); }
+				try (Transaction tx = Transaction.openOuter()) { long accepted = b.insert(FluidVariant.of(Fluids.WATER), 2 * 81 + 17, tx); equal(2 * 81, accepted); equal(accepted, a.extract(FluidVariant.of(Fluids.WATER), accepted, tx)); tx.commit(); }
 			}
 			case Machines.NEO -> {
 				var a = level.getCapability(Capabilities.Fluid.BLOCK, from, face); var b = level.getCapability(Capabilities.Fluid.BLOCK, to, face);
-				try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(3, b.insert(0, FluidResource.of(Fluids.WATER), 3, tx)); equal(3, a.extract(0, FluidResource.of(Fluids.WATER), 3, tx)); tx.commit(); }
+				try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(2, b.insert(0, FluidResource.of(Fluids.WATER), 2, tx)); equal(2, a.extract(0, FluidResource.of(Fluids.WATER), 2, tx)); tx.commit(); }
 			}
-			case Machines.FORGE -> {
-				IFluidHandler a = forgeProvider(level, from).getCapability(ForgeCapabilities.FLUID_HANDLER, face).resolve().orElseThrow();
-				IFluidHandler b = forgeProvider(level, to).getCapability(ForgeCapabilities.FLUID_HANDLER, face).resolve().orElseThrow();
-				long total = fluidTotal(level); equal(3, a.drain(3, IFluidHandler.FluidAction.SIMULATE).getAmount()); equal(3, b.fill(new FluidStack(Fluids.WATER, 3), IFluidHandler.FluidAction.SIMULATE)); equal(total, fluidTotal(level));
-				FluidStack extracted = a.drain(3, IFluidHandler.FluidAction.EXECUTE); equal(3, extracted.getAmount()); equal(3, b.fill(extracted, IFluidHandler.FluidAction.EXECUTE));
-			}
+			default -> throw new IllegalStateException(source);
 		}
 		equal(FLUID_TOTAL, fluidTotal(level));
 	}
 
 	private static void checkInvalidation(ServerLevel level) {
-		BlockPos pos = new BlockPos(24, 80, 16); Machines.Machine old = place(level, pos, Machines.FORGE);
+		BlockPos pos = new BlockPos(24, 80, 16); Machines.Machine old = place(level, pos, Machines.NEO);
 		Storage<ItemVariant> cachedFabric = ItemStorage.SIDED.find(level, pos, Direction.NORTH);
 		ResourceHandler<ItemResource> cachedNeo = level.getCapability(Capabilities.Item.BLOCK, pos, Direction.NORTH);
 		Storage<FluidVariant> cachedFabricFluid = FluidStorage.SIDED.find(level, pos, Direction.NORTH);
 		ResourceHandler<FluidResource> cachedNeoFluid = level.getCapability(Capabilities.Fluid.BLOCK, pos, Direction.NORTH);
-		yes(cachedFabric != null && cachedNeo != null && cachedFabricFluid != null && cachedNeoFluid != null, "missing foreign Forge views before replacement");
-		// No manual invalidateCapabilities: removing the block entity must invalidate every cached view by itself.
-		level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState()); Machines.Machine replacement = place(level, pos, Machines.FORGE);
+		yes(cachedFabric != null && cachedNeo != null && cachedFabricFluid != null && cachedNeoFluid != null, "missing foreign NeoForge views before replacement");
+		// No manual invalidation: removing the block entity must invalidate every cached view by itself.
+		level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState()); Machines.Machine replacement = place(level, pos, Machines.NEO);
 		yes(old != replacement && old.isRemoved(), "world did not replace the block entity");
 		try (Transaction tx = Transaction.openOuter()) { equal(0, cachedFabric.insert(ItemVariant.of(tagged(1)), 1, tx)); equal(0, cachedFabricFluid.insert(FluidVariant.of(Fluids.WATER), 81, tx)); tx.commit(); }
 		try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(0, cachedNeo.insert(0, ItemResource.of(tagged(1)), 1, tx)); equal(0, cachedNeoFluid.insert(0, FluidResource.of(Fluids.WATER), 1, tx)); tx.commit(); }
 		equal(0, old.itemSnapshot().getCount()); equal(0, replacement.itemSnapshot().getCount()); equal(0, old.fluidUnits()); equal(0, replacement.fluidUnits());
 
 		BlockPos fabricPos = new BlockPos(26, 80, 16); Machines.Machine oldFabric = place(level, fabricPos, Machines.FABRIC);
-		var optional = forgeProvider(level, fabricPos).getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.NORTH); IItemHandler facade = optional.resolve().orElseThrow();
-		var fluidOptional = forgeProvider(level, fabricPos).getCapability(ForgeCapabilities.FLUID_HANDLER, Direction.NORTH); IFluidHandler fluidFacade = fluidOptional.resolve().orElseThrow();
+		var neoItems = level.getCapability(Capabilities.Item.BLOCK, fabricPos, Direction.NORTH);
+		var neoFluids = level.getCapability(Capabilities.Fluid.BLOCK, fabricPos, Direction.NORTH);
 		level.setBlockAndUpdate(fabricPos, Blocks.AIR.defaultBlockState()); place(level, fabricPos, Machines.FABRIC);
-		yes(!optional.isPresent(), "the cached Forge LazyOptional survived removal"); equal(1, facade.insertItem(0, tagged(1), false).getCount()); equal(0, oldFabric.itemSnapshot().getCount());
-		yes(!fluidOptional.isPresent(), "the cached Forge fluid LazyOptional survived removal"); equal(0, fluidFacade.fill(new FluidStack(Fluids.WATER, 1), IFluidHandler.FluidAction.EXECUTE)); equal(0, oldFabric.fluidUnits());
-		System.out.println("[M33Transfer] PASS cached foreign views and Forge LazyOptional cannot write replaced block entities");
+		try (var tx = net.neoforged.neoforge.transfer.transaction.Transaction.openRoot()) { equal(0, neoItems.insert(0, ItemResource.of(tagged(1)), 1, tx)); equal(0, neoFluids.insert(0, FluidResource.of(Fluids.WATER), 1, tx)); tx.commit(); }
+		equal(0, oldFabric.itemSnapshot().getCount()); equal(0, oldFabric.fluidUnits());
+		System.out.println("[M33Transfer] PASS cached foreign views cannot write replaced block entities");
 	}
 
 	private static void checkQuantization(ServerLevel level) {
@@ -455,7 +393,7 @@ public final class TransferWorldProbe {
 	}
 
 	private static void checkPrimaryState(ServerLevel level) {
-		equal(60, itemTotal(level)); equal(FLUID_TOTAL, fluidTotal(level));
+		equal(40, itemTotal(level)); equal(FLUID_TOTAL, fluidTotal(level));
 		for (String family : FAMILIES) {
 			Machines.Machine be = machine(level, POSITIONS.get(family)); equal(20, be.itemSnapshot().getCount());
 			yes(ItemStack.isSameItemSameComponents(tagged(1), be.itemSnapshot()), "item component/NBT changed on " + family);
@@ -471,9 +409,6 @@ public final class TransferWorldProbe {
 		return type.cast(java.util.Objects.requireNonNull(level.getBlockEntity(pos), "missing block entity at " + pos));
 	}
 	private static Machines.Machine machine(ServerLevel level, BlockPos pos) { return (Machines.Machine) java.util.Objects.requireNonNull(level.getBlockEntity(pos), "missing machine at " + pos); }
-	private static ICapabilityProvider forgeProvider(ServerLevel level, BlockPos pos) {
-		return (ICapabilityProvider) (Object) java.util.Objects.requireNonNull(level.getBlockEntity(pos), "missing block entity at " + pos);
-	}
 	private static long itemTotal(ServerLevel level) { return POSITIONS.values().stream().mapToLong(pos -> machine(level, pos).itemSnapshot().getCount()).sum(); }
 	private static long fluidTotal(ServerLevel level) { return POSITIONS.values().stream().mapToLong(pos -> machine(level, pos).fluidUnits()).sum(); }
 	private static ItemStack tagged(int amount) {

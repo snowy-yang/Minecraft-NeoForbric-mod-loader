@@ -20,12 +20,10 @@ package net.forbric.loader.impl.metadata;
 public enum ModEcosystem {
 	/** A Fabric mod, declared by {@code fabric.mod.json}. */
 	FABRIC,
-	/** A traditional MinecraftForge mod, declared by {@code META-INF/mods.toml}. */
-	FORGE,
 	/** A NeoForge mod, declared by {@code META-INF/neoforge.mods.toml}. */
 	NEOFORGE;
 
-	/** Whether this is a Forge-family ecosystem (traditional MinecraftForge or NeoForge). */
+	/** Whether this is a Forge-family ecosystem (NeoForge — the family MinecraftForge once belonged to). */
 	public boolean isForgeFamily() {
 		return this != FABRIC;
 	}

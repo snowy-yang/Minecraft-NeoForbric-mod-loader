@@ -39,26 +39,19 @@ import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.TypeInsnNode;
 
 /**
- * Which of a hook class's hooks the merged game base still CALLS, and which events therefore never get posted.
+ * Which of a hook class's hooks the game base still CALLS, and which events therefore never get posted.
  *
  * <h2>Why this exists</h2>
  *
- * <p>An ecosystem's event surface is two halves that live in different jars: the hook class ({@code
- * ForgeEventFactory}, {@code ForgeEventFactoryClient}, NeoForge's {@code ClientHooks}) ships in the carrier and
- * declares a static method per event; the CALL SITES live in the game, and the byte-merge decides per method
- * which ecosystem's patched body survives. When NeoForge's body wins a method both patched, MinecraftForge's
- * call to its own hook goes with it — {@code merge-conflicts.txt} logs that as {@code (forge hook lost)} — and
- * the hook method is still there, still linkable, still callable by anyone, and never called by anything.
+ * <p>An ecosystem's event surface is two halves that live in different jars: the hook class (NeoForge's
+ * {@code EventHooks}, {@code ClientHooks}) ships in the carrier and declares a static method per event; the CALL
+ * SITES live in the game. A hook method can be present, still linkable, still callable by anyone, and never
+ * called by anything.
  *
  * <p>A mod that subscribes to that event gets no exception, no warning, and no event. The surface is intact:
- * only the calls are gone. That is a defect you can only find by asking whether a call site EXISTS, which is
- * why the numbers this project quotes — "46 hooks, eight still have a call site", "161 declared, 20 alive" —
- * were produced by reading {@code javap} output by hand and writing the answer into a javadoc. A number in a
- * comment is true on the day it is written and unfalsifiable afterwards; the merged base is rebuilt whenever a
- * carrier moves, and nothing re-derived any of them.
- *
- * <p>This derives them. The comparison is absolute in the direction that matters: a constant pool either names
- * the method or it does not, so {@code dead} is a fact about bytecode, not a reading of prose or a log line.
+ * only the calls are gone. That is a defect you can only find by asking whether a call site EXISTS. The
+ * comparison is absolute in the direction that matters: a constant pool either names the method or it does not,
+ * so {@code dead} is a fact about bytecode, not a reading of prose or a log line.
  *
  * <h2>From dead hooks to dead events</h2>
  *
@@ -129,7 +122,7 @@ public final class HookCallSiteCensus {
 	 * Counts {@code hookClass}'s hooks against the call sites in {@code baseJars}.
 	 *
 	 * @param carrierJar the jar DECLARING the hook class (a carrier; the hook class is not in the merged base)
-	 * @param hookClass  its internal name, e.g. {@code net/minecraftforge/client/event/ForgeEventFactoryClient}
+	 * @param hookClass  its internal name, e.g. {@code net/neoforged/neoforge/event/EventHooks}
 	 * @param baseJars   the jars whose call sites count — the merged game base
 	 */
 	public static Census of(Path carrierJar, String hookClass, List<Path> baseJars) throws IOException {
@@ -267,21 +260,20 @@ public final class HookCallSiteCensus {
 	}
 
 	/**
-	 * How many call sites each of {@code hookClass}'s hooks kept across the merge.
+	 * How many call sites each of {@code hookClass}'s hooks keeps across the merge.
 	 *
 	 * <h2>Why "dead" was not the whole answer</h2>
 	 *
 	 * <p>{@link #of} asks whether a hook has ANY call site, which answers "is this event ever posted". It cannot
-	 * answer the state in between, and that state is real: three rows were deleted from {@link DeadEventAudit}
-	 * for claiming an event is never posted when it is — posted from one class and not from another, because the
-	 * merge took some of its call sites and left others.
+	 * answer the state in between, and that state is real: a hook can be called from one class and not from
+	 * another, so some of its call sites are taken and others are left.
 	 *
 	 * <p>That is worse for a mod than either extreme. A mod whose fall-damage listener never fires gets reported
 	 * and investigated; one that fires for horses and llamas and not for anything else looks intermittent, which
 	 * is the hardest kind of bug to report and the easiest to blame on the mod.
 	 *
-	 * @param before the ecosystem's OWN patched game jar, as it was before the merge
-	 * @param after  the merged base
+	 * @param before the ecosystem's OWN patched game jar
+	 * @param after  the base under audit
 	 */
 	public static List<Erosion> erosion(String hookClass, Path before, Path after) throws IOException {
 		Map<String, Integer> was = callSites(before, hookClass);
@@ -325,60 +317,6 @@ public final class HookCallSiteCensus {
 			}
 		}
 		return out;
-	}
-
-	/**
-	 * Methods that call into BOTH ecosystems' event-hook classes, which is the only way one path can deliver a
-	 * bridged event twice.
-	 *
-	 * <p>"The base also posts this event directly" is NOT that, and reading it as that produced a finding here
-	 * that did not survive being checked: {@code BlockEvent$EntityPlaceEvent} has a bridge and one surviving
-	 * call site, in {@code ReplaceDisk#apply}, which calls MinecraftForge's {@code onBlockPlace} and no NeoForge
-	 * hook at all — so the bridge is silent on that path and a subscriber gets exactly one event. A bridge fires
-	 * on the OTHER ecosystem's event; unless something fires both, the two never meet.
-	 */
-	public static List<String> methodsCallingBothFamilies(List<Path> jars) throws IOException {
-		List<String> both = new java.util.ArrayList<>();
-		for (Path jar : jars) {
-			if (!Files.isRegularFile(jar)) continue;
-			try (ZipFile zf = new ZipFile(jar.toFile())) {
-				var entries = zf.entries();
-				while (entries.hasMoreElements()) {
-					ZipEntry e = entries.nextElement();
-					if (!e.getName().endsWith(".class")) continue;
-					ClassNode cn = new ClassNode();
-					try (InputStream in = zf.getInputStream(e)) {
-						new ClassReader(in.readAllBytes()).accept(cn, ClassReader.SKIP_FRAMES | ClassReader.SKIP_DEBUG);
-					}
-					for (MethodNode m : cn.methods) {
-						if (m.instructions == null) continue;
-						boolean forge = false;
-						boolean neo = false;
-						for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-							if (!(insn instanceof MethodInsnNode mi)) continue;
-							if (isHookClass(mi.owner, "net/minecraftforge/")) forge = true;
-							if (isHookClass(mi.owner, "net/neoforged/")) neo = true;
-						}
-						if (forge && neo) both.add(cn.name + "#" + m.name + m.desc);
-					}
-				}
-			}
-		}
-		return List.copyOf(both);
-	}
-
-	/**
-	 * An event-hook ENTRY POINT of {@code family}, as opposed to any other class in its namespace.
-	 *
-	 * <p>Narrow on purpose. Both namespaces carry ordinary utilities a game method may legitimately touch —
-	 * {@code BlockSnapshot.create} is one — and counting those would make this find methods that post nothing.
-	 */
-	static boolean isHookClass(String owner, String family) {
-		if (!owner.startsWith(family)) return false;
-		String simple = owner.substring(owner.lastIndexOf('/') + 1);
-		return simple.equals("ForgeEventFactory") || simple.equals("ForgeEventFactoryClient")
-				|| simple.equals("ForgeHooks") || simple.equals("ForgeHooksClient")
-				|| simple.equals("EventHooks") || simple.equals("ClientHooks");
 	}
 
 	private static ClassNode read(Path jar, String entry) throws IOException {

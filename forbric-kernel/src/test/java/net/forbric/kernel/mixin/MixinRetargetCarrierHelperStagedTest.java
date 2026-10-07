@@ -74,7 +74,7 @@ class MixinRetargetCarrierHelperStagedTest {
 		Function<String, byte[]> resolver = mergedResolver();
 		String entry = "com/anthonyhilyard/highlighter/forge/mixin/AbstractContainerScreenMixin";
 		byte[] mixin = fromJar(SWEEP.resolve("Highlighter-26.2-forge-1.2.2.jar"), entry + ".class");
-		MixinStubRebind.noteEcosystem(entry, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(entry, Ecosystem.NEOFORGE);
 		MixinFit.Result before = MixinFit.evaluate(mixin, resolver);
 		assertEquals(MixinFit.Verdict.PARTIAL, before.verdict(), "premise: " + before.unresolved());
 

@@ -40,7 +40,7 @@ class MixinFitReportManifestTest {
 	@Test void twoModsOrNoManifestGiveNoMod() {
 		String toml = "modLoader=\"javafml\"\nloaderVersion=\"[1,)\"\nlicense=\"MIT\"\n[[mods]]\nmodId=\"one\"\nversion=\"1\"\n"
 				+ "[[mods]]\nmodId=\"two\"\nversion=\"1\"\n";
-		assertNull(MixinFitReport.modOf(Map.of("META-INF/mods.toml", bytes(toml)), Ecosystem.FORGE, "two.jar"));
+		assertNull(MixinFitReport.modOf(Map.of("META-INF/mods.toml", bytes(toml)), Ecosystem.NEOFORGE, "two.jar"));
 		assertNull(MixinFitReport.modOf(Map.of("META-INF/mods.toml", bytes(toml)), Ecosystem.NEOFORGE, "two.jar"));
 		assertNull(MixinFitReport.modOf(Map.of(), Ecosystem.FABRIC, "none.jar"));
 		assertNull(MixinFitReport.modOf(Map.of("fabric.mod.json", bytes("{")), Ecosystem.FABRIC, "broken.jar"));

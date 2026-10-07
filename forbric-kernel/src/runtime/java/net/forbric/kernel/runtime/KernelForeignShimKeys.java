@@ -40,8 +40,7 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
  * <p>{@code register} writes straight into the live {@code Options.keyMappings} array, so re-posting the event here
  * puts the mappings where the game reads them. The two calls after it are what make them USABLE rather than merely
  * present: {@code Options.load(true)} is the late pass that applies a binding saved in {@code options.txt} for a key
- * that did not exist during the first load (the kernel already keeps those in {@code unknownKeys} — see
- * {@link net.forbric.kernel.runtime.KernelForgeOptions}), without which the player's own rebind is silently
+ * that did not exist during the first load, without which the player's own rebind is silently
  * reverted to the mod's default; and {@code KeyMapping.resetMapping()} rebuilds the input→mapping index that
  * dispatch reads, without which the key is listed in Controls and does nothing when pressed.
  */

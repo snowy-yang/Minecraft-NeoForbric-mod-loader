@@ -168,7 +168,7 @@ class NativeAbsentTargetsTest {
 	@Test void theShippedTableNamesTheGameEachPlatformsRowsDescribe() {
 		NativeAbsentTargets.Table table = NativeAbsentTargets.shipped();
 		assertEquals(Map.of("minecraft", "26.2"), table.of(Ecosystem.FABRIC).versions());
-		assertEquals(Map.of("minecraft", "26.2", "forge", "65.0.1"), table.of(Ecosystem.FORGE).versions());
+		assertEquals(Map.of("minecraft", "26.2", "forge", "65.0.1"), table.of(Ecosystem.NEOFORGE).versions());
 		assertEquals(Map.of("minecraft", "26.2", "neoforge", "26.2.0.88"), table.of(Ecosystem.NEOFORGE).versions());
 	}
 
@@ -190,11 +190,11 @@ class NativeAbsentTargetsTest {
 				new Case(Ecosystem.FABRIC, required("minecraft", ">=26.3"), false),
 				new Case(Ecosystem.FABRIC, required("minecraft", "26.1.x"), false),
 				new Case(Ecosystem.FABRIC, required("minecraft", "?!"), false),
-				new Case(Ecosystem.FORGE, required("forge", ">=65"), true),
-				new Case(Ecosystem.FORGE, required("minecraft", ">=26.2 <26.3"), true),
-				new Case(Ecosystem.FORGE, required("neoforge", ">=99"), true),
-				new Case(Ecosystem.FORGE, required("forge", ">=65.1"), false),
-				new Case(Ecosystem.FORGE, required("minecraft", "=26.3"), false),
+				new Case(Ecosystem.NEOFORGE, required("forge", ">=65"), true),
+				new Case(Ecosystem.NEOFORGE, required("minecraft", ">=26.2 <26.3"), true),
+				new Case(Ecosystem.NEOFORGE, required("neoforge", ">=99"), true),
+				new Case(Ecosystem.NEOFORGE, required("forge", ">=65.1"), false),
+				new Case(Ecosystem.NEOFORGE, required("minecraft", "=26.3"), false),
 				new Case(Ecosystem.NEOFORGE, required("neoforge", ">=26.2.0.80"), true),
 				new Case(Ecosystem.NEOFORGE, required("NeoForge", ">=26.2.0.90"), false),
 				new Case(Ecosystem.NEOFORGE, required("minecraft", ">=26.3"), false));
@@ -272,7 +272,7 @@ class NativeAbsentTargetsTest {
 		assertEquals(java.util.Set.of("l1", "l2"), table.libraries());
 		assertEquals(Map.of("minecraft", "26.2"), table.of(Ecosystem.FABRIC).versions());
 		assertEquals(Map.of("minecraft", "26.2", "neoforge", "26.2.0.88"), table.of(Ecosystem.NEOFORGE).versions());
-		assertNull(table.of(Ecosystem.FORGE), "a platform without its line is not spoken for");
+		assertNull(table.of(Ecosystem.NEOFORGE), "a platform without its line is not spoken for");
 
 		NativeAbsentTargets.Rows rows = table.of(Ecosystem.NEOFORGE);
 		assertNull(NativeAbsentTargets.unmetRequirement(rows, mod(Ecosystem.NEOFORGE, "m", required("neoforge", ">=26.2.0.88"))));
@@ -399,12 +399,12 @@ class NativeAbsentTargetsTest {
 
 		// Each platform reads its own rows only.
 		assertTrue(NativeAbsentTargets.nativeLacks(fabric, BLOCK_ENTITY, "forgeOnly", null, raw, rows), "vanilla lacks it");
-		assertFalse(NativeAbsentTargets.nativeLacks(Ecosystem.FORGE, BLOCK_ENTITY, "forgeOnly", null, raw, rows),
+		assertFalse(NativeAbsentTargets.nativeLacks(Ecosystem.NEOFORGE, BLOCK_ENTITY, "forgeOnly", null, raw, rows),
 				"MinecraftForge's game has it");
-		assertTrue(NativeAbsentTargets.nativeLacks(Ecosystem.FORGE, BLOCK_ENTITY, "lost", null, raw, rows),
+		assertTrue(NativeAbsentTargets.nativeLacks(Ecosystem.NEOFORGE, BLOCK_ENTITY, "lost", null, raw, rows),
 				"vanilla's row says nothing of MinecraftForge's game");
 		assertTrue(NativeAbsentTargets.nativeLacks(fabric, "net/minecraft/ForgeLacks", "x", null, name -> blockEntity(), rows));
-		assertFalse(NativeAbsentTargets.nativeLacks(Ecosystem.FORGE, "net/minecraft/ForgeLacks", "x", null, name -> blockEntity(), rows));
+		assertFalse(NativeAbsentTargets.nativeLacks(Ecosystem.NEOFORGE, "net/minecraft/ForgeLacks", "x", null, name -> blockEntity(), rows));
 		assertFalse(NativeAbsentTargets.nativeLacks(Ecosystem.NEOFORGE, BLOCK_ENTITY, "populateCrashReport", null, raw, rows),
 				"a platform the table does not declare is never answered for, rows or not");
 		assertFalse(NativeAbsentTargets.nativeLacks(null, BLOCK_ENTITY, "populateCrashReport", null, raw, rows), "nor no platform");

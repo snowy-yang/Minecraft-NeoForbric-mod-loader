@@ -45,7 +45,7 @@ jobs:
 
   # The kernel is a second, independent build with its own wrapper. It is here for one specific reason:
   # forbric-kernel/build.gradle wires its GAME-side source set at CONFIGURATION time, and only when the
-  # staged game artifacts are present. Those artifacts embed Mojang/Forge/NeoForge code and are built on
+  # staged game artifacts are present. Those artifacts embed Mojang/NeoForge code and are built on
   # the user's own machine, so they are never in this repository and never on a runner -- which makes this
   # job the honest test of the claim that their absence costs a clean clone nothing. If that ever stops
   # being true, the boot jar silently ships without its game-side half, and this goes red instead.
@@ -83,7 +83,7 @@ jobs:
           --results forbric-kernel/build/test-results --root "$GITHUB_WORKSPACE"
           --baseline forbric-kernel/src/test/skip-baseline/ci-unstaged.tsv >> "$GITHUB_STEP_SUMMARY"
 
-      # This runner has no Mojang, Forge or NeoForge bytes (the game-side set is not compiled), so the raw reports
+      # This runner has no Mojang or NeoForge bytes (the game-side set is not compiled), so the raw reports
       # are safe to publish: anyone can see which test skipped and why.
       - uses: actions/upload-artifact@v5
         if: always()
@@ -103,8 +103,8 @@ jobs:
           if-no-files-found: error
 
   # The same unit suite with the game files present, so the ~1000 tests the boot-only job has to skip run here.
-  # tools/dev.py prepare downloads Minecraft 26.2 from Mojang and the Forge / NeoForge userdev artifacts from their
-  # own mavens, and builds the merged base and carriers on this runner, the way Loom and NeoGradle prepare a CI
+  # tools/dev.py prepare downloads Minecraft 26.2 from Mojang and the NeoForge userdev artifacts from their
+  # own mavens, and builds the game base and the NeoForge carrier on this runner, the way Loom and NeoGradle prepare a CI
   # workspace. Nothing derived from them leaves the runner: only upstream downloads are cached, the reports below are
   # counts and test ids, and a guard refuses to upload any jar or JUnit XML (a failing bytecode comparison can print
   # disassembled game code into a test message).
@@ -139,7 +139,7 @@ jobs:
       # Real dedicated servers through the kernel, on the same prepared files: a zero-mod boot (m1) and the gates whose
       # mods are canaries built from this repository's sources. m36 weaves real guest mixins in a running server and
       # checks what they did (its weave-level half also runs in the unit suite, see MixinOutcomeWeaveTest); m46 and m53
-      # check mixins written against vanilla that the merged game reshaped. Each gate writes eula.txt for its own
+      # check mixins written against vanilla that the patched game reshaped. Each gate writes eula.txt for its own
       # throwaway server, as it does on a developer machine.
       - name: Server gates on the prepared files
         shell: bash

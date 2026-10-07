@@ -45,12 +45,9 @@ class ForeignTypeTest {
 	 * the transform simply never fires, which is the silent-failure shape this project keeps paying for.
 	 */
 	@Test
-	void neoForgeSplitsAcrossTwoRootsAndTheTableKnowsWhich() {
+	void neoForgeSplitsAcrossRootsAndTheTableKnowsWhich() {
 		assertEquals("net.neoforged.fml.ModList", ForeignType.MOD_LIST.binary(Ecosystem.NEOFORGE));
 		assertEquals("net.neoforged.neoforge.registries.GameData", ForeignType.GAME_DATA.binary(Ecosystem.NEOFORGE));
-
-		assertEquals("net.minecraftforge.fml.ModList", ForeignType.MOD_LIST.binary(Ecosystem.FORGE));
-		assertEquals("net.minecraftforge.registries.GameData", ForeignType.GAME_DATA.binary(Ecosystem.FORGE));
 
 		assertFalse(ForeignType.MOD_LIST.binary(Ecosystem.NEOFORGE).startsWith("net.neoforged.neoforge."),
 				"fml.* stays under net.neoforged. -- pushing it down a level is the mistake this test exists for");
@@ -60,8 +57,6 @@ class ForeignTypeTest {
 	void internalNamesAreTheSlashFormAsmWants() {
 		assertEquals("net/neoforged/neoforge/client/loading/ClientModLoader",
 				ForeignType.CLIENT_MOD_LOADER.internal(Ecosystem.NEOFORGE));
-		assertEquals("net/minecraftforge/client/loading/ClientModLoader",
-				ForeignType.CLIENT_MOD_LOADER.internal(Ecosystem.FORGE));
 	}
 
 	@Test
@@ -73,23 +68,20 @@ class ForeignTypeTest {
 	}
 
 	@Test
-	void matchesAnswersForEitherFamilyAndNothingElse() {
+	void matchesAnswersForTheForgeFamilyAndNothingElse() {
 		assertTrue(ForeignType.MOD_LIST.matches("net.neoforged.fml.ModList"));
-		assertTrue(ForeignType.MOD_LIST.matches("net.minecraftforge.fml.ModList"));
 		assertFalse(ForeignType.MOD_LIST.matches("net.neoforged.neoforge.fml.ModList"), "the wrong root is not a match");
 		assertFalse(ForeignType.MOD_LIST.matches("net.fabricmc.loader.api.FabricLoader"));
 	}
 
-	/** Every row must name both families, or a call site that asks for one gets a null it will not check. */
+	/** Every row must name its concept, or a call site that asks gets a null it will not check. */
 	@Test
-	void everyRowNamesBothForgeFamilies() {
+	void everyRowNamesItsConceptInTheNeoForgeRoot() {
 		for (ForeignType type : ForeignType.values()) {
-			for (Ecosystem eco : new Ecosystem[] {Ecosystem.FORGE, Ecosystem.NEOFORGE}) {
-				String binary = type.binary(eco);
-				assertNotNull(binary, type + " has no " + eco + " name");
-				assertTrue(binary.startsWith(eco == Ecosystem.FORGE ? "net.minecraftforge." : "net.neoforged."),
-						type + " " + eco + " name is in the wrong root: " + binary);
-			}
+			String binary = type.binary(Ecosystem.NEOFORGE);
+			assertNotNull(binary, type + " has no NeoForge name");
+			assertTrue(binary.startsWith("net.neoforged."),
+					type + " name is in the wrong root: " + binary);
 		}
 	}
 
@@ -132,7 +124,7 @@ class ForeignTypeTest {
 					// CommonNetworkInteropInjector matches on "net/neoforged/"; neither names a concept that
 					// could have a forgotten other half, and a two-column table has nothing to offer them.
 					if (dotted.endsWith(".") || !Character.isUpperCase(lastSegment(dotted).charAt(0))) continue;
-					Ecosystem eco = dotted.startsWith("net.minecraftforge.") ? Ecosystem.FORGE : Ecosystem.NEOFORGE;
+					Ecosystem eco = Ecosystem.NEOFORGE;
 					String tail = lastSegment(dotted);
 					byTail.computeIfAbsent(tail, k -> new TreeMap<>()).put(eco, dotted);
 					where.computeIfAbsent(tail, k -> new TreeSet<>()).add(f.getFileName().toString());

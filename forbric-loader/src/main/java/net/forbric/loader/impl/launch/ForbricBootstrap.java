@@ -129,27 +129,23 @@ public final class ForbricBootstrap {
 		try {
 			List<DiscoveredMod> all = new ForbricModDiscoverer().discover(mods);
 
-			// Which Forge family this instance's game base carries (FORGE or NEOFORGE): the two bases patch
-			// vanilla differently and are mutually exclusive per instance; Fabric layers on either. Explicit
-			// via -Dforbric.forgeFamily (the installer writes it), else probed from the staged runtime jar's
-			// injected identity (mod id "forge" / "neoforge").
-			// Which Forge families are active this instance: {FORGE}, {NEOFORGE}, or BOTH on the tri-in-one merged
-			// base (both runtimes staged, or -Dforbric.forgeFamily=both). Mods of any active family are welcomed.
+			// The Forge family this instance's game base carries: NEOFORGE. Fabric layers on it. Explicit via
+			// -Dforbric.forgeFamily (the installer writes it), else probed from the staged runtime jar's
+			// injected identity (mod id "neoforge").
 			java.util.Set<ModEcosystem> activeFamilies = resolveActiveFamilies(all);
-			// A representative family for single-ecosystem diagnostics — the wrong-family skip below only fires when
-			// exactly one family is active (in BOTH mode every Forge-family mod is welcome, so it never fires).
-			ModEcosystem family = activeFamilies.size() == 1 ? activeFamilies.iterator().next() : ModEcosystem.FORGE;
+			// A representative family for diagnostics — the wrong-family skip below names it in its warning.
+			ModEcosystem family = activeFamilies.iterator().next();
 			java.util.Set<String> activeFamilySources = new java.util.HashSet<>();
 			for (DiscoveredMod mod : all) {
 				if (activeFamilies.contains(mod.getEcosystem())) activeFamilySources.add(mod.getSource());
 			}
 
 			// A jar carrying BOTH manifests is usually already substrate-loadable via its fabric.mod.json
-			// (the merged forge-runtime.jar, pre-wrapped mods, genuine dual-loader builds) — preparing its
-			// FORGE identity would duplicate the whole jar. EXCEPTION: "wrongloader traps" — Forge-only
+			// (the staged neoforge-runtime.jar, pre-wrapped mods, genuine dual-loader builds) — preparing its
+			// NeoForge identity would duplicate the whole jar. EXCEPTION: "wrongloader traps" — Forge-family-only
 			// builds ship a fake fabric.mod.json (unparseable version, an entrypoint that just throws) to
 			// fail fast when dropped into a Fabric loader. Those we suppress on the Fabric side
-			// (-Dforbric.suppressMods, substrate patch 0006) and load the REAL Forge identity instead.
+			// (-Dforbric.suppressMods, substrate patch 0006) and load the REAL Forge-family identity instead.
 			java.util.Set<String> fabricSources = new java.util.HashSet<>();
 			java.util.Map<String, DiscoveredMod> fabricBySource = new java.util.HashMap<>();
 			java.util.Map<String, DiscoveredMod> dubiousFabricBySource = new java.util.HashMap<>();
@@ -177,19 +173,15 @@ public final class ForbricBootstrap {
 			java.util.List<String> wrongFamilyWarned = new ArrayList<>();
 			for (DiscoveredMod mod : all) {
 				if (mod.getEcosystem().isForgeFamily()) {
-					// The forge-runtime.jar / neoforge-runtime.jar (mod ids "forge"/"neoforge") IS the Knot-loaded
-					// runtime — it must load through its own fabric identity, never Forge-wrapped. Same for any
-					// jar Forbric already produced.
-					if (("forge".equals(mod.getId()) || "neoforge".equals(mod.getId()))
-							&& fabricSources.contains(mod.getSource())) {
+					// The neoforge-runtime.jar (mod id "neoforge") IS the Knot-loaded runtime — it must load
+					// through its own fabric identity, never wrapped. Same for any jar Forbric already produced.
+					if ("neoforge".equals(mod.getId()) && fabricSources.contains(mod.getSource())) {
 						ForbricLog.warn("[Forbric] skipping Forge prep for %s (runtime jar, substrate-loadable)%n", mod.getId());
 						continue;
 					}
 
-					// The other Forge family's identity: on a dual-toml (multiloader) jar the active family's
-					// entry loads it, so the sibling is dropped silently; a mod with ONLY an INACTIVE family's
-					// manifest cannot work on this game base — skip it honestly, naming the right profile. In BOTH
-					// mode every Forge family is active, so this never fires.
+					// A mod with only an inactive family's manifest cannot work on this game base — skip it
+					// honestly, naming the right profile.
 					if (!activeFamilies.contains(mod.getEcosystem())) {
 						if (!activeFamilySources.contains(mod.getSource()) && !wrongFamilyWarned.contains(mod.getId())) {
 							wrongFamilyWarned.add(mod.getId());
@@ -201,18 +193,18 @@ public final class ForbricBootstrap {
 						continue;
 					}
 
-					// Genuine multiloader "unimod": one jar shipping BOTH a real Fabric identity and this Forge
+					// Genuine multiloader "unimod": one jar shipping BOTH a real Fabric identity and this Forge-family
 					// identity, with loader-specific mixins/ATs (e.g. collective_fabric.mixins.json vs
-					// collective_forge.mixins.json) — and, unlike a wrongloader trap, the SAME mod id on both
-					// sides. On the Forge-patched game base the Forge variant is the one written for this
-					// bytecode, so prefer it: suppress the original jar (its Fabric identity would apply the
-					// loader-wrong mixins) BY SOURCE — id-based suppression can't be used when both identities
-					// share the id — and load the mod through the Forge lifecycle (re-wrapped under cache/).
+					// collective_neoforge.mixins.json) — and, unlike a wrongloader trap, the SAME mod id on both
+					// sides. On the NeoForge game base the NeoForge variant is the one written for this bytecode,
+					// so prefer it: suppress the original jar (its Fabric identity would apply the loader-wrong
+					// mixins) BY SOURCE — id-based suppression can't be used when both identities share the id —
+					// and load the mod through the NeoForge lifecycle (re-wrapped under cache/).
 					DiscoveredMod dual = fabricBySource.get(mod.getSource());
 					if (dual != null) {
 						String file = sourceFileName(mod.getSource());
 						if (file != null && !suppressSources.contains(file)) {
-							ForbricLog.warn("[Forbric] multiloader jar %s: preferring Forge identity on the Forge base, suppressing the Fabric identity in %s%n",
+							ForbricLog.warn("[Forbric] multiloader jar %s: preferring the Forge-family identity on the NeoForge base, suppressing the Fabric identity in %s%n",
 									mod.getId(), file);
 							suppressSources.add(file);
 						}
@@ -222,7 +214,7 @@ public final class ForbricBootstrap {
 
 					DiscoveredMod trap = dubiousFabricBySource.get(mod.getSource());
 					if (trap != null && !suppress.contains(trap.getId())) {
-						ForbricLog.warn("[Forbric] suppressing wrongloader-trap fabric identity '%s' of Forge mod %s%n",
+						ForbricLog.warn("[Forbric] suppressing wrongloader-trap fabric identity '%s' of Forge-family mod %s%n",
 								trap.getId(), mod.getId());
 						suppress.add(trap.getId());
 					}
@@ -242,24 +234,24 @@ public final class ForbricBootstrap {
 						existing.isEmpty() ? String.join(",", suppressSources) : existing + "," + String.join(",", suppressSources));
 			}
 
-			// On the traditional-MinecraftForge base (mods/forge-runtime.jar, mod id "forge"), Forge's GameData
+			// On the NeoForge base (mods/neoforge-runtime.jar, mod id "neoforge"), NeoForge's GameData
 			// owns the registry lifecycle: freeze/unfreeze windows (Forbric bridge), id tracking, sync and
 			// persistence. Fabric API's registry-sync module manages that same lifecycle for the vanilla base —
-			// redundant here, and its mixin anchors do not survive Forge's binary patches (Bootstrap.bootStrap
+			// redundant here, and its mixin anchors do not survive the NeoForge patches (Bootstrap.bootStrap
 			// no longer calls wrapStreams). Neutralize its configs via substrate patch 0007; user-supplied
 			// -Dforbric.suppressMixinConfigs entries are preserved.
-			if (all.stream().anyMatch(m -> "forge".equals(m.getId()) || "neoforge".equals(m.getId()))) {
-				// Hard-suppressed for a SEMANTIC reason (not just a failed mixin): Forge's GameData owns the
+			if (all.stream().anyMatch(m -> "neoforge".equals(m.getId()))) {
+				// Hard-suppressed for a SEMANTIC reason (not just a failed mixin): NeoForge's GameData owns the
 				// registry lifecycle here — freeze/unfreeze windows, id tracking, sync, persistence — so
 				// Fabric's registry-sync must never partially apply and double-manage it. Other Fabric API
-				// modules whose mixins simply can't apply on the Forge-patched base are handled generically
+				// modules whose mixins simply can't apply on the NeoForge-patched base are handled generically
 				// by the best-effort mixin error handler (relaxMixinOverwrites, substrate patch 0007), which
 				// skips the unpatchable mixin with a warning instead of needing a name here.
 				String defaults = "fabric-registry-sync-v0.mixins.json,fabric-registry-sync-v0.client.mixins.json";
 				String existing = System.getProperty("forbric.suppressMixinConfigs", "");
 				System.setProperty("forbric.suppressMixinConfigs",
 						existing.isEmpty() ? defaults : existing + "," + defaults);
-				ForbricLog.warn("[Forbric] Forge base detected - suppressing GameData-owned Fabric mixin configs: " + defaults);
+				ForbricLog.warn("[Forbric] NeoForge base detected - suppressing GameData-owned Fabric mixin configs: " + defaults);
 
 				// A guest Forge/NeoForge mod pinned to a DIFFERENT MC version (e.g. xaerominimap-26.1.4, which itself
 				// declares minecraft (1.21.10, 26.1.0) while we run 26.2) carries mixins whose @Shadow/@Inject anchors
@@ -277,7 +269,7 @@ public final class ForbricBootstrap {
 				for (DiscoveredMod mod : all) {
 					if (!mod.getEcosystem().isForgeFamily()) continue; // only Forge-family guests pin to an exact MC version
 					String id = mod.getId();
-					if (id.startsWith("forbric") || "forge".equals(id) || "neoforge".equals(id) || "minecraft".equals(id)) continue;
+					if (id.startsWith("forbric") || "neoforge".equals(id) || "minecraft".equals(id)) continue;
 					if (!declaresMcIncompatibility(mod, runningMc)) continue;
 					versionSuppressedModIds.add(id);
 					versionSuppressedConfigs.addAll(mod.getMixinConfigs());
@@ -300,7 +292,7 @@ public final class ForbricBootstrap {
 							prev.isEmpty() ? csv : prev + "," + csv);
 				}
 
-				// Guest mixin configs deep-hook vanilla internals that the merged base has moved or rewritten, so
+				// Guest mixin configs deep-hook vanilla internals that the NeoForge-patched base has moved or rewritten, so
 				// an anchor no longer resolves and the mixin throws FATAL during prepare/apply (crash-to-desktop).
 				// This bites two kinds of guest equally: (1) a Fabric mixin whose injector Forge's binary patches
 				// invalidated, and (2) a Forge/NeoForge mod built for a DIFFERENT MC version (e.g. a 1.21.11 build
@@ -328,7 +320,7 @@ public final class ForbricBootstrap {
 					// hits the same unpatchable-anchor failure as a Fabric guest. Exclude only infrastructure so a
 					// genuine failure in the loader/runtime still crashes loudly.
 					String id = mod.getId();
-					if (id.startsWith("forbric") || "forge".equals(id) || "neoforge".equals(id) || "minecraft".equals(id)) continue;
+					if (id.startsWith("forbric") || "neoforge".equals(id) || "minecraft".equals(id)) continue;
 					if (versionSuppressedModIds.contains(id)) continue; // whole-config suppressed above; don't also relax it
 					guestConfigs.addAll(mod.getMixinConfigs()); // exact config names of each discovered guest mod (any ecosystem)
 				}
@@ -339,7 +331,7 @@ public final class ForbricBootstrap {
 					String suppressMixinExisting = System.getProperty("forbric.suppressMixins", "");
 					System.setProperty("forbric.suppressMixins",
 							suppressMixinExisting.isEmpty() ? csv : suppressMixinExisting + "," + csv);
-					ForbricLog.warn("[Forbric] Forge base detected - suppressing guest mixins that target "
+					ForbricLog.warn("[Forbric] NeoForge base detected - suppressing guest mixins that target "
 							+ "Forge/NeoForge-owned renderer/model/registry-sync pipeline entries: " + csv);
 				}
 				if (!guestConfigs.isEmpty()) {
@@ -350,7 +342,7 @@ public final class ForbricBootstrap {
 					String downgradeExisting = System.getProperty("forbric.downgradeInjectionErrors", "");
 					System.setProperty("forbric.downgradeInjectionErrors",
 							downgradeExisting.isEmpty() ? guestCsv : downgradeExisting + "," + guestCsv);
-					ForbricLog.warn("[Forbric] Forge base detected - discovered guest mixin configs will soft-skip "
+					ForbricLog.warn("[Forbric] NeoForge base detected - discovered guest mixin configs will soft-skip "
 							+ "failing injectors/mixins instead of crashing (relax + downgrade set: " + guestCsv + ")");
 				}
 			}
@@ -419,7 +411,7 @@ public final class ForbricBootstrap {
 		LinkedHashMap<String, LinkedHashSet<String>> configsBySource = new LinkedHashMap<>();
 		for (DiscoveredMod mod : all) {
 			String id = mod.getId();
-			if (id == null || id.startsWith("forbric") || "forge".equals(id) || "neoforge".equals(id)
+			if (id == null || id.startsWith("forbric") || "neoforge".equals(id)
 					|| "minecraft".equals(id)) {
 				continue;
 			}
@@ -765,10 +757,10 @@ public final class ForbricBootstrap {
 	}
 
 	/**
-	 * Mojmap-canonical (MC 26.2+) Forge support: the game classes are already Mojmap-named, so each Forge-family
-	 * mod is prepared with NO bytecode remap — just {@code @Mod} scan + a synthetic {@code fabric.mod.json}
-	 * (carrying the {@code forbric:forgeClasses} keys) — then handed to Knot. The Knot-loaded Forge runtime driver
-	 * ({@code ForbricMinecraftForgeRuntime} for traditional Forge) discovers those keys and brings the mods up. No
+	 * Mojmap-canonical (MC 26.2+) Forge-family support: the game classes are already Mojmap-named, so each
+	 * NeoForge mod is prepared with NO bytecode remap — just {@code @Mod} scan + a synthetic {@code fabric.mod.json}
+	 * (carrying the {@code forbric:forgeClasses} keys) — then handed to Knot. The Knot-loaded NeoForge runtime
+	 * driver ({@code ForbricNeoForgeRuntime}) discovers those keys and brings the mods up. No
 	 * intermediary/mojmap mappings and no game jar are needed here.
 	 */
 	private static void setupForgeIdentity(List<DiscoveredMod> forge, Path gameDir, TransformChain chain,
@@ -783,9 +775,8 @@ public final class ForbricBootstrap {
 
 			// Partition by each mod's OWN family and prepare one wrap batch per family present: ForbricForgeLoader
 			// stays single-family (its wrap cache key + nested-jar filter are per-family), and each mod's wrapped
-			// identity is stamped with the correct ecosystem so the right Knot-loaded driver (traditional-Forge vs
-			// NeoForge) claims it. On the tri-in-one merged base both families are present at once; single-ecosystem
-			// instances have exactly one group, identical to before.
+			// identity is stamped with the correct ecosystem so the right Knot-loaded driver claims it. Today
+			// exactly one family (NEOFORGE) exists, so this is one group.
 			java.util.Map<ModEcosystem, List<DiscoveredMod>> byFamily = new java.util.EnumMap<>(ModEcosystem.class);
 			for (DiscoveredMod mod : forge) {
 				byFamily.computeIfAbsent(mod.getEcosystem(), k -> new ArrayList<>()).add(mod);
@@ -850,29 +841,19 @@ public final class ForbricBootstrap {
 	}
 
 	/**
-	 * The Forge family/families this instance's game base carries. Explicit {@code -Dforbric.forgeFamily=forge|
-	 * neoforge|both} wins (the installer writes it into the profile); otherwise probe the discovered mods for the
-	 * staged runtime jars' injected identity (mod id {@code "forge"} / {@code "neoforge"}). BOTH runtimes staged
-	 * → the tri-in-one merged base: return both families so mods of either load side by side. Defaults to a single
-	 * {@link ModEcosystem#FORGE} (the legacy single-family behavior) when no signal is present.
+	 * The Forge family this instance's game base carries: {@link ModEcosystem#NEOFORGE}. Explicit
+	 * {@code -Dforbric.forgeFamily=neoforge} wins (the installer writes it into the profile); otherwise probe the
+	 * discovered mods for the staged runtime jar's injected identity (mod id {@code "neoforge"}). Always NEOFORGE
+	 * when no signal is present.
 	 */
 	private static java.util.Set<ModEcosystem> resolveActiveFamilies(List<DiscoveredMod> all) {
 		String prop = System.getProperty("forbric.forgeFamily", "").trim();
-		if ("both".equalsIgnoreCase(prop)) return java.util.Set.of(ModEcosystem.FORGE, ModEcosystem.NEOFORGE);
 		if ("neoforge".equalsIgnoreCase(prop)) return java.util.Set.of(ModEcosystem.NEOFORGE);
-		if ("forge".equalsIgnoreCase(prop)) return java.util.Set.of(ModEcosystem.FORGE);
 		if (!prop.isEmpty()) {
-			ForbricLog.warn("[Forbric] unknown -Dforbric.forgeFamily='%s' (expected forge|neoforge|both) — probing instead", prop);
+			ForbricLog.warn("[Forbric] unknown -Dforbric.forgeFamily='%s' (expected neoforge) — probing instead", prop);
 		}
 
-		boolean neo = all.stream().anyMatch(m -> "neoforge".equals(m.getId()));
-		boolean forge = all.stream().anyMatch(m -> "forge".equals(m.getId()));
-		if (neo && forge) {
-			// The tri-in-one merged base stages both runtimes deliberately (single-ecosystem installs stage one).
-			return java.util.Set.of(ModEcosystem.FORGE, ModEcosystem.NEOFORGE);
-		}
-		if (neo) return java.util.Set.of(ModEcosystem.NEOFORGE);
-		return java.util.Set.of(ModEcosystem.FORGE);
+		return java.util.Set.of(ModEcosystem.NEOFORGE);
 	}
 
 	/** The file name of a DiscoveredMod source path (used to suppress the original jar by name in the substrate). */

@@ -2,21 +2,21 @@
 
 [English](README.md) | 简体中文
 
-**一个 Minecraft 实例，同时运行 Fabric mod、Forge mod 和 NeoForge mod。**
+**一个 Minecraft 实例，同时运行 Fabric mod 和 NeoForge mod。**
 
 版本 0.3.0 · Minecraft 26.2
 
 ## 它能做什么
 
-Minecraft 的 mod 分三种，通常你只能选其中一种。每个 mod 都是为 **Fabric**、**Forge** 或 **NeoForge** 中的某一个做的，而且只能在它对应的那一个上运行。把 Fabric mod 放进 Forge 游戏里，什么也不会发生。所以大多数人会同时维护好几套互相独立的环境，而不管启动哪一套，大部分 mod 都躺在另外几套里。
+Minecraft 的 mod 主要分两种，通常你只能选其中一种。每个 mod 都是为 **Fabric** 或 **NeoForge** 中的某一个做的，而且只能在它对应的那一个上运行。把 Fabric mod 放进 NeoForge 游戏里，什么也不会发生。所以大多数人会同时维护两套互相独立的环境，而不管启动哪一套，都有一半的 mod 躺在另一套里。
 
-Forbric 是第四种东西，装了它就不用再装那三个。你把**所有** mod 放进**同一个**文件夹——Fabric、Forge、NeoForge 混在一起，不用分类——Forbric 会打开每个文件，判断它是哪一种，然后加载它。所有 mod 都在同一个世界里同时运行。
+Forbric 是第三种东西，装了它就不用再装那两个。你把**所有** mod 放进**同一个**文件夹——Fabric、NeoForge 混在一起，不用分类——Forbric 会打开每个文件，判断它是哪一种，然后加载它。所有 mod 都在同一个世界里同时运行。
 
-它还会把你装的所有东西列在同一张列表里。暂停菜单和标题界面上会多出一个 Forbric 的 Mods 按钮；在这张列表里，不管一个 mod 属于三种中的哪一种，你都能打开它自己的设置界面（Fabric mod 需要同时装了 Mod Menu 才行）。
+它还会把你装的所有东西列在同一张列表里。暂停菜单和标题界面上会多出一个 Forbric 的 Mods 按钮；在这张列表里，不管一个 mod 属于两种中的哪一种，你都能打开它自己的设置界面（Fabric mod 需要同时装了 Mod Menu 才行）。
 
-**你也许听说过 Kilt 或 Sinytra Connector。** 它们是装在普通加载器上的 mod，在一方内部重新实现另一方的功能——相当于屋里请了个翻译。Forbric 则是加载器本身。Fabric Loader，以及 Forge 和 NeoForge 里面自带的加载器，都不会启动；它们的活由 Forbric 来干——找到 mod、启动 mod、按顺序运行 mod——并尽量按每个 mod 自己的加载器那样去做。你的 mod 调用的是真正的 Fabric API，以及真正的 Forge 和 NeoForge 代码；这一部分不是重新实现的。所以这不是三个加载器并排运行，而是一个新的加载器，把三种 mod 和它们依赖的真实代码放进同一个游戏。
+**你也许听说过 Kilt 或 Sinytra Connector。** 它们是装在普通加载器上的 mod，在一方内部重新实现另一方的功能——相当于屋里请了个翻译。Forbric 则是加载器本身。Fabric Loader 和 NeoForge 自己的加载器都不会启动；它们的活由 Forbric 来干——找到 mod、启动 mod、按顺序运行 mod——并尽量按每个 mod 自己的加载器那样去做。你的 mod 调用的是真正的 Fabric API，以及真正的 NeoForge 代码；这一部分不是重新实现的。所以这不是两个加载器并排运行，而是一个新的加载器，把两种 mod 和它们依赖的真实代码放进同一个游戏。
 
-不过 Forge 和 NeoForge 都会修改 Minecraft，而且常常改的是同一个地方，而一个游戏里每个地方只能保留一个版本，所以 Forbric 大多保留 NeoForge 的版本。然后由 Forbric 自己的衔接代码让其他 mod 继续工作：把游戏事件转交给 Forge mod，把 Fabric mod 的修改挪到代码现在所在的位置，并让来自不同加载器的 mod 互相传递物品、流体和能量。这些衔接代码同样是一种翻译，而且还没有完成，这也是一部分 mod 仍然失败的原因之一。
+游戏本身是 NeoForge 的：Forbric 运行的是 NeoForge 自己打过补丁的 Minecraft，NeoForge mod 踩在它们自己的原生地面上。然后由 Forbric 自己的衔接代码让另一边继续工作：把 Fabric mod 的修改挪到代码现在所在的位置，并让两种加载器的 mod 互相传递物品、流体和能量。这些衔接代码同样是一种翻译，而且还没有完成，这也是一部分 mod 仍然失败的原因之一。
 
 Connector 已经很成熟，Forbric 还不是，所以如果 Connector 已经能运行你想要的 mod，就用 Connector。Forbric 是为它照顾不到的情况准备的。
 
@@ -28,7 +28,7 @@ Connector 已经很成熟，Forbric 还不是，所以如果 Connector 已经能
 - **Java。** 如果你已经能玩 Minecraft，你就已经有了。就算你从没自己装过 Java，安装器也能找到你的启动器下载的那一份。
 - **网络连接**，以及安装过程中约 730 MB 的可用磁盘空间（完成后约保留 190 MB）。
 
-你**不需要**先装 Minecraft 26.2。如果没有，安装器会自动下载。你也**不需要** Fabric、Forge 或 NeoForge，也不用去找其他任何文件：Forbric 需要的一切都由安装器下载并构建。不过你的 mod 照常还需要各自的前置 mod，比如大多数 Fabric mod 都需要 Fabric API。
+你**不需要**先装 Minecraft 26.2。如果没有，安装器会自动下载。你也**不需要** Fabric 或 NeoForge，也不用去找其他任何文件：Forbric 需要的一切都由安装器下载并构建。不过你的 mod 照常还需要各自的前置 mod，比如大多数 Fabric mod 都需要 Fabric API。
 
 ### 安装
 
@@ -56,7 +56,7 @@ Connector 已经很成熟，Forbric 还不是，所以如果 Connector 已经能
 
    其他设置都不要动。尤其是 **Built artifacts** 要留空——它只给从源码构建了 Forbric 游戏文件的开发者使用。
 
-5. **点击 Install，然后等待。** 第一次安装需要几分钟。它在下载 Minecraft、Forge 和 NeoForge 各自的文件，并在你的电脑上把它们组装起来，因为按照法律，这些文件不能做成现成的包直接分发。安装期间请保持联网。之后再安装会复用磁盘上已有的文件，很快就能完成。
+5. **点击 Install，然后等待。** 第一次安装需要几分钟。它在下载 Minecraft 和 NeoForge 各自的文件，并在你的电脑上把它们组装起来，因为按照法律，这些文件不能做成现成的包直接分发。安装期间请保持联网。之后再安装会复用磁盘上已有的文件，很快就能完成。
 
 6. **打开你的启动器。** 列表里会出现一个名为 **`26.2-forbric`** 的新版本。像启动其他版本一样启动它即可。PCL2 会把它显示成 Fabric 版本，这是正常的（见下一节）。
 
@@ -70,24 +70,24 @@ Connector 已经很成熟，Forbric 还不是，所以如果 Connector 已经能
 
 ### mod 放在哪里
 
-**Fabric、Forge 和 NeoForge 的 mod 都放进同一个 `mods` 文件夹。** 具体是哪个文件夹取决于你的启动器，而不是 Forbric：
+**Fabric 和 NeoForge 的 mod 都放进同一个 `mods` 文件夹。** 具体是哪个文件夹取决于你的启动器，而不是 Forbric：
 
 - 如果你的启动器让每个版本各自独立（通常叫“版本隔离”；PCL2 和 HMCL 都能这样设置）：`.minecraft/versions/26.2-forbric/mods/`
 - 否则就是你所选 Game directory 里共用的 `.minecraft/mods/`。所有没有独立文件夹的版本都用这个文件夹，所以 Forbric 也会尝试加载里面已有的 mod。
 
 安装器完成时会把这两个位置都列出来。不确定你的启动器用的是哪一个？先启动一次游戏：正确的那个 `mods` 文件夹旁边会出现一个名为 `.forbric-kernel` 的文件夹。
 
-你的启动器可能会把 `26.2-forbric` 称为 Fabric 版本。这是有意为之：启动器每个版本只显示一个 mod 加载器，所以 Forbric 的版本告诉它的是 Fabric。PCL2 会读取这一信息，把 `26.2-forbric` 当作 mod 版本，并在它的 mod 浏览器里优先推荐 Fabric 版的 mod。其他启动器可能会把它显示为普通的 Minecraft。不管怎样，Forbric 都会从 `mods` 文件夹加载 Fabric、Forge 和 NeoForge 的 mod。
+你的启动器可能会把 `26.2-forbric` 称为 Fabric 版本。这是有意为之：启动器每个版本只显示一个 mod 加载器，所以 Forbric 的版本告诉它的是 Fabric。PCL2 会读取这一信息，把 `26.2-forbric` 当作 mod 版本，并在它的 mod 浏览器里优先推荐 Fabric 版的 mod。其他启动器可能会把它显示为普通的 Minecraft。不管怎样，Forbric 都会从 `mods` 文件夹加载 Fabric 和 NeoForge 的 mod。
 
-有一点要注意：很多 mod 同时有 Fabric 版、Forge 版和 NeoForge 版。每个 mod 只放**一个**版本进文件夹。如果你放了不止一个，Forbric 仍然只会运行其中一个。第一次遇到这种情况时，它会把自己的选择写进 `mods` 文件夹旁边的 `forbric-mods.txt`，你可以在那里改选另一个版本。
+有一点要注意：很多 mod 同时有 Fabric 版和 NeoForge 版。每个 mod 只放**一个**版本进文件夹。如果你放了不止一个，Forbric 仍然只会运行其中一个。第一次遇到这种情况时，它会把自己的选择写进 `mods` 文件夹旁边的 `forbric-mods.txt`，你可以在那里改选另一个版本。
 
-多个 mod 共同需要的前置（库）mod 也是一样：通常一个版本就够了，因为 Forge 或 NeoForge 的 mod 一般可以使用其前置 mod 的 Fabric 版，反过来也一样。为两个加载器各装一份前置，并不会让每个 mod 各用各的：Forbric 仍然只运行其中一份。如果一个 mod 直接挂接在另一个 mod 上（比如 Iris 之于 Sodium），两者要用同一个加载器的版本。关于 Sodium，另见下文的*一个已知的崩溃*。
+多个 mod 共同需要的前置（库）mod 也是一样：通常一个版本就够了，因为 NeoForge 的 mod 一般可以使用其前置 mod 的 Fabric 版，反过来也一样。为两个加载器各装一份前置，并不会让每个 mod 各用各的：Forbric 仍然只运行其中一份。如果一个 mod 直接挂接在另一个 mod 上（比如 Iris 之于 Sodium），两者要用同一个加载器的版本。关于 Sodium，另见下文的*一个已知的崩溃*。
 
 ### 装好了吗？
 
 打开暂停菜单。那里有一个画着**三个叠在一起的方块**的按钮，提示框上写着 *Mods (Forbric)*。点开是一张列表，列出你装的所有 mod，每一行都标明了它是哪一种。选中一个 mod 后点 **Config**，或者双击那一行，就能打开这个 mod 自己的设置。
 
-Fabric mod 把自己的设置界面交给 Mod Menu 管理，所以只有同时装了 Mod Menu，Fabric mod 在这张列表里才会有 **Config** 按钮。装了 Mod Menu 后，标题界面和暂停菜单上都会有**两个** Mods 按钮。请用画着三个方块的那个：它能打开三种 mod 的设置，而 Mod Menu 自己的按钮只能打开 Fabric mod 的设置。
+Fabric mod 把自己的设置界面交给 Mod Menu 管理，所以只有同时装了 Mod Menu，Fabric mod 在这张列表里才会有 **Config** 按钮。装了 Mod Menu 后，标题界面和暂停菜单上都会有**两个** Mods 按钮。请用画着三个方块的那个：它能打开两种 mod 的设置，而 Mod Menu 自己的按钮只能打开 Fabric mod 的设置。
 
 ### 出了问题怎么办
 
@@ -110,6 +110,8 @@ Fabric mod 把自己的设置界面交给 Mod Menu 管理，所以只有同时�
 **卸载**：删除 `.minecraft/versions/26.2-forbric/`。如果你的启动器让每个版本各自独立，这个文件夹里还存着这个版本的 mod、世界和设置，所以请先把想保留的东西复制出来。如果还想收回磁盘空间，再删除 `.minecraft/.forbric-build/` 和 `.minecraft/libraries/net/forbric/`。
 
 ## 0.3.0 更新内容
+
+*这一节是 0.3.0 发布时的发行说明；本页其余部分描述的是当前代码，两者并不逐字一致。*
 
 **能用的 mod 更多了。** 我们从 Modrinth 随机挑了三批 mod，每批约 100 个（既有热门的，也有随机的，三种都有），然后每次只装其中一个 mod 来启动游戏。**0.2.0 上有 80.5% 无错误加载，0.3.0 上是 89.0%**（判定标准：日志里没有 mod 加载失败）。在 0.3.0 上，有 91.8% 能进入世界，有 79.1% 同时做到了没有任何部分被报告为无法工作。这个测试只检查 mod 能不能加载、世界能不能打开；不会逐个试 mod 的功能，也不测多个 mod 放在一起。
 
@@ -138,11 +140,11 @@ Fabric mod 把自己的设置界面交给 Mod Menu 管理，所以只有同时�
 
 ## 我们的承诺
 
-**不会动你现有的 Minecraft。** Forbric 与其他所有东西并存安装。你的 Fabric、Forge 和 NeoForge 环境、你的世界、你的其他 mod 文件夹，都和原来一模一样。
+**不会动你现有的 Minecraft。** Forbric 与其他所有东西并存安装。你的 Fabric 和 NeoForge 环境、你的世界、你的其他 mod 文件夹，都和原来一模一样。
 
 **卸载就是删掉一个文件夹。** 它不会在你的系统里到处留下东西，你不玩游戏时也不会有任何东西在运行。
 
-**没有任何隐藏。** 所有源代码都在这里，许可证是 Apache-2.0。本仓库不包含任何 Minecraft、Forge 或 NeoForge 的代码——这些都是在你安装时从它们各自的服务器上获取，并在你的机器上组装的。
+**没有任何隐藏。** 所有源代码都在这里，许可证是 Apache-2.0。本仓库不包含任何 Minecraft 或 NeoForge 的代码——这些都是在你安装时从它们各自的服务器上获取，并在你的机器上组装的。
 
 我们**不**承诺的是：
 
@@ -160,16 +162,16 @@ Forbric 与 Mojang、FabricMC、MinecraftForge 或 NeoForged 均无关联。
 
 ### 写给 mod 开发者
 
-**你的 mod 不需要做任何修改。** 它调用的是真正的 Fabric API、MinecraftForge 或 NeoForge 类，所以不存在需要你专门针对它编写代码的兼容层。Forbric 重新实现的是加载器：类加载、mod 发现、加载顺序、生命周期、Mixin 服务，以及 Fabric Loader 的 API（Forbric 自带 Fabric Loader 的公开 API 类型——这些类型保留 FabricMC 的版权——并实现了它们；Fabric Loader 本身从不运行）。游戏本身也不一样：安装器会用两个 Forge 系的补丁构建出一个合并后的游戏 jar。这对你的 mod 意味着：
+**你的 mod 不需要做任何修改。** 它调用的是真正的 Fabric API 或 NeoForge 类，所以不存在需要你专门针对它编写代码的兼容层。Forbric 重新实现的是加载器：类加载、mod 发现、加载顺序、生命周期、Mixin 服务，以及 Fabric Loader 的 API（Forbric 自带 Fabric Loader 的公开 API 类型——这些类型保留 FabricMC 的版权——并实现了它们；Fabric Loader 本身从不运行）。游戏本身也不一样：它是 NeoForge 自己打过补丁的 jar，由安装器构建。这对你的 mod 意味着：
 
-- **游戏是一个合并后的 jar。** 凡是 MinecraftForge 和 NeoForge 都打了补丁的同一个方法（大约一千个），只保留了一个版本：除其中五个保留的是 MinecraftForge 的版本外，其余都保留 NeoForge 的。因此丢失了调用的事件——几乎都是 MinecraftForge 的，另有少数 NeoForge 的，比如物品提示框和界面打开——只有在 Forbric 重新发出时才会到达你的监听器，没有桥的则永远不会触发（[introduction.md §8](introduction.zh-CN.md#8-事件桥)）。调用在合并中保留下来的事件照常触发。NeoForge 自带的 coremod 不会被加载；它们所做的改写由 Forbric 自己完成。
-- **mixin 会应用在这份合并后的代码上。** Forbric 会放宽 mod 的 mixin 配置（`required: false`、`defaultRequire: 0`），因此目标缺失的注入器会什么也不做，而不是报错失败，除非它自己设置了 `require`。目标挪了位置的注入器，Forbric 会把它跟着挪过去；如果一个 mixin 的目标全都不存在，就丢弃整个 mixin（[§7](introduction.zh-CN.md#7-合并基底上的-mixin)）。
+- **游戏是 NeoForge 自己打过补丁的 jar**——带有 NeoForge 补丁的原版 26.2。NeoForge 的事件照常触发。NeoForge 自带的 coremod 不会被加载；它们所做的改写由 Forbric 自己完成。mixin 套不上这份补丁基底的 Fabric API 事件，改由 NeoForge 自己的调用点触发（[introduction.md §8](introduction.zh-CN.md#8-事件桥)）。
+- **mixin 会应用在这份补丁基底上。** Forbric 会放宽 mod 的 mixin 配置（`required: false`、`defaultRequire: 0`），因此目标缺失的注入器会什么也不做，而不是报错失败，除非它自己设置了 `require`。目标挪了位置的注入器，Forbric 会把它跟着挪过去；如果一个 mixin 的目标全都不存在，就丢弃整个 mixin（[§7](introduction.zh-CN.md#7-补丁基底上的-mixin)）。
 - **启动按 Forbric 的顺序进行**，与各加载器原生的顺序接近，但并不相同（[§3](introduction.zh-CN.md#3-启动顺序)）。
-- **不支持启动扩展：** MinecraftForge 的 ModLauncher 服务（`ITransformationService`、`ILaunchPluginService`）和 `coremods.json`、NeoForge 的 `ClassProcessorProvider`，以及自定义的 mod 定位器或依赖定位器。目前它们会被直接跳过，不会有任何警告。
+- **不支持启动扩展：** NeoForge 的 `ClassProcessorProvider` 和 `coremods.json`，以及自定义的 mod 定位器或依赖定位器。目前它们会被直接跳过，不会有任何警告。
 
 更多细节：
 
-- [introduction.md](introduction.zh-CN.md)——面向开发者介绍 Forbric 的内部工作方式：启动顺序、三种 mod 如何一起加载、安装器构建了什么，以及它是怎样测试的。
+- [introduction.md](introduction.zh-CN.md)——面向开发者介绍 Forbric 的内部工作方式：启动顺序、两种 mod 如何一起加载、安装器构建了什么，以及它是怎样测试的。
 - [forbric-kernel/README.md](forbric-kernel/README.zh-CN.md)——内核的简要概述；安装器安装的就是内核。
 
 要从源码构建内核，你需要 `git` 和 JDK 21 或更新版本。内核有自己的 Gradle 构建；引导侧的编译不需要 Fabric 底座：

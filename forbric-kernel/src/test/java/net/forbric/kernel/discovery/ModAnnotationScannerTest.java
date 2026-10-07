@@ -84,8 +84,7 @@ class ModAnnotationScannerTest {
 
 	@Test
 	void aModThatDeclaresNoSideRunsOnBoth(@TempDir Path dir) throws Exception {
-		// The annotation's own default, and the only honest reading of a @Mod that says nothing. Traditional
-		// MinecraftForge's @Mod has no dist() at all, so every Forge-family mod lands here.
+		// The annotation's own default, and the only honest reading of a @Mod that says nothing.
 		Path jar = dir.resolve("plain.jar");
 
 		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
@@ -161,9 +160,9 @@ class ModAnnotationScannerTest {
 	}
 
 	@Test
-	void distinguishesTheTwoModAnnotationFamilies(@TempDir Path dir) throws Exception {
-		// The construction ABIs diverge entirely on this bit: a MINECRAFTFORGE @Mod needs an FMLJavaModLoadingContext
-		// on a BusGroup, a NEOFORGE one needs (IEventBus, Dist, ModContainer).
+	void onlyTheNeoForgeModAnnotationIsRecognized(@TempDir Path dir) throws Exception {
+		// Traditional MinecraftForge is not an ecosystem this loader runs, so its @Mod descriptor is deliberately
+		// absent from MOD_DESCRIPTORS: a class carrying it is an ordinary class, not a mod-constructor candidate.
 		Path jar = dir.resolve("mod.jar");
 
 		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
@@ -175,9 +174,9 @@ class ModAnnotationScannerTest {
 
 		List<ModAnnotationScanner.ModClassInfo> mods = ModAnnotationScanner.scan(jar);
 
-		assertEquals(2, mods.size());
-		assertEquals(Ecosystem.FORGE, mods.get(0).family);
-		assertEquals(Ecosystem.NEOFORGE, mods.get(1).family);
+		assertEquals(1, mods.size());
+		assertEquals("com.example.BNeo", mods.get(0).className);
+		assertEquals(Ecosystem.NEOFORGE, mods.get(0).family);
 	}
 
 	private static void write(ZipOutputStream zip, String name, byte[] bytes) throws Exception {

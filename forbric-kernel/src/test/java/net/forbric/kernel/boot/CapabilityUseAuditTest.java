@@ -63,10 +63,10 @@ class CapabilityUseAuditTest {
 		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
 		try {
 			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.FORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", ""),
-					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.FORGE, "plain", "Plain", "1", "", java.util.List.of(), "plain.jar", "", "")));
+					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.NEOFORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", ""),
+					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.NEOFORGE, "plain", "Plain", "1", "", java.util.List.of(), "plain.jar", "", "")));
 			CapabilityUseAudit.note("pipez.jar", classNaming("net/minecraftforge/common/capabilities/Capability"));
-			CapabilityUseAudit.report(false, java.util.Set.of());
+			CapabilityUseAudit.report();
 			var failures = net.forbric.api.ModCatalog.failures();
 			assertTrue(failures.size() == 1 && failures.getFirst().modId().equals("pipez"), failures.toString());
 			assertTrue(failures.getFirst().status() == net.forbric.api.ModCatalog.Status.DEGRADED);
@@ -81,9 +81,9 @@ class CapabilityUseAuditTest {
 		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
 		try {
 			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.FORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", "")));
+					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.NEOFORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", "")));
 			CapabilityUseAudit.note("pipez.jar", classNaming("net/minecraftforge/common/capabilities/Capability"));
-			CapabilityUseAudit.report(true, CapabilityUseAudit.ROOTS);
+			CapabilityUseAudit.report();
 			assertTrue(net.forbric.api.ModCatalog.failures().isEmpty(), "composed everywhere: the feature exists, nothing to name");
 		} finally {
 			net.forbric.api.ModCatalog.publish(previous);
@@ -95,9 +95,9 @@ class CapabilityUseAuditTest {
 		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
 		try {
 			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.FORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", "")));
+					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.NEOFORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", "")));
 			CapabilityUseAudit.note("pipez.jar", classNaming("net/minecraftforge/common/capabilities/Capability"));
-			CapabilityUseAudit.report(true, java.util.Set.of("net/minecraft/world/level/block/entity/BlockEntity", "net/minecraft/world/level/Level"));
+			CapabilityUseAudit.report();
 			var failures = net.forbric.api.ModCatalog.failures();
 			assertTrue(failures.size() == 1 && failures.getFirst().statusDetail().contains("Entity"), failures.toString());
 			assertFalse(failures.getFirst().statusDetail().contains("BlockEntity]"), "only the missed root is named");

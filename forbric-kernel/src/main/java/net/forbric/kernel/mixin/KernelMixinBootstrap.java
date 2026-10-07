@@ -129,9 +129,9 @@ public final class KernelMixinBootstrap {
 		// the way NeoForge lets it (LibJF's ASM layer) must be the one that weaves from then on. With no wrapper it
 		// is `transformer`, one volatile read away.
 		MixinWeaverSlot.install(transformer);
-		loader.setMixinTransformer((name, bytes) -> net.forbric.kernel.transform.ForgeTransferShapeAudit.certify(name,
+		loader.setMixinTransformer((name, bytes) ->
 				conflicts.transform(name, bytes, PostMixinFixups.apply(name, net.forbric.kernel.transform.NativeCoremodParity
-						.apply(name, MixinWeaverSlot.currentOr(transformer).transformClassBytes(name, name, bytes))))));
+						.apply(name, MixinWeaverSlot.currentOr(transformer).transformClassBytes(name, name, bytes)))));
 
 		// Leave PREINIT so the registered configs are prepared and their targets become weavable.
 		gotoPhase(MixinEnvironment.Phase.INIT);

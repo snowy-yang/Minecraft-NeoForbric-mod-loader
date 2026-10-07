@@ -95,11 +95,11 @@ public final class KernelModCatalog {
 		}
 		addUnreadable(entries, modsDir);
 		ModCatalog.publish(entries);
-		ForbricLog.info("[Forbric/Catalog] %d installed mod(s) for the unified Mods screen: %d Fabric, %d NeoForge,"
-						+ " %d MinecraftForge — plus %d jar(s) they carry inside themselves, which are running and "
+		ForbricLog.info("[Forbric/Catalog] %d installed mod(s) for the unified Mods screen: %d Fabric, %d NeoForge "
+						+ "— plus %d jar(s) they carry inside themselves, which are running and "
 						+ "are not what a player means by \"my mods\"",
 				ModCatalog.all().size(), ModCatalog.count(Ecosystem.FABRIC), ModCatalog.count(Ecosystem.NEOFORGE),
-				ModCatalog.count(Ecosystem.FORGE), ModCatalog.everything().size() - ModCatalog.all().size());
+				ModCatalog.everything().size() - ModCatalog.all().size());
 	}
 
 	/**

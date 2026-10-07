@@ -10,7 +10,6 @@ import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
 import net.forbric.api.Ecosystem;
 import net.forbric.api.ForeignType;
-import net.forbric.kernel.transform.FluidInteractionsInjector;
 import net.forbric.kernel.util.ForbricLog;
 
 /** Restores Carpet fluid callbacks without running vanilla's dead interaction loop beside the native registry. */
@@ -21,9 +20,7 @@ public final class CarpetFluidMixinAdapter {
 	static final String OPERATION = "com/llamalad7/mixinextras/injector/wrapoperation/Operation";
 	static final String HANDLER = "(L" + LEVEL + ";" + POS + STATE + CIR + ")V";
 	static final String INTERACT = "(L" + LEVEL + ";" + POS + ")Z";
-	static final List<String> REGISTRIES = List.of(
-			ForeignType.FLUID_INTERACTION_REGISTRY.internal(Ecosystem.NEOFORGE),
-			ForeignType.FLUID_INTERACTION_REGISTRY.internal(Ecosystem.FORGE));
+	static final String REGISTRY = ForeignType.FLUID_INTERACTION_REGISTRY.internal(Ecosystem.NEOFORGE);
 	private CarpetFluidMixinAdapter() { }
 
 	public static int adapt(ClassNode mixin, Function<String, ClassNode> targets) {
@@ -55,7 +52,7 @@ public final class CarpetFluidMixinAdapter {
 		for (String name : List.of("onPlace", "neighborChanged")) {
 			MethodNode host = named(target,name); if(host==null)return 0;
 			List<MethodInsnNode> found = new ArrayList<>();
-			for(var i:host.instructions)if(i instanceof MethodInsnNode c && REGISTRIES.contains(c.owner)
+			for(var i:host.instructions)if(i instanceof MethodInsnNode c && c.owner.equals(REGISTRY)
 					&& c.name.equals("canInteract") && c.desc.equals(INTERACT) && c.getOpcode()==Opcodes.INVOKESTATIC)found.add(c);
 			if(found.size()!=1)return 0;
 			// The registry's answer decides the fluid tick: true (handled) jumps past scheduleTick. The wrap answers true
@@ -78,15 +75,6 @@ public final class CarpetFluidMixinAdapter {
 			code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE,OPERATION,"call","([Ljava/lang/Object;)Ljava/lang/Object;",true));
 			code.add(new TypeInsnNode(Opcodes.CHECKCAST,"java/lang/Boolean"));code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,"java/lang/Boolean","booleanValue","()Z",false));
 			LabelNode handled=new LabelNode();code.add(new JumpInsnNode(Opcodes.IFNE,handled));
-			// Only with -Dforbric.fluidInteractions=off: onPlace's MinecraftForge registry is then neutered. Give NeoForge
-			// the unhandled reaction before applying Carpet's tail rule. With the repair on, MinecraftForge's registry
-			// answers placement itself (vanilla's rules and its mods'), as on MinecraftForge, and asking NeoForge's too
-			// would run NeoForge mods' rules on placement, which NeoForge's own onPlace never does.
-			if(call.owner.equals(REGISTRIES.get(1))&&!FluidInteractionsInjector.enabled()) {
-				code.add(new VarInsnNode(Opcodes.ALOAD,1));code.add(new VarInsnNode(Opcodes.ALOAD,2));
-				code.add(new MethodInsnNode(Opcodes.INVOKESTATIC,REGISTRIES.getFirst(),"canInteract",INTERACT,false));
-				code.add(new JumpInsnNode(Opcodes.IFNE,handled));
-			}
 			callback(code,4);
 			code.add(new VarInsnNode(Opcodes.ALOAD,0));code.add(new VarInsnNode(Opcodes.ALOAD,1));code.add(new VarInsnNode(Opcodes.ALOAD,2));
 			state(code,1,2);code.add(new VarInsnNode(Opcodes.ALOAD,4));
@@ -106,19 +94,16 @@ public final class CarpetFluidMixinAdapter {
 		if(!selects(inject,"shouldSpreadLiquid"))return 0;
 		List<AnnotationNode> oldAt=MixinFit.atNodes(inject);
 		if(oldAt.size()!=1||!("L"+FLUID_STATE+";isSource()Z").equals(MixinFit.value(oldAt.getFirst(),"target")))return 0;
-		// Vanilla has a real shouldSpreadLiquid caller, so this adaptation is only for the registry carriers.
+		// Vanilla has a real shouldSpreadLiquid caller, so this adaptation is only for the registry carrier.
 		MethodNode onPlace=named(liquid,"onPlace");
-		if(onPlace==null||REGISTRIES.stream().noneMatch(r->count(onPlace,"L"+r+";canInteract"+INTERACT)==1))return 0;
+		if(onPlace==null||count(onPlace,"L"+REGISTRY+";canInteract"+INTERACT)!=1)return 0;
 		List<AnnotationNode> points=new ArrayList<>();
-		// Placement asks MinecraftForge's registry and a neighbour change NeoForge's (FluidInteractionsInjector), so the
-		// rule goes into both. With -Dforbric.fluidInteractions=off MinecraftForge's is neutered — no interact call to
-		// inject at — and the blackstone fallback hands placement to NeoForge's, which then carries it alone.
-		List<String> registries=FluidInteractionsInjector.enabled()?REGISTRIES:List.of(REGISTRIES.getFirst());
+		// Placement and a neighbour change both ask NeoForge's registry, so the rule goes in.
 		String interact="interact(L"+LEVEL+";"+POS+POS+"L"+FLUID_STATE+";)V";
-		for(String registry:registries) {
-			ClassNode target=targets.apply(registry);if(target==null)return 0;
+		{
+			ClassNode target=targets.apply(REGISTRY);if(target==null)return 0;
 			MethodNode method=selector(target,"canInteract"+INTERACT);if(method==null)return 0;
-			String member="L"+registry+"$FluidInteraction;"+interact;
+			String member="L"+REGISTRY+"$FluidInteraction;"+interact;
 			int any=0;for(var i:method.instructions)if(i instanceof MethodInsnNode c&&(c.name+c.desc).equals(interact))any++;
 			if(count(method,member)!=1||any!=1)return 0;
 			boolean neighbor=false;
@@ -126,10 +111,6 @@ public final class CarpetFluidMixinAdapter {
 					&& next(c) instanceof VarInsnNode v&&v.getOpcode()==Opcodes.ASTORE&&v.var==5)neighbor=true;
 			if(!neighbor)return 0;points.add(at(member));
 		}
-		// One @At for both: each registry calls its own FluidInteraction.interact exactly once (checked above), and a
-		// point without an owner matches that one call in either. Two owner-qualified points would each miss in the
-		// other registry, which Mixin tolerates but the preflight census reads as a half-applied mixin.
-		if(points.size()>1)points=List.of(at(interact));
 		MethodNode fizz=selector(liquid,"fizz(Lnet/minecraft/world/level/LevelAccessor;"+POS+")V");
 		if(fizz==null||(fizz.access&Opcodes.ACC_STATIC)!=0||count(fizz,"Lnet/minecraft/world/level/LevelAccessor;levelEvent(I"+POS+"I)V")!=1)return 0;
 		MethodInsnNode fizzCall=null;VarInsnNode receiver=null;int thisLoads=0;
@@ -146,7 +127,7 @@ public final class CarpetFluidMixinAdapter {
 		if(mixin.invisibleAnnotations==null)return 0;
 		AnnotationNode declaration=mixin.invisibleAnnotations.stream().filter(a->a.desc.equals("Lorg/spongepowered/asm/mixin/Mixin;")).findFirst().orElse(null);
 		if(declaration==null)return 0;
-		set(declaration,"value",registries.stream().map(Type::getObjectType).toList());
+		set(declaration,"value",List.of(Type.getObjectType(REGISTRY)));
 		original.visibleAnnotations.remove(inject);original.name+="$forbricOriginal";
 		original.instructions.remove(receiver);fizzCall.name="forbric$carpetFizz";fizzCall.setOpcode(Opcodes.INVOKESTATIC);fizzCall.itf=false;
 		makeStatic(original,mixin.name);

@@ -182,14 +182,13 @@ public final class MixinFitReport {
 	static Ecosystem platformOf(Map<String, byte[]> content) {
 		List<Ecosystem> declared = new ArrayList<>();
 		if (content.containsKey("fabric.mod.json")) declared.add(Ecosystem.FABRIC);
-		if (content.containsKey("META-INF/mods.toml")) declared.add(Ecosystem.FORGE);
 		if (content.containsKey("META-INF/neoforge.mods.toml")) declared.add(Ecosystem.NEOFORGE);
 		return declared.size() == 1 ? declared.get(0) : null;
 	}
 
 	/**
 	 * The one mod a unit's manifest declares for {@code platform}, as discovery reads it, or null when it declares none
-	 * or several (a MinecraftForge toml listing two mods shares one config list between them, which the boot leaves
+	 * or several (a neoforge.mods.toml listing two mods shares one config list between them, which the boot leaves
 	 * unowned) or the manifest cannot be read: then no injector target is judged absent from that platform's game.
 	 */
 	static DiscoveredMod modOf(Map<String, byte[]> content, Ecosystem platform, String source) {
@@ -199,7 +198,7 @@ public final class MixinFitReport {
 				byte[] json = content.get("fabric.mod.json");
 				return json == null ? null : FabricModJsonReader.read(new ByteArrayInputStream(json), source);
 			}
-			byte[] toml = content.get(platform == Ecosystem.FORGE ? "META-INF/mods.toml" : "META-INF/neoforge.mods.toml");
+			byte[] toml = content.get("META-INF/neoforge.mods.toml");
 			if (toml == null) return null;
 			List<DiscoveredMod> mods = ForgeMetadataMapper.toDiscoveredMods(ModsTomlParser.parse(new ByteArrayInputStream(toml)),
 					"0", source, List.of(), List.of(), config -> true, platform);
@@ -222,7 +221,7 @@ public final class MixinFitReport {
 		return out;
 	}
 
-	/** A jar plus every mod jar nested inside it (Fabric {@code META-INF/jars}, Forge {@code META-INF/jarjar}). */
+	/** A jar plus every mod jar nested inside it (Fabric {@code META-INF/jars}, NeoForge {@code META-INF/jarjar}). */
 	static Map<String, Map<String, byte[]>> expand(Path jar) throws IOException {
 		Map<String, Map<String, byte[]>> units = new LinkedHashMap<>();
 		Map<String, byte[]> top = readJar(jar);

@@ -58,7 +58,7 @@ class MixinRetargetRenamedBodyTest {
 	private static final String WITH = "(I)Lnet/minecraft/network/chat/Style;";
 	private static final String CHECK_EMPTY = "L" + STYLE + ";checkEmptyAfterChange(L" + STYLE + ";Ljava/lang/Object;Ljava/lang/Object;)L" + STYLE + ";";
 	private static final String ITEM_STACK = "net/minecraft/world/item/ItemStack";
-	private static final String TOOLTIP = CarrierRenameCensusTest.TOOLTIP;
+	private static final String TOOLTIP = "(Lnet/minecraft/world/item/Item$TooltipContext;Lnet/minecraft/world/item/component/TooltipDisplay;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;)V";
 	private static final String ADD_TO_TOOLTIP = "L" + ITEM_STACK + ";addToTooltip(Lnet/minecraft/core/component/DataComponentType;"
 			+ "Lnet/minecraft/world/item/Item$TooltipContext;Lnet/minecraft/world/item/component/TooltipDisplay;"
 			+ "Ljava/util/function/Consumer;Lnet/minecraft/world/item/TooltipFlag;)V";
@@ -180,7 +180,7 @@ class MixinRetargetRenamedBodyTest {
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver(ITEM_STACK, uncalledTooltip(true, true))).isEmpty(), "called");
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver(ITEM_STACK, uncalledTooltip(true, false))).isEmpty(), "NeoForge mod");
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertEquals(1, MixinRetarget.plan(MixinFit.parse(mixin), resolver(ITEM_STACK, uncalledTooltip(true, false))).rewrites().size(),
 				"MinecraftForge kept vanilla's body in addDetailsToTooltip");
 
@@ -230,7 +230,7 @@ class MixinRetargetRenamedBodyTest {
 	void onlyAModOfAnEcosystemTheRowListsMoves() {
 		Function<String, byte[]> resolver = resolver(MANAGER, manager(true));
 		byte[] mixin = mixin(MANAGER, "addEntity", TICKING);
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FORGE);
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty());
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty());

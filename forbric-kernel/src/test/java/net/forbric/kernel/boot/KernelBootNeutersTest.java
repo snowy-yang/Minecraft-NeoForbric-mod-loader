@@ -28,27 +28,27 @@ import org.objectweb.asm.tree.MethodNode;
  * rules run through that method, and a neuter there silenced them while every other test and gate stayed green.
  */
 class KernelBootNeutersTest {
-	private static final String REGISTRY = ForeignType.FLUID_INTERACTION_REGISTRY.binary(Ecosystem.FORGE);
+	private static final String REGISTRY = ForeignType.FLUID_INTERACTION_REGISTRY.binary(Ecosystem.NEOFORGE);
 	private static final String CAN_INTERACT = "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Z";
 	private static final Path FORGE_CARRIER = TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar");
 
 	@Test void withTheRepairOnNoSideNeutersMinecraftForgesFluidRegistry() {
 		for (KernelBoot.Side side : KernelBoot.Side.values()) {
-			assertFalse(owners(KernelBoot.neuters(side, true)).contains(REGISTRY), side + ": " + owners(KernelBoot.neuters(side, true)));
+			assertFalse(owners(KernelBoot.neuters(side)).contains(REGISTRY), side + ": " + owners(KernelBoot.neuters(side)));
 		}
 	}
 
 	@Test void withTheRepairOffEverySideNeutersItAgain() {
 		for (KernelBoot.Side side : KernelBoot.Side.values()) {
-			assertTrue(owners(KernelBoot.neuters(side, false)).contains(REGISTRY), side.toString());
+			assertTrue(owners(KernelBoot.neuters(side)).contains(REGISTRY), side.toString());
 		}
 	}
 
 	@Test void onTheRealRegistryTheRepairOnLeavesCanInteractWholeAndOffEmptiesIt() throws Exception {
 		byte[] registry = read(FORGE_CARRIER, REGISTRY.replace('.', '/'));
 		for (KernelBoot.Side side : KernelBoot.Side.values()) {
-			assertSame(registry, KernelBoot.neuters(side, true).transform(REGISTRY, registry, null), side + ": the repair on leaves it alone");
-			MethodNode emptied = canInteract(KernelBoot.neuters(side, false).transform(REGISTRY, registry, null));
+			assertSame(registry, KernelBoot.neuters(side).transform(REGISTRY, registry, null), side + ": the repair on leaves it alone");
+			MethodNode emptied = canInteract(KernelBoot.neuters(side).transform(REGISTRY, registry, null));
 			assertEquals(List.of(Opcodes.ICONST_0, Opcodes.IRETURN), real(emptied), side + ": off, it answers false as before the repair");
 			assertTrue(real(canInteract(registry)).size() > 2, "premise: the carrier's canInteract walks its interactions");
 		}

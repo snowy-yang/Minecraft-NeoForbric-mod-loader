@@ -42,9 +42,9 @@ import org.objectweb.asm.tree.MethodNode;
  *
  * <h2>Why resolution and not provenance</h2>
  *
- * <p>The merged base IS NeoForge's patched Minecraft — {@code MergedBaseBuilder} takes NeoForge as the base and
- * splices Forge in, so its own report reads {@code forge=195 neo=10161 MERGED=611}. "The target is a class
- * Forge/NeoForge owns" therefore describes ~93% of every class in the jar: it is the normal state, not a hazard
+ * <p>The merged base IS NeoForge's patched Minecraft — {@code MergedBaseBuilder} builds it from NeoForge's patched
+ * jar. "The target is a class
+ * NeoForge owns" therefore describes ~93% of every class in the jar: it is the normal state, not a hazard
  * signal. Measured over the 163 suppressions the previous owned-target rule actually made, 108 (66%) targeted a
  * class BYTE-IDENTICAL to NeoForge's own patched jar.
  *
@@ -72,7 +72,7 @@ import org.objectweb.asm.tree.MethodNode;
  * <h2>What native drops as well</h2>
  *
  * <p>A miss is the merge's only when the mod's own platform had the member: vanilla 26.2 for a Fabric mod, its own
- * patched game for a MinecraftForge or NeoForge mod. An injector whose every target that platform lacks too, and which
+ * patched game for a NeoForge mod. An injector whose every target that platform lacks too, and which
  * nothing requires to inject, is one native Mixin drops without a word; it is counted neither way and listed in
  * {@link Result#nativeAbsent}, so the mixin is judged on the rest. See {@link NativeAbsentTargets}.
  */

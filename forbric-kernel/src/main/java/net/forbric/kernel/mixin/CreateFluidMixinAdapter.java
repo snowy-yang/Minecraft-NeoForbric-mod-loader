@@ -39,7 +39,7 @@ public final class CreateFluidMixinAdapter {
 			if (host == null) return 0;
 			List<MethodInsnNode> nativeCalls = new ArrayList<>();
 			for (var instruction : host.instructions) if (instruction instanceof MethodInsnNode call
-					&& call.getOpcode() == Opcodes.INVOKESTATIC && CarpetFluidMixinAdapter.REGISTRIES.contains(call.owner)
+					&& call.getOpcode() == Opcodes.INVOKESTATIC && CarpetFluidMixinAdapter.REGISTRY.equals(call.owner)
 					&& call.name.equals("canInteract") && call.desc.equals(CarpetFluidMixinAdapter.INTERACT)) nativeCalls.add(call);
 			if (nativeCalls.size() != 1) return 0;
 			hosts.add(host); calls.add(nativeCalls.getFirst());

@@ -18,7 +18,6 @@ package net.forbric.kernel.runtime;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
-import java.util.function.BiFunction;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.forbric.api.Ecosystem;
@@ -26,25 +25,22 @@ import net.forbric.api.ModCatalog;
 import net.forbric.kernel.boot.ModMenuApiStandIn;
 import net.forbric.kernel.fabric.ModMenuConfigFactories;
 import net.forbric.kernel.util.ForbricLog;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 
 /**
  * Opens a mod's config screen, whichever ecosystem it came from.
  *
- * <h2>Why three answers and not one</h2>
+ * <h2>Why two answers and not one</h2>
  *
- * <p>There is no cross-loader config screen SPI, and the three that exist do not resemble each other. NeoForge
- * registers an {@code IConfigScreenFactory} as an extension point on the mod's container. Traditional
- * MinecraftForge registers a {@code ConfigScreenHandler.ConfigScreenFactory} record holding a
- * {@code BiFunction<Minecraft, Screen, Screen>}. Fabric has no config SPI at all — Fabric mods register with
- * <em>Mod Menu</em>, which is itself a mod, so the registry lives in a class this kernel cannot compile against
- * and may not be installed. When it is not, the registrations themselves — each mod's {@code "modmenu"}
- * entrypoint — are still there to be read, and are (see {@link ModMenu}).
+ * <p>There is no cross-loader config screen SPI, and the two that exist do not resemble each other. NeoForge
+ * registers an {@code IConfigScreenFactory} as an extension point on the mod's container. Fabric has no config
+ * SPI at all — Fabric mods register with <em>Mod Menu</em>, which is itself a mod, so the registry lives in a
+ * class this kernel cannot compile against and may not be installed. When it is not, the registrations
+ * themselves — each mod's {@code "modmenu"} entrypoint — are still there to be read, and are (see {@link ModMenu}).
  *
  * <p>Each screen therefore answers for its own family and no other. That is why Mod Menu opens Fabric mods'
  * configs and nothing else: it asks its own registry, which only Fabric mods can register in. Nothing is wrong
- * with it. The answer for an instance running three loaders is to ask all three registries, which is this class.
+ * with it. The answer for an instance running both loaders is to ask both registries, which is this class.
  *
  * <h2>Linkage</h2>
  *
@@ -81,7 +77,7 @@ public final class KernelModConfigScreens {
 			return switch (entry.ecosystem()) {
 				case FABRIC -> ModMenu.resolve(entry.modId(), parent, probe);
 				case NEOFORGE -> Neo.resolve(entry.modId(), parent, probe);
-				case FORGE -> Forge.resolve(entry.modId(), parent, probe);
+				default -> null;
 			};
 		} catch (Throwable t) {
 			// A family that is not present, or a mod whose factory throws. Neither may cost the screen the
@@ -101,13 +97,12 @@ public final class KernelModConfigScreens {
 	/**
 	 * How many mods of each ecosystem have a config screen, and the first one that does.
 	 *
-	 * <p>Exists for the client smoke. The whole claim of this class is that it asks THREE registries, and the
+	 * <p>Exists for the client smoke. The whole claim of this class is that it asks BOTH registries, and the
 	 * only way to see that is a count per family: a Fabric-only count would be indistinguishable from Mod Menu's
 	 * own answer, which is the thing this replaces.
 	 */
 	public static String summary() {
-		return probe(Ecosystem.FABRIC) + " Fabric, " + probe(Ecosystem.NEOFORGE) + " NeoForge, "
-				+ probe(Ecosystem.FORGE) + " MinecraftForge";
+		return probe(Ecosystem.FABRIC) + " Fabric, " + probe(Ecosystem.NEOFORGE) + " NeoForge";
 	}
 
 	private static int probe(Ecosystem ecosystem) {
@@ -241,21 +236,6 @@ public final class KernelModConfigScreens {
 					net.neoforged.neoforge.client.gui.IConfigScreenFactory.getForMod(container.get().getModInfo());
 			if (factory.isEmpty()) return null;
 			return probe ? PRESENT : factory.get().createScreen(container.get(), parent);
-		}
-	}
-
-	/** Traditional MinecraftForge's answer: a different registry, a different shape, the same question. */
-	private static final class Forge {
-		static Screen resolve(String modId, Screen parent, boolean probe) {
-			// Static, with no get(): the two families' ModList classes share a name and not much else.
-			Optional<? extends net.minecraftforge.fml.ModContainer> container =
-					net.minecraftforge.fml.ModList.getModContainerById(modId);
-			if (container.isEmpty()) return null;
-			Optional<BiFunction<Minecraft, Screen, Screen>> factory =
-					net.minecraftforge.client.ConfigScreenHandler.getScreenFactoryFor(
-							container.get().getModInfo());
-			if (factory.isEmpty()) return null;
-			return probe ? PRESENT : factory.get().apply(Minecraft.getInstance(), parent);
 		}
 	}
 }

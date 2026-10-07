@@ -107,8 +107,7 @@ public final class ModsButtonRedirector implements ClassTransformer {
 	 * own internals would be rewriting the thing nothing is supposed to reach any more.
 	 */
 	private static final Set<String> EXEMPT = Set.of(
-			ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE),
-			ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.FORGE));
+			ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE));
 
 	/** Named through {@link ForeignType} so neither family's spelling can be the one that quietly stops matching. */
 	/**
@@ -132,7 +131,6 @@ public final class ModsButtonRedirector implements ClassTransformer {
 
 	private static final Set<String> REPLACED = Set.of(
 			ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE),
-			ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.FORGE),
 			NEOFORGE_PRE_88_MOD_LIST_SCREEN);
 
 	/**

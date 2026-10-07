@@ -105,7 +105,7 @@ final class PortalSpawnFixture implements AutoCloseable {
 
 	private static void copyCarrierHook(Path classes, String jar, String owner) throws Exception {
 		ClassNode original = new ClassNode();
-		new ClassReader(ForgeSpawnFixture.staged(jar, owner)).accept(original, 0);
+		new ClassReader(TestFixtures.stagedClass(jar, owner)).accept(original, 0);
 		var hook = original.methods.stream().filter(m -> m.name.equals("onTrySpawnPortal")).findFirst().orElseThrow();
 		ClassWriter writer = new ClassWriter(0);
 		writer.visit(original.version, original.access, original.name, null, "java/lang/Object", null);

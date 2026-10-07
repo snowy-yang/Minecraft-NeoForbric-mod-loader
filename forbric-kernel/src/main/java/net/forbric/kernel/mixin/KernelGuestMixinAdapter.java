@@ -47,8 +47,8 @@ import net.forbric.kernel.util.ForbricLog;
  * Derives, per mixin config, which of its guest mixins must not apply to the merged base — the general form of
  * {@link MergedBaseMixinCompat#SUPPRESSED_MIXINS}'s hand-written entries.
  *
- * <p>A guest Fabric/Forge mixin is written against VANILLA bytecode. In the merged base, Forge or NeoForge may have
- * won the byte-merge of the class the mixin targets and restructured it — a field the mixin {@code @Shadow}s is
+ * <p>A guest Fabric mixin is written against VANILLA bytecode. In the merged base, NeoForge may have
+ * restructured the class the mixin targets — a field the mixin {@code @Shadow}s is
  * never assigned, an {@code @Inject} anchor moved, a param was re-typed. Generic erasure lets many such mixins APPLY
  * with no error and then misbehave at runtime (the archetype: {@code fabric-rendering-v1}'s {@code GuiRendererMixin}
  * reads {@code GuiRenderer.pictureInPictureRenderers}, which the NeoForge-won merge never assigns → NPE). Whether a
@@ -56,8 +56,8 @@ import net.forbric.kernel.util.ForbricLog;
  *
  * <p><b>Provenance is not a usable signal either.</b> This used to drop every mixin whose target matched a
  * hand-curated owned-class/package table. That was wrong at the root: the merged base IS NeoForge's patched
- * Minecraft ({@code MergedBaseBuilder} takes NeoForge as the base and splices Forge in — {@code forge=195
- * neo=10161 MERGED=611}), so "Forge/NeoForge owns this class" describes ~93% of the jar. Measured over the 163
+ * Minecraft ({@code MergedBaseBuilder} builds it from NeoForge's patched jar), so "NeoForge owns this class" describes
+ * ~93% of the jar. Measured over the 163
  * suppressions that rule actually made, 108 targeted a class byte-identical to NeoForge's own jar, and restoring
  * them costs nothing. The table also could not see the failures that matter: fabric-block-api-v1 redirects
  * {@code BlockState.isAir()} inside {@code LevelChunkSection.setBlockState}, which the merged base calls as

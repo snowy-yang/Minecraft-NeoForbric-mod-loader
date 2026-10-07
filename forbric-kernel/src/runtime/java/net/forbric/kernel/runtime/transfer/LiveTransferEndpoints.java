@@ -69,9 +69,9 @@ public final class LiveTransferEndpoints {
 			long before = generation.getAsLong();
 			int amount = h.extract(max, tx); stillValid(valid); unchanged(before, generation); return amount;
 		}
-		// The store's own flag when it has one; otherwise NeoForge's legacy rule, capacity > 0. Nothing when gone.
-		public boolean canInsert() { var h = current(); return h != null && EnergyAbilities.forgeCanInsert(h); }
-		public boolean canExtract() { var h = current(); return h != null && EnergyAbilities.forgeCanExtract(h); }
+		// The store's own flag when it has one; otherwise the legacy rule, capacity > 0. Nothing when gone.
+		public boolean canInsert() { var h = current(); return h != null && EnergyAbilities.neoCanInsert(h); }
+		public boolean canExtract() { var h = current(); return h != null && EnergyAbilities.neoCanExtract(h); }
 		// Identity, not the record's component equality: two live views of one place are two endpoints.
 		@Override public boolean equals(Object other) { return this == other; }
 		@Override public int hashCode() { return System.identityHashCode(this); }

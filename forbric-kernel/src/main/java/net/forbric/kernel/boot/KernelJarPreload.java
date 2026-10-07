@@ -38,13 +38,11 @@ import net.forbric.kernel.util.ForbricLog;
  *
  * <p>The boot side is loaded from the kernel jar by the JVM's class-path loader, and that loader reads a class out of
  * the jar the first time something needs it. Much of the boot side is first needed long after boot, from bytecode the
- * kernel splices into the game: MinecraftForge's fluid rules reach {@code ForgeRuntimeInterop} at the first lava or
- * water placement that asks them, and NeoForge's {@code RegistryManager.revertToFrozen} reaches
+ * kernel splices into the game: NeoForge's {@code RegistryManager.revertToFrozen} reaches
  * {@code KernelRegistryRevert} when a player leaves a world. If the jar has been replaced on disk in between (a
  * developer redeploying mid-session), or sits on a volume that went away, that first use reads a file that no longer
- * holds the class: gate M22 measured both — a server crash report ("Exception ticking world",
- * {@code NoClassDefFoundError: net/forbric/kernel/interop/ForgeRuntimeInterop}) when the first lava flow came after
- * the jar was truncated, and a {@code NoClassDefFoundError} for {@code KernelRegistryRevert} on every disconnect.
+ * holds the class: gate M22 measured it — a {@code NoClassDefFoundError} for {@code KernelRegistryRevert} on every
+ * disconnect.
  *
  * <p>The exit hook used to be the only class resolved early for this reason (see {@code KernelBoot}). Every spliced
  * hook has the same exposure, and so does every class those hooks reach in turn, so naming them one at a time would

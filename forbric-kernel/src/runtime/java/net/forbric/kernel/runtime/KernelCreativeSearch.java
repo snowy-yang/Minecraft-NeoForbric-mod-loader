@@ -31,21 +31,18 @@ import net.neoforged.neoforge.client.CreativeModeTabSearchRegistry;
 import net.forbric.kernel.util.ForbricLog;
 
 /**
- * The creative search trees, filed where the merged creative screen reads them.
+ * The creative search trees, filed where the creative screen reads them.
  *
- * <p>Called from the three {@code SessionSearchTrees} methods whose merged bodies are MinecraftForge's
- * ({@code CreativeSearchTreesInjector}): vanilla's two producers {@code updateCreativeTooltips(Provider, List)} and
- * {@code updateCreativeTags(List)}, and MinecraftForge's reader {@code getSearchTree(Key)}. As merged, those three
- * kept their trees in the class's private MinecraftForge map, while the creative screen — NeoForge's — reads
- * NeoForge's {@link CreativeModeTabSearchRegistry}. A mod that rebuilt the creative tabs itself and then refreshed the
- * search through vanilla's methods (TCDCommons does it on every join) filled a map nothing reads, and took the
- * screen's own rebuild with it: the tabs had not changed since, so the screen skipped its rebuild and searched an
- * empty tree.
+ * <p>Called from the three {@code SessionSearchTrees} methods the injector redirects
+ * ({@code CreativeSearchTreesInjector}): vanilla's two producers {@code updateCreativeTooltips(Provider, List)}
+ * and {@code updateCreativeTags(List)}, and the reader {@code getSearchTree(Key)}. The producers file their trees
+ * under NeoForge's {@link CreativeModeTabSearchRegistry} keys, which is where the creative screen reads them, so a
+ * mod that rebuilds the creative tabs itself and then refreshes the search through vanilla's methods cannot fill
+ * a map nothing reads and leave the screen searching an empty tree.
  *
  * <p>Each producer refreshes every tab that has a search bar, the search tab from the list it was given and every
- * other from its own contents. That is what MinecraftForge's body did and what the screen's own rebuild does — a
- * superset of NeoForge's, which refreshes only the search tab and leaves a mod's searchable tab empty after such a
- * caller.
+ * other from its own contents — what the screen's own rebuild does, and a superset of the producers' vanilla
+ * bodies, which refresh only the search tab and leave a mod's searchable tab empty after such a caller.
  */
 public final class KernelCreativeSearch {
 	private static final AtomicBoolean REPORTED = new AtomicBoolean();
@@ -69,33 +66,11 @@ public final class KernelCreativeSearch {
 		}
 	}
 
-	/**
-	 * {@code SessionSearchTrees.getSearchTree(Key)}: a tag key's tag tree, any other key's name tree. A key nothing was
-	 * built under answers the empty tree — as merged it joined a default the merged constructor left incomplete.
-	 *
-	 * <p>The caller of this method is a MinecraftForge mod, and its key may come from MinecraftForge's own registry.
-	 * For the search tab both registries hand out vanilla's shared constants, but for a mod's searchable tab each
-	 * makes its own {@code Key}, so a MinecraftForge key is first turned into NeoForge's key for the same tab — the
-	 * one the trees are filed under. Without that, the tab's tree is there and the mod is told it is empty.
-	 */
+	/** {@code SessionSearchTrees.getSearchTree(Key)}: a tag key's tag tree, any other key's name tree. */
 	public static SearchTree<ItemStack> tree(SessionSearchTrees trees, SessionSearchTrees.Key key) {
-		SessionSearchTrees.Key filed = neoForgeKeyFor(key);
-		return CreativeModeTabSearchRegistry.getTagSearchKeys().containsValue(filed)
-				? trees.creativeTagSearch(filed)
-				: trees.creativeNameSearch(filed);
-	}
-
-	/** NeoForge's key for the tab MinecraftForge's {@code key} stands for; {@code key} itself when it is not one. */
-	private static SessionSearchTrees.Key neoForgeKeyFor(SessionSearchTrees.Key key) {
-		for (Map.Entry<CreativeModeTab, SessionSearchTrees.Key> tab
-				: net.minecraftforge.client.CreativeModeTabSearchRegistry.getTagSearchKeys().entrySet()) {
-			if (tab.getValue() == key) return CreativeModeTabSearchRegistry.getTagSearchKey(tab.getKey());
-		}
-		for (Map.Entry<CreativeModeTab, SessionSearchTrees.Key> tab
-				: net.minecraftforge.client.CreativeModeTabSearchRegistry.getNameSearchKeys().entrySet()) {
-			if (tab.getValue() == key) return CreativeModeTabSearchRegistry.getNameSearchKey(tab.getKey());
-		}
-		return key;
+		return CreativeModeTabSearchRegistry.getTagSearchKeys().containsValue(key)
+				? trees.creativeTagSearch(key)
+				: trees.creativeNameSearch(key);
 	}
 
 	private static List<ItemStack> itemsOf(CreativeModeTab tab, List<ItemStack> searchTabItems) {

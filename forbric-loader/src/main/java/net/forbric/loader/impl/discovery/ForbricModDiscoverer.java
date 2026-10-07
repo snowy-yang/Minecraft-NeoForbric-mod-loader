@@ -41,7 +41,7 @@ import net.forbric.loader.impl.metadata.forge.ModsTomlParser;
  * <p>A jar is classified by which descriptors it carries:
  * <ul>
  *   <li>{@code fabric.mod.json} (jar root) &rarr; a Fabric mod,</li>
- *   <li>{@code META-INF/mods.toml} or {@code META-INF/neoforge.mods.toml} &rarr; one or more Forge mods,</li>
+ *   <li>{@code META-INF/neoforge.mods.toml} &rarr; one or more NeoForge mods,</li>
  *   <li>a jar carrying both yields both (a multi-loader jar) &mdash; each side enters the unified list.</li>
  * </ul>
  *
@@ -51,9 +51,8 @@ import net.forbric.loader.impl.metadata.forge.ModsTomlParser;
  */
 public final class ForbricModDiscoverer {
 	public static final String FABRIC_MANIFEST = "fabric.mod.json";
-	public static final String FORGE_MANIFEST = "META-INF/mods.toml";
 	public static final String NEOFORGE_MANIFEST = "META-INF/neoforge.mods.toml";
-	/** The classic (Forge) default Access Transformer path, used when the toml declares none. */
+	/** FML's classic default Access Transformer path, used when the toml declares none. */
 	public static final String DEFAULT_AT = "META-INF/accesstransformer.cfg";
 
 	/** Discovers every mod jar directly inside {@code modsDir}. Non-mod jars are ignored. */
@@ -96,11 +95,9 @@ public final class ForbricModDiscoverer {
 				}
 			}
 
-			// Forge / NeoForge side — a jar may carry either or both (multiloader builds ship one toml per
-			// family). Each present manifest is reported truthfully under its own ecosystem; which family
-			// actually loads is a boot-time policy (the active game base), not a discovery concern.
+			// NeoForge side — the classic MinecraftForge {@code META-INF/mods.toml} is no longer discovered:
+			// the only game base is NeoForge's own patched jar, and its mods carry {@code neoforge.mods.toml}.
 			discoverForgeFamily(jar, NEOFORGE_MANIFEST, ModEcosystem.NEOFORGE, jarVersion, source, result);
-			discoverForgeFamily(jar, FORGE_MANIFEST, ModEcosystem.FORGE, jarVersion, source, result);
 		}
 
 		return result;

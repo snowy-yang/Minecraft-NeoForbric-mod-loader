@@ -40,7 +40,7 @@ import net.forbric.kernel.TestFixtures.Fixture;
  */
 class MixinRetargetRenamedBodyStagedTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar").normalize();
-	private static final String TOOLTIP = CarrierRenameCensusTest.TOOLTIP;
+	private static final String TOOLTIP = "(Lnet/minecraft/world/item/Item$TooltipContext;Lnet/minecraft/world/item/component/TooltipDisplay;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;)V";
 	private static final String ITEM_STACK = "net/minecraft/world/item/ItemStack";
 
 	/**

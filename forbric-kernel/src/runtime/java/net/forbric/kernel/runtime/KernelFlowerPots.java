@@ -2,31 +2,23 @@
 package net.forbric.kernel.runtime;
 
 import java.lang.reflect.Field;
-import java.util.Map;
-import java.util.function.Supplier;
 
 import com.google.common.collect.Table;
 import net.forbric.kernel.util.ForbricLog;
 import net.forbric.kernel.util.Reflect;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FlowerPotBlock;
 import net.neoforged.neoforge.registries.GameData;
 
 /**
- * Which full pot a plant makes, for every family's way of declaring one (FlowerPotRepairInjector).
+ * Which full pot a plant makes (FlowerPotRepairInjector).
  *
- * <p>The merged {@code FlowerPotBlock.useItemOn} is MinecraftForge's body: it looks the plant up in the empty pot's
- * {@code fullPots} map, which only MinecraftForge's constructor and {@code addPlant} ever filled, and the merge kept
- * NeoForge's bodies of both. NeoForge declares a pot by its constructor (empty pot + plant) and keeps them in
- * {@code GameData}'s pot table, which its registry bake callback fills — and that callback never runs on the merged
- * base, where the block registry is MinecraftForge's wrapper. So every lookup answered air.
- *
- * <p>The lookup now asks, in order: the empty pot's explicit {@code addPlant} entries (MinecraftForge's API), then
- * NeoForge's table, which {@link #rebuildTable} fills from every registered pot the way NeoForge's bake does. A
- * vanilla or Fabric pot is in that table too: NeoForge's (Block, Properties) constructor names the vanilla empty pot.
+ * <p>NeoForge declares a pot by its constructor (empty pot + plant) and keeps them in {@code GameData}'s pot table,
+ * which its registry bake callback fills — a bake that never runs under the kernel's own registry handling, so
+ * {@link #rebuildTable} fills it from every registered pot the way NeoForge's bake does. A vanilla or Fabric pot is
+ * in that table too: NeoForge's (Block, Properties) constructor names the vanilla empty pot.
  */
 public final class KernelFlowerPots {
 	private static volatile boolean warned;
@@ -35,16 +27,8 @@ public final class KernelFlowerPots {
 	}
 
 	/** The full pot {@code content} makes in {@code self}'s empty pot, or air. Never throws. */
-	public static Block fullPotFor(Map<?, ?> explicit, FlowerPotBlock self, Block content) {
+	public static Block fullPotFor(FlowerPotBlock self, Block content) {
 		try {
-			if (explicit != null && !explicit.isEmpty()) {
-				Identifier key = BuiltInRegistries.BLOCK.getKey(content);
-				// An unregistered block answers the default key (air); that is not a request for the air slot.
-				boolean aliased = content != Blocks.AIR && key.equals(BuiltInRegistries.BLOCK.getDefaultKey());
-				if (!aliased && explicit.get(key) instanceof Supplier<?> supplier && supplier.get() instanceof Block full) {
-					return full;
-				}
-			}
 			Block full = GameData.getFlowerPotBlockTable().get(self.getEmptyPot(), content);
 			return full != null ? full : Blocks.AIR;
 		} catch (Throwable failure) {
@@ -82,7 +66,7 @@ public final class KernelFlowerPots {
 			}
 			invalidateLegacyView();
 			ForbricLog.info("[Forbric/FlowerPot] filled NeoForge's flower pot table with %d pot(s)%s — its bake callback "
-					+ "never runs on the merged block registry, so every plant looked up air", entered,
+					+ "never runs under the kernel's registry handling, so every plant would look up air", entered,
 					failed == 0 ? "" : " (" + failed + " pot(s) could not name their plant yet)");
 			return entered;
 		} catch (Throwable failure) {

@@ -50,7 +50,6 @@ import net.forbric.kernel.util.ForbricLog;
  */
 public final class ForeignModPresenceInjector implements ClassTransformer {
 	private static final String NEOFORGE_MOD_LIST = ForeignType.MOD_LIST.binary(Ecosystem.NEOFORGE);
-	private static final String FORGE_MOD_LIST = ForeignType.MOD_LIST.binary(Ecosystem.FORGE);
 	private static final String IS_LOADED = "isLoaded";
 	private static final String IS_LOADED_DESC = "(Ljava/lang/String;)Z";
 	private static final String PRESENCE = "net/forbric/api/ModPresence";
@@ -66,14 +65,13 @@ public final class ForeignModPresenceInjector implements ClassTransformer {
 				+ "while that mod is running. Physics Mod took that branch next to a live Fabric Sodium: loaded, "
 				+ "mixins applied, no error anywhere, and nothing on screen";
 		return AnchorSet.of(
-				new AnchorSet.Anchor(NEOFORGE_MOD_LIST, AnchorSet.Severity.REQUIRED, cost),
-				new AnchorSet.Anchor(FORGE_MOD_LIST, AnchorSet.Severity.REQUIRED, cost));
+				new AnchorSet.Anchor(NEOFORGE_MOD_LIST, AnchorSet.Severity.REQUIRED, cost));
 	}
 
 	@Override
 	public byte[] transform(String className, byte[] classBytes, TransformContext context) {
 		if (classBytes == null || classBytes.length == 0) return classBytes;
-		if (!NEOFORGE_MOD_LIST.equals(className) && !FORGE_MOD_LIST.equals(className)) return classBytes;
+		if (!NEOFORGE_MOD_LIST.equals(className)) return classBytes;
 
 		ClassNode node = new ClassNode();
 		new ClassReader(classBytes).accept(node, 0);

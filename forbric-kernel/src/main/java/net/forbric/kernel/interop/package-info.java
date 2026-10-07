@@ -17,15 +17,12 @@
 /**
  * The reflective hooks that GUEST bytecode calls into.
  *
- * <p>Three classes, each the landing site of an {@code INVOKESTATIC} the kernel splices into someone else's class:
- * {@link net.forbric.kernel.interop.PayloadInterop} for the custom-payload codec and dispatch split between
- * Fabric API, MinecraftForge and NeoForge; {@link net.forbric.kernel.interop.ClientShutdown} for the non-daemon
- * executors a session leaves behind; {@link net.forbric.kernel.interop.ForgeRuntimeInterop} for the
- * Forge/NeoForge {@code FluidType} ABI split.
+ * <p>{@link net.forbric.kernel.interop.PayloadInterop} is the landing site of an {@code INVOKESTATIC} the kernel
+ * splices into someone else's class: the custom-payload codec and dispatch split between Fabric API and NeoForge.
  *
  * <h2>Why they are boot-side, and why every parameter is {@code Object}</h2>
  *
- * <p>They name no game type. Every Minecraft, Fabric, MinecraftForge and NeoForge class they touch is reached
+ * <p>They name no game type. Every Minecraft, Fabric and NeoForge class they touch is reached
  * reflectively through the class loader of the object they were handed, which is what lets them sit on the BOOT
  * side of the kernel's delegation split while being called from the GAME side — see
  * {@code DelegationPolicy}, which pins this package to the parent. That pinning is load-bearing: each of these

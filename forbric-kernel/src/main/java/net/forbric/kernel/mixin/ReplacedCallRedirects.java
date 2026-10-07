@@ -88,7 +88,7 @@ public final class ReplacedCallRedirects {
 					Opcodes.INVOKEVIRTUAL, 2, new int[] { 0, 1 },
 					List.of("Lnet/minecraft/client/Options;keySwapOffhand:Lnet/minecraft/client/KeyMapping;",
 							"Lnet/minecraft/client/Options;keyHotbarSlots:[Lnet/minecraft/client/KeyMapping;"),
-					null, new int[] { 0, -1 }, Set.of(Ecosystem.FABRIC, Ecosystem.FORGE),
+					null, new int[] { 0, -1 }, Set.of(Ecosystem.FABRIC),
 					"NeoForge's checkHotbarKeyPressed reads the key once and asks each mapping isActiveAndMatches(key) where "
 							+ "vanilla asked matches(event): the same key comparison plus NeoForge's key-conflict context and "
 							+ "modifier, for the off-hand swap and then each hotbar slot, in vanilla's order"),

@@ -83,9 +83,7 @@ public final class KernelForgeFamilyMixins {
 		int suppressed = 0;
 		int disabled = 0;
 		for (ForgeMixinConfig decl : declared) {
-			Ecosystem mine = decl.ecosystem() == Ecosystem.NEOFORGE
-					? Ecosystem.NEOFORGE
-					: Ecosystem.FORGE;
+			Ecosystem mine = Ecosystem.NEOFORGE;
 			if (MultiLoaderArbiter.suppressedFor(decl.jar(), mine)) {
 				suppressed++;
 				ForbricLog.debug("[Forbric/Mixin] skipping %s's %s — %s does not own %s", decl.modId(),

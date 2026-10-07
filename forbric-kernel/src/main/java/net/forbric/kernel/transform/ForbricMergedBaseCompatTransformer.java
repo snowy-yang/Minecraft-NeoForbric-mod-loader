@@ -45,22 +45,23 @@ import org.objectweb.asm.tree.TypeInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
 
 import net.forbric.api.Ecosystem;
-import net.forbric.api.EventBridges;
 import net.forbric.api.ForeignType;
-import net.forbric.api.GameEventBridge;
 import net.forbric.kernel.util.ForbricLog;
 
 /**
- * Repairs class-local bytecode invariants that can drift when two patched Minecraft bases are merged.
+ * Repairs class-local bytecode invariants of the game base — NeoForge's own patched jar, which a
+ * decompile-recompile pipeline produced — so vanilla parity and Fabric and NeoForge mod behaviour hold
+ * on it.
  */
 public final class ForbricMergedBaseCompatTransformer implements ClassTransformer {
 	/**
-	 * Reads another class's bytes, for the one repair that has to look up the superclass chain. Null when the
-	 * transformer was built without one, in which case that repair stands down rather than guessing.
+	 * Reads another class's bytes, for repairs that have to look beyond the class in hand. Kept because the
+	 * boot chain constructs this transformer with a resolver; no current repair walks a superclass chain,
+	 * so a transformer built without one simply runs every repair it has.
 	 */
 	private final java.util.function.Function<String, byte[]> classBytes;
 
-	/** Without a resolver: every repair except the shadowing-override one, which needs to read other classes. */
+	/** Without a resolver: every repair runs; the ones that would read other classes stand down instead of guessing. */
 	public ForbricMergedBaseCompatTransformer() {
 		this(null);
 	}
@@ -76,10 +77,10 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 
 	@Override
 	public AnchorSet anchors() {
-		// Independent repairs behind one `changed` flag -- dungeon generation, key mappings, the particle map,
-		// default attributes, the save on teardown. Each one can stop applying on its own, and a single
-		// class-level answer cannot see that. This is the largest reservoir of the failure this mechanism
-		// exists for, and it needs one claim per repair rather than one anchor per class.
+		// Independent repairs behind one `changed` flag -- key mappings, the particle map, the save on
+		// teardown. Each one can stop applying on its own, and a single class-level answer cannot see that.
+		// This is the largest reservoir of the failure this mechanism exists for, and it needs one claim per
+		// repair rather than one anchor per class.
 		//
 		// COUNTED, never written down. This sentence said "47" and the comment above it said "Forty" while
 		// REPAIRS held 49: two self-descriptions that drifted because nothing compared them to anything, in
@@ -93,54 +94,39 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	}
 
 	/** The repairs {@link #transform} runs, in its order; a test pins the two lists against each other. */
-	static final List<String> REPAIRS = List.of("repairLambdaBootstrapHandles", "addBlockStateModelConflictResolvers", "addBlockStateAppearanceResolver", "addMissingForgeFluidTypeBridge", "addMissingForgeKeyMappingLookupInitializer", "routeKeyMappingClickToPopulatedLookup", "giveKeyMappingItsMinecraftForgeFace", "giveKeyMappingItsVanillaMap", "giveTheVanillaParticleMapAViewOfTheLiveOne", "giveFeaturesPerStepItsVanillaDescriptorBack", "letDungeonsGenerateWithoutTheDataMap", "restoreDoublePrecisionToTheRandomSources", "convertRadiansWithVanillasFoldedConstant", "callVanillasWriteByteAgain", "saveTheHeightmapsVanillaSaves", "guardNeoForgesWorldModifierPass", "letForeignResourceConditionsThrough", "letForeignResourceConditionsThroughMinecraftForge", "letFabricResourceConditionsDecide", "translateAGuestsPrivateSkipMarker", "serveDefaultAttributesBothEcosystems", "restoreForgeClientInit", "restoreForgeGeometryReload", "nameTheReloadListenersNeoForgeRefusesToName", "dropInterfaceDefaultShadowingOverrides", "tolerateEmptyCreativeTabStacks", "routePlaceItemHookToNeoForge", "bridgeOrphanedPipRenderers", "keepForgeOutboundProtocolCurrent", "surviveTheMissingForgeModelDataManager", "dropTheWindowTitlesLoaderBrand", "keepTheSaveOffTheTeardownsFailurePath", "postNeoForgesItemTooltipEvent", "askNeoForgeWhatAnItemsAttributesAre", "readTheSpawnReasonThatIsActuallyWritten", "giveTheUnwrittenLoggerAValue", "addTheMissingCapabilityLifecycleStubs", "addTheMissingNbtBuilderFactory", "postMinecraftForgesReloadListenerEvent", "giveMinecraftForgesReloadEventItsConditionContext", "letMinecraftForgeIngredientTypesDecode", "letMinecraftForgeFluidsChooseTheirModel", "giveMinecraftForgesParticleLookupItsFirstVariant", "dropStubsThatBypassARealSuperclassMethod", "inlineTheSwitchMapTheMergeLost", "vetoUnjudgeableOverlayConditions", "hideTheLegacyLootModifierIndexFromTheDirectoryScan", "letModdedFeatureFlagsRegister", "dropTheKeyModifierSuffixBeforeParsingAKeyName", "letTheAtlasLowerItsMipLevelLikeVanilla", "wrapTheStreamsVanillaWraps", "returnFromANestedBootstrapBeforeItsTail", "letBothEcosystemsSetBurnTime", "letMinecraftForgeSeeSpawnerMobs", "letMinecraftForgeAddPackFinders");
+	static final List<String> REPAIRS = List.of("repairLambdaBootstrapHandles", "addBlockStateAppearanceResolver", "giveKeyMappingItsVanillaMap", "giveTheVanillaParticleMapAViewOfTheLiveOne", "restoreDoublePrecisionToTheRandomSources", "convertRadiansWithVanillasFoldedConstant", "callVanillasWriteByteAgain", "saveTheHeightmapsVanillaSaves", "guardNeoForgesWorldModifierPass", "letForeignResourceConditionsThrough", "letFabricResourceConditionsDecide", "translateAGuestsPrivateSkipMarker", "nameTheReloadListenersNeoForgeRefusesToName", "tolerateEmptyCreativeTabStacks", "bridgeOrphanedPipRenderers", "dropTheWindowTitlesLoaderBrand", "keepTheSaveOffTheTeardownsFailurePath", "vetoUnjudgeableOverlayConditions", "letModdedFeatureFlagsRegister", "wrapTheStreamsVanillaWraps");
 
 	private static final String NEO_EVENT_HOOKS_BINARY = "net.neoforged.neoforge.event.EventHooks";
 
 	/**
 	 * One claim per repair, in {@link #REPAIRS} order. A repair with one fixed target declares it REQUIRED with
 	 * the cost of its silence; one that scans by shape declares {@link AnchorSet#scanned}. Client-only targets
-	 * are simply never loaded on a dedicated server, which the ledger reports as absent, not missed. The two
-	 * repairs behind {@code -Dforbric.forgeClientInit} stand down with it, so switching them off is not a Miss.
+	 * are simply never loaded on a dedicated server, which the ledger reports as absent, not missed.
 	 */
 	@Override
 	public List<Claim> claims() {
-		boolean clientInit = !"off".equalsIgnoreCase(System.getProperty("forbric.forgeClientInit", "on"));
 		List<Claim> out = new ArrayList<>();
-		out.add(scanned("repairLambdaBootstrapHandles", "any class whose invokedynamic still names the old loader's hook owners"));
-		out.add(fixed("addBlockStateModelConflictResolvers", "net/minecraft/client/renderer/block/dispatch/BlockStateModel",
-				"every block model's geometry key and conflict resolver are gone — the merged BlockStateModel lacks the methods both families call"));
+		out.add(scanned("repairLambdaBootstrapHandles", "any class whose invokedynamic names a lambda handle that disagrees with the method it names"));
 		out.add(scanned("addBlockStateAppearanceResolver",
 				"net.minecraft.world.level.block.Block and ...block.state.BlockState, which each inherit "
 						+ "getAppearance as a default from BOTH NeoForge and fabric-api and declare neither, so the "
 						+ "first mod to ask a neighbour what it looks like — any connected-texture mod — dies on "
 						+ "IncompatibleClassChangeError mid-frame"));
-		out.add(scanned("addMissingForgeFluidTypeBridge", "every concrete fluid under net.minecraft.world.level.material implementing NeoForge's IFluidExtension"));
-		out.add(fixed("addMissingForgeKeyMappingLookupInitializer", KEY_MAPPING,
-				"MinecraftForge's KeyMapping.MAP is never initialised — every traditional-Forge key registration NPEs"));
-		out.add(fixed("routeKeyMappingClickToPopulatedLookup", KEY_MAPPING,
-				"key presses are looked up in the lookup registration never populated — MinecraftForge mods' keys never fire"));
-		out.add(fixed("giveKeyMappingItsMinecraftForgeFace", KEY_MAPPING,
-				"KeyMapping lacks the MinecraftForge-typed accessors — a Forge mod setting a conflict context NoSuchMethodErrors"));
 		out.add(fixed("giveKeyMappingItsVanillaMap", KEY_MAPPING,
 				"KeyMapping has no vanilla-typed MAP — a mod reading it as a Map dies on NoSuchFieldError (LiquidBounce, on a key press)"));
 		out.add(fixed("giveTheVanillaParticleMapAViewOfTheLiveOne", PARTICLE_RESOURCES,
 				"the vanilla-typed particle provider map stays empty — particles registered the vanilla way never render"));
-		out.add(fixed("giveFeaturesPerStepItsVanillaDescriptorBack", CHUNK_GENERATOR,
-				"ChunkGenerator.featuresPerStep keeps MinecraftForge's descriptor — the server cannot start (NoSuchFieldError)"));
-		out.add(fixed("letDungeonsGenerateWithoutTheDataMap", MONSTER_ROOM_FEATURE,
-				"monster rooms never generate — the NeoForge data map they ask has no vanilla fallback"));
 		out.add(randomSourcePrecisionEnabled()
 				? new Claim(claimId("restoreDoublePrecisionToTheRandomSources"), AnchorSet.of(
 						new AnchorSet.Anchor(XOROSHIRO_RANDOM_SOURCE.replace('/', '.'), AnchorSet.Severity.REQUIRED,
-								"every noise octave's origin is off — the merged nextDouble() rounds through float, so no "
+								"every noise octave's origin is off — the patched nextDouble() rounds through float, so no "
 										+ "world generates the way the same seed does in vanilla"),
 						new AnchorSet.Anchor(BIT_RANDOM_SOURCE.replace('/', '.'), AnchorSet.Severity.REQUIRED,
 								"WorldgenRandom's nextDouble() rounds through float and can return exactly 1.0 — out of "
 										+ "the [0,1) range every caller assumes")))
 				: scanned("restoreDoublePrecisionToTheRandomSources", "-D" + RANDOM_PRECISION_PROPERTY + "=off"));
 		out.add(fixed("convertRadiansWithVanillasFoldedConstant", "net/minecraft/world/entity/Entity",
-				"every angle the game computes from a vector is off in the eighth digit — the merged base divides by "
+				"every angle the game computes from a vector is off in the eighth digit — the patched base divides by "
 						+ "pi at run time where vanilla multiplies by a constant it folded in float"));
 		out.add(vanillaWriteByteEnabled()
 				? fixed("callVanillasWriteByteAgain", PLAYER_ABILITIES_PACKET,
@@ -157,106 +143,29 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 				"NeoForge's biome/structure modifier pass is neutered — every neoforge:biome_modifier does nothing"));
 		out.add(fixed("letForeignResourceConditionsThrough", ICONDITION,
 				"another ecosystem's condition type fails NeoForge's evaluator and the whole registry load with it"));
-		out.add(fixed("letForeignResourceConditionsThroughMinecraftForge", FORGE_ICONDITION,
-				"another ecosystem's condition type fails MinecraftForge's evaluator and the whole registry load with it"));
 		out.add(fixed("letFabricResourceConditionsDecide", CONDITIONAL_OPS,
 				"fabric:load_conditions has no evaluator — a Fabric mod's conditional data files all load"));
 		out.add(fixed("translateAGuestsPrivateSkipMarker", JSON_RELOAD_LISTENER,
-				"fabric-api's skip marker reaches the merged reader's cast — the datapack load dies (\"can't proceed with server load\")"));
-		out.add(fixed("serveDefaultAttributesBothEcosystems", DEFAULT_ATTRIBUTES,
-				"DefaultAttributes reads only the ecosystem that won the merge — the other's entities \"have no attributes\""));
-		out.add(clientInit ? fixed("restoreForgeClientInit", "net/minecraft/client/Minecraft",
-				"ForgeHooksClient.initClientHooks never runs — traditional-Forge key mappings, renderers and layers are never registered")
-				: scanned("restoreForgeClientInit", "switched off by -Dforbric.forgeClientInit=off"));
-		out.add(clientInit ? fixed("restoreForgeGeometryReload", "net/minecraft/client/resources/model/ModelManager",
-				"MinecraftForge's geometry loaders never reload — Forge OBJ/custom models are missing")
-				: scanned("restoreForgeGeometryReload", "switched off by -Dforbric.forgeClientInit=off"));
+				"fabric-api's skip marker reaches the reader's cast — the datapack load dies (\"can't proceed with server load\")"));
 		out.add(fixed("nameTheReloadListenersNeoForgeRefusesToName", ADD_CLIENT_RELOAD_LISTENERS,
 				"a Fabric mod's client reload listener kills the client — NeoForge refuses to name it"));
-		out.add(scanned("dropInterfaceDefaultShadowingOverrides", "every net.minecraft.client.gui class implementing ContainerEventHandler"));
 		out.add(fixed("tolerateEmptyCreativeTabStacks", NEO_EVENT_HOOKS_BINARY.replace('.', '/'),
 				"one empty stack from any mod aborts the whole creative menu"));
-		out.add(fixed("routePlaceItemHookToNeoForge", ITEM_STACK,
-				"placing any block ClassCastExceptions on the server thread — ItemStack.useOn drains a NeoForge-typed snapshot list as MinecraftForge's"));
 		out.add(fixed("bridgeOrphanedPipRenderers", GUI_RENDERER,
 				"a picture-in-picture renderer registered the vanilla way never draws"));
-		out.add(fixed("keepForgeOutboundProtocolCurrent", "net/minecraft/network/Connection",
-				"MinecraftForge's channels pick their packet type from a protocol field nothing writes — Forge networking sends the wrong packet type"));
-		out.add(fixed("surviveTheMissingForgeModelDataManager", "net/minecraft/client/renderer/extract/LevelExtractor",
-				"the block-breaking overlay crashes the render frame on MinecraftForge's absent model-data manager"));
 		out.add(fixed("dropTheWindowTitlesLoaderBrand", "net/minecraft/client/Minecraft",
 				"the window title carries another loader's brand"));
 		out.add(fixed("keepTheSaveOffTheTeardownsFailurePath", INTEGRATED_SERVER,
 				"a throw in IntegratedServer.teardownPublishedState costs the world save"));
-		out.add(fixed("postNeoForgesItemTooltipEvent", ITEM_STACK,
-				"NeoForge mods cannot add a line to any item's tooltip — the merged getTooltipLines posts only MinecraftForge's event"));
-		out.add(fixed("askNeoForgeWhatAnItemsAttributesAre", ITEM_STACK,
-				"an item's attributes are read off the raw component — elytra flight and every NeoForge attribute modifier stop working"));
-		out.add(fixed("readTheSpawnReasonThatIsActuallyWritten", "net/minecraft/world/entity/Mob",
-				"Mob.getSpawnReason() reads a field the game never writes — spawn-reason logic sees null"));
-		out.add(scanned("giveTheUnwrittenLoggerAValue", "any class with a static final Logger the merge left unassigned"));
-		// The capability composition (E) runs first in the same phase and composes the three roots itself; the
-		// stubs are its fallback and are expected to find nothing while it is on. Measured on gate-m9: all three
-		// declined, exactly because the composed methods were already there.
-		out.add(ForgeCapabilityCompositionTransformer.enabled()
-				? scanned("addTheMissingCapabilityLifecycleStubs", "the capability composition composes the roots first; these stubs are its fallback")
-				: new Claim(claimId("addTheMissingCapabilityLifecycleStubs"), AnchorSet.of(
-						capabilityRoot("net/minecraft/world/entity/Entity"), capabilityRoot("net/minecraft/world/level/block/entity/BlockEntity"),
-						capabilityRoot("net/minecraft/world/level/Level"))));
-		out.add(fixed("addTheMissingNbtBuilderFactory", "net/minecraft/nbt/CompoundTag",
-				"CompoundTag.builder() is gone — IForgeBlockPos.toCompoundTag and ForgeHooks.createEmptyStructure NoSuchMethodError"));
-		out.add(fixed("postMinecraftForgesReloadListenerEvent", RELOADABLE_SERVER_RESOURCES,
-				"MinecraftForge's AddReloadListenerEvent is never posted — traditional-Forge JSON data loaders never register"));
-		out.add(fixed("giveMinecraftForgesReloadEventItsConditionContext", FORGE_RELOAD_EVENT,
-				"AddReloadListenerEvent.getConditionContext() NoSuchMethodErrors the first Forge data loader that asks"));
-		out.add(fixed("letMinecraftForgeIngredientTypesDecode", "net/minecraft/world/item/crafting/Ingredient",
-				"MinecraftForge ingredient types (forge:intersection, …) fail to parse — every recipe using one is dropped"));
-		out.add(fixed("letMinecraftForgeFluidsChooseTheirModel", FLUID_RENDERER,
-				"a MinecraftForge fluid renders with vanilla water's model and tint"));
-		out.add(fixed("giveMinecraftForgesParticleLookupItsFirstVariant", WEIGHTED_VARIANTS,
-				"WeightedVariants.first is never written — MinecraftForge's particle lookup reads null"));
-		out.add(scanned("dropStubsThatBypassARealSuperclassMethod", "any class carrying a measured merge stub that shadows a real superclass method"));
-		out.add(fixed("inlineTheSwitchMapTheMergeLost", LOST_SWITCH_MAPS.get(0).user(),
-				"AbstractFurnaceBlockEntity's Direction switch NoSuchFieldErrors on the $SwitchMap the merge lost — furnaces cannot be interacted with"));
 		out.add(fixed("vetoUnjudgeableOverlayConditions", OVERLAY_ENTRY,
 				"a pack.mcmeta overlay gated by a condition no evaluator here can judge is mounted anyway"));
-		out.add(new Claim(claimId("hideTheLegacyLootModifierIndexFromTheDirectoryScan"), AnchorSet.of(
-				new AnchorSet.Anchor(LOOT_MODIFIER_MANAGER_NEO.replace('/', '.'), AnchorSet.Severity.REQUIRED,
-						"NeoForge's loot-modifier manager parse-fails MinecraftForge's legacy index file on every reload"),
-				new AnchorSet.Anchor(LOOT_MODIFIER_MANAGER_FORGE.replace('/', '.'), AnchorSet.Severity.REQUIRED,
-						"MinecraftForge's loot-modifier manager parse-fails its own index as a modifier on every reload"))));
 		out.add(fixed("letModdedFeatureFlagsRegister", FEATURE_FLAGS,
 				"NeoForge mods' declared feature flags are never registered — a mod asking for its own flag dies in its static "
 						+ "initialiser and its datapack then fails the whole registry load"));
-		// Both of these are switched off by their own property, and a claim that stays REQUIRED while its repair is
-		// off reports the switch as a broken anchor. The lesson is J11's: a conditional repair declares a
-		// conditional claim, or the census stops meaning what it says.
-		out.add(keyModifierSuffixEnabled()
-				? fixed("dropTheKeyModifierSuffixBeforeParsingAKeyName", INPUT_CONSTANTS,
-						"one modded key bound with a modifier throws out of options.txt parsing — the player loses EVERY setting")
-				: scanned("dropTheKeyModifierSuffixBeforeParsingAKeyName", "-D" + KEY_SUFFIX_PROPERTY + "=off"));
-		out.add(mipmapLoweringEnabled()
-				? fixed("letTheAtlasLowerItsMipLevelLikeVanilla", SPRITE_LOADER,
-						"an atlas holding a sprite smaller than the mip level allows fails to upload — the FIRST resource "
-								+ "reload dies, every pack is dropped, and the client sits on a black screen with no further log")
-				: scanned("letTheAtlasLowerItsMipLevelLikeVanilla", "-D" + MIPMAP_PROPERTY + "=off"));
 		out.add(fixed("wrapTheStreamsVanillaWraps", BOOTSTRAP,
 				"System.out and System.err are never routed into log4j, so every line a mod PRINTS rather than logs "
 						+ "is absent from latest.log — including the debug output a mod is told to turn on when it "
 						+ "misbehaves"));
-		out.add(fixed("returnFromANestedBootstrapBeforeItsTail", BOOTSTRAP,
-				"MinecraftForge's ForgeRegistries re-enters Bootstrap.bootStrap() from inside the first one, so every "
-						+ "mixin at its TAIL runs twice, the first time half-way through bootstrap — a Fabric mod that "
-						+ "initialises there once (cristellib) throws and the server does not start"));
-		out.add(fixed("letBothEcosystemsSetBurnTime", FUEL_VALUES,
-				"NeoForge's FurnaceFuelBurnTimeEvent is never posted, so a NeoForge mod cannot change how long "
-						+ "anything burns while a MinecraftForge one can"));
-		out.add(fixed("letMinecraftForgeSeeSpawnerMobs", BASE_SPAWNER,
-				"MobSpawnEvent$FinalizeSpawn is never posted, so a MinecraftForge mod can neither see nor refuse "
-						+ "a mob a spawner produces"));
-		out.add(scanned("letMinecraftForgeAddPackFinders",
-				"AddPackFindersEvent is never posted, so a MinecraftForge mod's own data pack is never offered "
-						+ "to any repository"));
 		return List.copyOf(out);
 	}
 
@@ -266,12 +175,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 
 	private Claim scanned(String repair, String why) {
 		return new Claim(claimId(repair), AnchorSet.scanned(why));
-	}
-
-	private static AnchorSet.Anchor capabilityRoot(String internal) {
-		return new AnchorSet.Anchor(internal.replace('/', '.'), AnchorSet.Severity.REQUIRED,
-				"the capability lifecycle stubs are missing on " + internal.substring(internal.lastIndexOf('/') + 1)
-						+ " — its own merged code calls invalidateCaps/reviveCaps and NoSuchMethodErrors");
 	}
 
 
@@ -289,81 +192,35 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	public byte[] transform(String className, byte[] classBytes, TransformContext context, ClaimReporter reporter) {
 		if (classBytes == null || classBytes.length == 0) return classBytes;
 		try {
-			boolean namedOldLoader = stillNamesTheOldLoader(classBytes);
 			ClassNode node = new ClassNode();
 			new ClassReader(classBytes).accept(node, 0);
 			boolean changed = false;
 			changed |= claim(reporter, "repairLambdaBootstrapHandles", repairLambdaBootstrapHandles(node));
-			changed |= claim(reporter, "addBlockStateModelConflictResolvers", addBlockStateModelConflictResolvers(node));
 			changed |= claim(reporter, "addBlockStateAppearanceResolver", addBlockStateAppearanceResolver(node));
-			changed |= claim(reporter, "addMissingForgeFluidTypeBridge", addMissingForgeFluidTypeBridge(node));
-			changed |= claim(reporter, "addMissingForgeKeyMappingLookupInitializer", addMissingForgeKeyMappingLookupInitializer(node));
-			changed |= claim(reporter, "routeKeyMappingClickToPopulatedLookup", routeKeyMappingClickToPopulatedLookup(node));
-			changed |= claim(reporter, "giveKeyMappingItsMinecraftForgeFace", giveKeyMappingItsMinecraftForgeFace(node));
 			changed |= claim(reporter, "giveKeyMappingItsVanillaMap", giveKeyMappingItsVanillaMap(node));
 			changed |= claim(reporter, "giveTheVanillaParticleMapAViewOfTheLiveOne", giveTheVanillaParticleMapAViewOfTheLiveOne(node));
-			changed |= claim(reporter, "giveFeaturesPerStepItsVanillaDescriptorBack", giveFeaturesPerStepItsVanillaDescriptorBack(node));
-			changed |= claim(reporter, "letDungeonsGenerateWithoutTheDataMap", letDungeonsGenerateWithoutTheDataMap(node));
 			changed |= claim(reporter, "restoreDoublePrecisionToTheRandomSources", restoreDoublePrecisionToTheRandomSources(node));
 			changed |= claim(reporter, "convertRadiansWithVanillasFoldedConstant", convertRadiansWithVanillasFoldedConstant(node));
 			changed |= claim(reporter, "callVanillasWriteByteAgain", callVanillasWriteByteAgain(node));
 			changed |= claim(reporter, "saveTheHeightmapsVanillaSaves", saveTheHeightmapsVanillaSaves(node));
 			changed |= claim(reporter, "guardNeoForgesWorldModifierPass", guardNeoForgesWorldModifierPass(node));
 			changed |= claim(reporter, "letForeignResourceConditionsThrough", letForeignResourceConditionsThrough(node));
-			changed |= claim(reporter, "letForeignResourceConditionsThroughMinecraftForge", letForeignResourceConditionsThroughMinecraftForge(node));
 			changed |= claim(reporter, "letFabricResourceConditionsDecide", letFabricResourceConditionsDecide(node));
 			changed |= claim(reporter, "translateAGuestsPrivateSkipMarker", translateAGuestsPrivateSkipMarker(node));
-			changed |= claim(reporter, "serveDefaultAttributesBothEcosystems", serveDefaultAttributesBothEcosystems(node));
-			changed |= claim(reporter, "restoreForgeClientInit", restoreForgeClientInit(node));
-			changed |= claim(reporter, "restoreForgeGeometryReload", restoreForgeGeometryReload(node));
 			changed |= claim(reporter, "nameTheReloadListenersNeoForgeRefusesToName", nameTheReloadListenersNeoForgeRefusesToName(node));
-			changed |= claim(reporter, "dropInterfaceDefaultShadowingOverrides", dropInterfaceDefaultShadowingOverrides(node));
 			changed |= claim(reporter, "tolerateEmptyCreativeTabStacks", tolerateEmptyCreativeTabStacks(node));
-			changed |= claim(reporter, "routePlaceItemHookToNeoForge", routePlaceItemHookToNeoForge(node));
 			changed |= claim(reporter, "bridgeOrphanedPipRenderers", bridgeOrphanedPipRenderers(node));
-			changed |= claim(reporter, "keepForgeOutboundProtocolCurrent", keepForgeOutboundProtocolCurrent(node));
-			changed |= claim(reporter, "surviveTheMissingForgeModelDataManager", surviveTheMissingForgeModelDataManager(node));
 			changed |= claim(reporter, "dropTheWindowTitlesLoaderBrand", dropTheWindowTitlesLoaderBrand(node));
 			changed |= claim(reporter, "keepTheSaveOffTheTeardownsFailurePath", keepTheSaveOffTheTeardownsFailurePath(node));
-			changed |= claim(reporter, "postNeoForgesItemTooltipEvent", postNeoForgesItemTooltipEvent(node));
-			changed |= claim(reporter, "askNeoForgeWhatAnItemsAttributesAre", askNeoForgeWhatAnItemsAttributesAre(node));
-			changed |= claim(reporter, "readTheSpawnReasonThatIsActuallyWritten", readTheSpawnReasonThatIsActuallyWritten(node));
-			changed |= claim(reporter, "giveTheUnwrittenLoggerAValue", giveTheUnwrittenLoggerAValue(node));
-			changed |= claim(reporter, "addTheMissingCapabilityLifecycleStubs", addTheMissingCapabilityLifecycleStubs(node));
-			changed |= claim(reporter, "addTheMissingNbtBuilderFactory", addTheMissingNbtBuilderFactory(node));
-			changed |= claim(reporter, "postMinecraftForgesReloadListenerEvent", postMinecraftForgesReloadListenerEvent(node));
-			changed |= claim(reporter, "giveMinecraftForgesReloadEventItsConditionContext", giveMinecraftForgesReloadEventItsConditionContext(node));
-			changed |= claim(reporter, "letMinecraftForgeIngredientTypesDecode", letMinecraftForgeIngredientTypesDecode(node));
-			changed |= claim(reporter, "letMinecraftForgeFluidsChooseTheirModel", letMinecraftForgeFluidsChooseTheirModel(node));
-			changed |= claim(reporter, "giveMinecraftForgesParticleLookupItsFirstVariant", giveMinecraftForgesParticleLookupItsFirstVariant(node));
-			changed |= claim(reporter, "dropStubsThatBypassARealSuperclassMethod", dropStubsThatBypassARealSuperclassMethod(node));
-			changed |= claim(reporter, "inlineTheSwitchMapTheMergeLost", inlineTheSwitchMapTheMergeLost(node));
 			changed |= claim(reporter, "vetoUnjudgeableOverlayConditions", vetoUnjudgeableOverlayConditions(node));
-			changed |= claim(reporter, "hideTheLegacyLootModifierIndexFromTheDirectoryScan", hideTheLegacyLootModifierIndexFromTheDirectoryScan(node));
 			changed |= claim(reporter, "letModdedFeatureFlagsRegister", letModdedFeatureFlagsRegister(node));
-			changed |= claim(reporter, "dropTheKeyModifierSuffixBeforeParsingAKeyName",
-					dropTheKeyModifierSuffixBeforeParsingAKeyName(node));
-			changed |= claim(reporter, "letTheAtlasLowerItsMipLevelLikeVanilla",
-					letTheAtlasLowerItsMipLevelLikeVanilla(node));
 			changed |= claim(reporter, "wrapTheStreamsVanillaWraps", wrapTheStreamsVanillaWraps(node));
-			changed |= claim(reporter, "returnFromANestedBootstrapBeforeItsTail", returnFromANestedBootstrapBeforeItsTail(node));
-		changed |= claim(reporter, "letBothEcosystemsSetBurnTime", letBothEcosystemsSetBurnTime(node));
-		changed |= claim(reporter, "letMinecraftForgeSeeSpawnerMobs", letMinecraftForgeSeeSpawnerMobs(node));
-		changed |= claim(reporter, "letMinecraftForgeAddPackFinders", letMinecraftForgeAddPackFinders(node));
-			changed |= namedOldLoader && adoptInteropHooksTheBaseStillNamesAfterTheOldLoader(node);
 
 			byte[] result = classBytes;
 			if (changed) {
 				ClassWriter writer = new ClassWriter(0);
 				node.accept(writer);
 				result = writer.toByteArray();
-			}
-			if (namedOldLoader && stillNamesTheOldLoader(result)) {
-				// Not fatal here, but it WILL be at link time, in a stack that points at the game rather than at
-				// this transformer. Name it while the cause is still legible.
-				ForbricLog.error("[Forbric/MergedBaseCompat] %s still names %s after adoption — a reference shape "
-								+ "this pass does not rewrite. It will fail to link.",
-						className, LEGACY_INTEROP_PACKAGE.replace('/', '.'));
 			}
 			return result;
 		} catch (RuntimeException e) {
@@ -372,124 +229,19 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		}
 	}
 
-	/**
-	 * Rewrites calls the merged base makes to the kernel's reflective interop hooks under their OLD owner names.
-	 *
-	 * <p>The merged base is built by the previous-generation loader's {@code MergedBaseBuilder}, which splices an
-	 * {@code INVOKESTATIC net/forbric/loader/impl/compat/ForbricCustomPayloadInterop.findCodec} into the merged
-	 * {@code CustomPacketPayload} codec provider. Those three helper classes now live in the kernel
-	 * ({@code net.forbric.kernel.interop}) and the old loader jars are no longer on the boot classpath, so the
-	 * baked-in owner names no longer resolve — the symptom is a {@code NoClassDefFoundError} inside the netty
-	 * encoder the moment anything sends a custom payload, i.e. every world join.
-	 *
-	 * <p>This is a permanent adaptation, not a one-off migration step: the base-building pipeline belongs to the
-	 * other repository and keeps emitting the names it knows. The kernel owns what its own base links against, so
-	 * it retargets them here rather than requiring a 35 MB artifact to be rebuilt in lockstep.
-	 *
-	 * <p>The only shape the builder emits is a method owner. Anything else carrying the legacy prefix — a field
-	 * owner, a {@code new}, a class constant — would survive this pass and fail at link time far away from here,
-	 * so {@link #stillNamesTheOldLoader} re-reads the finished bytes and says so out loud.
-	 */
-	private static boolean adoptInteropHooksTheBaseStillNamesAfterTheOldLoader(ClassNode node) {
-		boolean changed = false;
-		for (MethodNode method : node.methods) {
-			if (method.instructions == null) continue;
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call)) continue;
-				String adopted = LEGACY_INTEROP_OWNERS.get(call.owner);
-				if (adopted == null) continue;
-				call.owner = adopted;
-				changed = true;
-			}
-		}
-		if (changed) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] adopted old-loader interop hooks named by %s",
-					node.name.replace('/', '.'));
-		}
-		return changed;
-	}
-
-	/** True if {@code classBytes} still mentions the old loader's package anywhere — a link error waiting to happen. */
-	static boolean stillNamesTheOldLoader(byte[] classBytes) {
-		byte[] needle = LEGACY_INTEROP_PACKAGE.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-		outer:
-		for (int i = 0; i + needle.length <= classBytes.length; i++) {
-			for (int j = 0; j < needle.length; j++) {
-				if (classBytes[i + j] != needle[j]) continue outer;
-			}
-			return true;
-		}
-		return false;
-	}
-
-	private static final String LEGACY_INTEROP_PACKAGE = "net/forbric/loader/impl/";
-
 	private static final String KEY_MAPPING = "net/minecraft/client/KeyMapping";
-	private static final String MF_CONTEXT = "Lnet/minecraftforge/client/settings/IKeyConflictContext;";
-	private static final String NEO_CONTEXT = "Lnet/neoforged/neoforge/client/settings/IKeyConflictContext;";
-	private static final String MF_MODIFIER = "Lnet/minecraftforge/client/settings/KeyModifier;";
-	private static final String NEO_MODIFIER = "Lnet/neoforged/neoforge/client/settings/KeyModifier;";
-	private static final String INPUT_KEY = "Lcom/mojang/blaze3d/platform/InputConstants$Key;";
-	private static final String KERNEL_KEYS = "net/forbric/kernel/runtime/KernelForgeKeyBindings";
 
 	private static final String PARTICLE_RESOURCES = "net/minecraft/client/particle/ParticleResources";
 
-	private static final String CHUNK_GENERATOR = "net/minecraft/world/level/chunk/ChunkGenerator";
-	private static final String FEATURES_PER_STEP = "featuresPerStep";
-	private static final String CLEARABLE_LAZY = "net/minecraftforge/common/util/ClearableLazy";
-	private static final String CLEARABLE_LAZY_DESC = "L" + CLEARABLE_LAZY + ";";
-	private static final String SUPPLIER = "java/util/function/Supplier";
-	private static final String SUPPLIER_DESC = "L" + SUPPLIER + ";";
-	private static final String KERNEL_CHUNK_GENERATOR = "net/forbric/kernel/runtime/KernelChunkGenerator";
-
 	private static final String KERNEL_NEO_WORLDGEN = "net/forbric/kernel/runtime/KernelNeoWorldgen";
-	private static final String KERNEL_FUEL_VALUES = "net/forbric/kernel/runtime/KernelFuelValues";
-	private static final String KERNEL_SPAWNER_FINALIZE = "net/forbric/kernel/runtime/KernelSpawnerFinalize";
-	private static final String KERNEL_PACK_FINDERS = "net/forbric/kernel/runtime/KernelPackFinders";
-	private static final String NEO_RESOURCE_PACK_LOADER = "net/neoforged/neoforge/resource/ResourcePackLoader";
-	private static final String BASE_SPAWNER = "net/minecraft/world/level/BaseSpawner";
-	private static final String NEO_EVENT_HOOKS = "net/neoforged/neoforge/event/EventHooks";
-	private static final String FUEL_VALUES = "net/minecraft/world/level/block/entity/FuelValues";
-	private static final String FORGE_BURN_TIME_DESC =
-			"(Lnet/minecraft/world/item/ItemStack;ILnet/minecraft/world/item/crafting/RecipeType;)I";
-	private static final String KERNEL_BURN_TIME_DESC =
-			"(Lnet/minecraft/world/item/ItemStack;ILnet/minecraft/world/item/crafting/RecipeType;"
-					+ "Lnet/minecraft/world/level/block/entity/FuelValues;)I";
-	private static final String MONSTER_ROOM_FEATURE = "net/minecraft/world/level/levelgen/feature/MonsterRoomFeature";
-	private static final String MONSTER_ROOM_HOOKS = "net/neoforged/neoforge/common/MonsterRoomHooks";
-	private static final String RANDOM_MONSTER_ROOM_MOB =
-			"(Lnet/minecraft/util/RandomSource;)Lnet/minecraft/world/entity/EntityType;";
 	private static final String NEO_SERVER_LIFECYCLE_HOOKS = "net/neoforged/neoforge/server/ServerLifecycleHooks";
 	private static final String RUN_MODIFIERS = "(Lnet/minecraft/server/MinecraftServer;)V";
 
 	private static final String ICONDITION = ForeignType.ICONDITION.internal(Ecosystem.NEOFORGE);
 	private static final String CODEC_DESC = "Lcom/mojang/serialization/Codec;";
 	private static final String KERNEL_NEO_CONDITIONS = "net/forbric/kernel/runtime/KernelNeoConditions";
-	private static final String FORGE_ICONDITION = ForeignType.ICONDITION.internal(Ecosystem.FORGE);
-	private static final String KERNEL_FORGE_CONDITIONS = "net/forbric/kernel/runtime/KernelForgeConditions";
-	private static final String KERNEL_FORGE_RELOAD = "net/forbric/kernel/runtime/KernelForgeReload";
-	private static final String KERNEL_FORGE_INGREDIENTS = "net/forbric/kernel/runtime/KernelForgeIngredients";
-	private static final String KERNEL_FORGE_FLUIDS = "net/forbric/kernel/runtime/KernelForgeFluids";
-	private static final String FLUID_RENDERER = "net/minecraft/client/renderer/block/FluidRenderer";
-	private static final String FLUID_MODEL = "Lnet/minecraft/client/renderer/block/FluidModel;";
-	private static final String FLUID_STATE = "Lnet/minecraft/world/level/material/FluidState;";
-	private static final String TESSELATE_DESC = "(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-			+ "Lnet/minecraft/client/renderer/block/FluidRenderer$Output;Lnet/minecraft/world/level/block/state/BlockState;"
-			+ FLUID_STATE + ")V";
-	private static final String FLUID_MODEL_FUNNEL_DESC = "(" + FLUID_MODEL + FLUID_STATE
-			+ "Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)" + FLUID_MODEL;
-	private static final String WEIGHTED_VARIANTS = "net/minecraft/client/renderer/block/dispatch/WeightedVariants";
-	private static final String BLOCK_STATE_MODEL = "net/minecraft/client/renderer/block/dispatch/BlockStateModel";
-	/** NeoForge-only: MinecraftForge composes its ingredient codec in ForgeHooks, so ForeignType has no pair. */
-	private static final String NEO_INGREDIENT_CODECS = "net/neoforged/neoforge/common/crafting/IngredientCodecs";
 	static final String CODEC_TO_CODEC = "(Lcom/mojang/serialization/Codec;)Lcom/mojang/serialization/Codec;";
 	private static final String BOOTSTRAP = "net/minecraft/server/Bootstrap";
-	private static final String RELOADABLE_SERVER_RESOURCES = "net/minecraft/server/ReloadableServerResources";
-	private static final String RELOAD_HOOK_DESC = "(L" + RELOADABLE_SERVER_RESOURCES
-			+ ";Lnet/minecraft/core/RegistryAccess;Ljava/util/Map;)Ljava/util/List;";
-	/** The carrier's own reload event; NeoForge's twin has a different name, so ForeignType has no pair. */
-	private static final String FORGE_RELOAD_EVENT = "net/minecraftforge/event/AddReloadListenerEvent";
-	private static final String FORGE_CONDITION_CONTEXT_DESC = "()L" + FORGE_ICONDITION + "$IContext;";
 	private static final String JSON_RELOAD_LISTENER = "net/minecraft/server/packs/resources/SimpleJsonResourceReloadListener";
 	private static final String DATA_RESULT = "Lcom/mojang/serialization/DataResult;";
 
@@ -498,11 +250,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 			"(Lcom/mojang/serialization/Codec;Ljava/lang/String;)Lcom/mojang/serialization/Codec;";
 	private static final String KERNEL_FABRIC_CONDITIONS = "net/forbric/kernel/runtime/KernelFabricConditions";
 
-	private static final String DEFAULT_ATTRIBUTES = "net/minecraft/world/entity/ai/attributes/DefaultAttributes";
-	private static final String NEO_COMMON_HOOKS = "net/neoforged/neoforge/common/CommonHooks";
-	private static final String ATTRIBUTES_VIEW = "()Ljava/util/Map;";
-	private static final String KERNEL_FORGE_ATTRIBUTES = "net/forbric/kernel/runtime/KernelForgeAttributes";
-
 	private static final String ADD_CLIENT_RELOAD_LISTENERS =
 			"net/neoforged/neoforge/client/event/AddClientReloadListenersEvent";
 	private static final String VANILLA_CLIENT_LISTENERS =
@@ -510,42 +257,11 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	private static final String NAME_FOR_CLASS =
 			"(Ljava/lang/Class;)Lnet/minecraft/resources/Identifier;";
 	private static final String KERNEL_RELOAD_NAMES = "net/forbric/kernel/runtime/KernelClientReloadNames";
-	/** NeoForge's retyping of vanilla's {@code providers}: the one the merged {@code <init>} actually writes. */
-	/**
-	 * The methods measured to be merge-injected in this shape, and worth removing.
-	 *
-	 * <p>Derived, not guessed: every pure interface-default delegate in the merged base that shadows a real
-	 * superclass method was differenced against both unmerged bases. 253 of 256 exist only after the merge, but
-	 * three do not — vanilla writes the same shape on purpose — so the shape alone cannot decide. This entry is
-	 * the one whose occurrences are all merge-introduced and whose bypassed method does something visible: it is
-	 * what applies a team's colour and prefix to a name.
-	 */
-	private static final java.util.Set<String> MEASURED_MERGE_STUBS =
-			java.util.Set.of("getDisplayName()Lnet/minecraft/network/chat/Component;");
-
-	/**
-	 * The classes MinecraftForge rooted its capability system at, and the merge rooted at NeoForge's attachment
-	 * holder instead. {@code LevelChunk} is absent on purpose: it kept both methods through the merge.
-	 */
-	private static final java.util.Set<String> CAPABILITY_ROOTS = java.util.Set.of(
-			"net/minecraft/world/entity/Entity",
-			"net/minecraft/world/level/block/entity/BlockEntity",
-			"net/minecraft/world/level/Level");
-	/** {@code org.slf4j.Logger}, the one unwritten static the merge leaves that has an obvious correct value. */
-	private static final String LOGGER_DESC = "Lorg/slf4j/Logger;";
-	/** {@code EntitySpawnReason}, the type of both of the merged {@code Mob}'s spawn fields. */
-	private static final String SPAWN_REASON = "Lnet/minecraft/world/entity/EntitySpawnReason;";
 	private static final String NAME_KEYED = "Ljava/util/Map;";
 	/** Vanilla's own descriptor for it, and the one fabric-api reads. */
 	private static final String ID_KEYED = "Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;";
 	private static final String KERNEL_PARTICLES = "net/forbric/kernel/runtime/KernelParticleProviders";
 	private static final String KERNEL_KEY_MAPPING_MAP = "net/forbric/kernel/runtime/KernelKeyMappingMap";
-	/** Old owner → the kernel class that now carries the method, for hooks the merged base still names. */
-	private static final Map<String, String> LEGACY_INTEROP_OWNERS = Map.of(
-			"net/forbric/loader/impl/compat/ForbricCustomPayloadInterop", "net/forbric/kernel/interop/PayloadInterop",
-			"net/forbric/loader/impl/forge/runtime/ForbricClientShutdown", "net/forbric/kernel/interop/ClientShutdown",
-			"net/forbric/loader/impl/forge/runtime/ForbricForgeRuntimeInterop",
-			"net/forbric/kernel/interop/ForgeRuntimeInterop");
 
 	private static boolean repairLambdaBootstrapHandles(ClassNode node) {
 		Map<String, MethodNode> methods = new HashMap<>();
@@ -570,10 +286,10 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	}
 
 	/**
-	 * Gives merged {@code BlockState} its own {@code getAppearance}, because it inherits TWO.
+	 * Gives {@code BlockState} its own {@code getAppearance}, because it inherits TWO.
 	 *
-	 * <p>The merged class declares {@code IBlockStateExtension} (NeoForge) and {@code IForgeBlockState}
-	 * (MinecraftForge); fabric-api's mixin then adds {@code FabricBlockState}. NeoForge's and Fabric's both
+	 * <p>The patched class declares {@code IBlockStateExtension} (NeoForge); fabric-api's mixin then adds
+	 * {@code FabricBlockState}. NeoForge's and Fabric's both
 	 * carry a {@code default getAppearance} with a byte-identical descriptor, neither overrides the other, and
 	 * the class declares nothing — so the JVM refuses to choose and the FIRST caller dies:
 	 * <pre>
@@ -599,8 +315,8 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 *
 	 * <p>Giving {@code BlockState} its own {@code getAppearance} was correct and it works: it resolves and
 	 * delegates to {@code getBlock().getAppearance(...)}. That delegate is where the SECOND copy of the same
-	 * defect lives. {@code Block} declares {@code IBlockExtension} (NeoForge) and {@code IForgeBlock}
-	 * (MinecraftForge); fabric-api's mixin adds {@code FabricBlock}; NeoForge's and Fabric's both default
+	 * defect lives. {@code Block} declares {@code IBlockExtension} (NeoForge); fabric-api's mixin adds
+	 * {@code FabricBlock}; NeoForge's and Fabric's both default
 	 * {@code getAppearance} with the same descriptor and {@code Block} declares neither, so every subclass that
 	 * does not override it inherits two defaults:
 	 * <pre>
@@ -627,7 +343,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * {@code System.out}/{@code System.err} into log4j.
 	 *
 	 * <p>Vanilla calls it as the last thing bootstrap does. NeoForge's patch spends that exact slot on
-	 * {@code GameData.vanillaSnapshot()} instead, and the byte merge kept NeoForge's half — so the merged
+	 * {@code GameData.vanillaSnapshot()} instead — so the patched
 	 * {@code bootStrap()} runs the snapshot and never wraps the streams. Measured: stock 26.2 has
 	 * {@code invokestatic wrapStreams:()V} at bci 81; in the merged base the ONLY class mentioning
 	 * {@code wrapStreams} is {@code Bootstrap} itself, and inside it the only mention is the declaration.
@@ -640,10 +356,8 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * "the mod said nothing" rather than "nobody was listening". Any mod printing a stack trace to stderr
 	 * disappears the same way.
 	 *
-	 * <p>Both halves are kept. The snapshot is NeoForge's and it stays exactly where NeoForge put it; the
-	 * wrap goes after it, at vanilla's position relative to {@code bootstrapDuration}. Restoring one
-	 * ecosystem's line must not cost the other's — that is the merge failure this repair is undoing, and
-	 * doing it in reverse would be no better.
+	 * <p>The snapshot is NeoForge's and it stays exactly where NeoForge put it; the wrap goes after it, at
+	 * vanilla's position relative to {@code bootstrapDuration}.
 	 */
 	private static boolean wrapTheStreamsVanillaWraps(ClassNode node) {
 		if (!BOOTSTRAP.equals(node.name) || node.methods == null) return false;
@@ -682,78 +396,10 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		bootStrap.maxStack = Math.max(bootStrap.maxStack, 2);
 
 		ForbricLog.warn("[Forbric/MergedBaseCompat] Bootstrap now wraps System.out/System.err into log4j again "
-				+ "— NeoForge's patch spends vanilla's wrapStreams() slot on GameData.vanillaSnapshot() and the "
-				+ "merge kept only that half, so every line a mod PRINTED rather than logged was absent from the "
+				+ "— NeoForge's patch spends vanilla's wrapStreams() slot on GameData.vanillaSnapshot(), so every "
+				+ "line a mod PRINTED rather than logged was absent from the "
 				+ "log entirely (a mod's own debug mode produced a log with nothing in it). Both calls now run");
 		return true;
-	}
-
-	/**
-	 * Gives {@code Bootstrap.bootStrap()}'s already-bootstrapped path its own {@code return}, ahead of the body, so
-	 * the method's last {@code return} — the one a mixin's {@code @At("TAIL")} names — is reached only by the call
-	 * that actually bootstrapped.
-	 *
-	 * <p>Vanilla's shape is {@code if (!isBootstrapped) { isBootstrapped = true; ... } return;}: one return, reached
-	 * by every call. On vanilla and on Fabric that is one call per process ({@code Main.main} / the client's
-	 * {@code Main}), so a mod injecting at TAIL runs once, after bootstrap. The merged game also carries
-	 * MinecraftForge's {@code ForgeRegistries.<clinit>}, whose {@code init()} calls {@code Bootstrap.bootStrap()}
-	 * to make sure bootstrap has happened — and it is first touched from INSIDE bootstrap, while {@code Items}
-	 * constructs a bucket. {@code isBootstrapped} is already true there, the nested call skips the body and falls
-	 * through to the same return, and every TAIL handler runs half-way through bootstrap and then again at its
-	 * end. Measured with {@code -Xlog:class+init}: {@code ForgeRegistries} initialises between {@code BucketItem}
-	 * and cristellib's {@code CristelLib}; cristellib's TAIL handler freezes its pack registry and config data the
-	 * first time and throws "Cannot set Auto Config data twice" the second, and the server does not start.
-	 *
-	 * <p>Only TAIL changes. The early return is still a return, so an {@code @At("RETURN")} handler still sees
-	 * every call; HEAD is untouched; the body and the call that runs it are exactly what they were.
-	 */
-	private static boolean returnFromANestedBootstrapBeforeItsTail(ClassNode node) {
-		if (!BOOTSTRAP.equals(node.name) || node.methods == null) return false;
-		MethodNode bootStrap = null;
-		for (MethodNode method : node.methods) {
-			if ("bootStrap".equals(method.name) && "()V".equals(method.desc)) bootStrap = method;
-		}
-		if (bootStrap == null || bootStrap.instructions == null) return false;
-
-		// The guard: the first real instructions are GETSTATIC isBootstrapped; IFNE skip.
-		AbstractInsnNode first = realAfter(bootStrap.instructions.getFirst(), true);
-		if (!(first instanceof FieldInsnNode read) || read.getOpcode() != Opcodes.GETSTATIC
-				|| !BOOTSTRAP.equals(read.owner) || !"isBootstrapped".equals(read.name) || !"Z".equals(read.desc)) {
-			return false;
-		}
-		AbstractInsnNode next = realAfter(first.getNext(), true);
-		// Already repaired (IFEQ body; RETURN) or a base that returns early itself: nothing to do.
-		if (!(next instanceof JumpInsnNode guard) || guard.getOpcode() != Opcodes.IFNE) return false;
-
-		// The guard must skip to the method's LAST return, or this is not the shape the repair is about.
-		AbstractInsnNode skipped = realAfter(guard.label, true);
-		AbstractInsnNode lastReturn = null;
-		for (AbstractInsnNode insn = bootStrap.instructions.getLast(); insn != null; insn = insn.getPrevious()) {
-			if (insn.getOpcode() == Opcodes.RETURN) { lastReturn = insn; break; }
-		}
-		if (skipped == null || skipped != lastReturn) return false;
-
-		LabelNode body = new LabelNode();
-		InsnList early = new InsnList();
-		early.add(new InsnNode(Opcodes.RETURN));
-		early.add(body);
-		// Method entry's frame: a static no-argument method, nothing on the stack.
-		early.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
-		bootStrap.instructions.insert(guard, early);
-		guard.setOpcode(Opcodes.IFEQ);
-		guard.label = body;
-
-		ForbricLog.info("[Forbric/MergedBaseCompat] Bootstrap.bootStrap() returns before its TAIL when bootstrap has "
-				+ "already begun — MinecraftForge's ForgeRegistries calls it again from inside the first call, which ran "
-				+ "every TAIL handler twice, the first time half-way through bootstrap");
-		return true;
-	}
-
-	/** The first instruction at or after {@code from} that is not a label, line number or frame. */
-	private static AbstractInsnNode realAfter(AbstractInsnNode from, boolean inclusive) {
-		AbstractInsnNode insn = inclusive ? from : (from == null ? null : from.getNext());
-		while (insn != null && insn.getOpcode() < 0) insn = insn.getNext();
-		return insn;
 	}
 
 	private static boolean addBlockAppearanceResolver(ClassNode node) {
@@ -811,490 +457,14 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return true;
 	}
 
-	private static boolean addBlockStateModelConflictResolvers(ClassNode node) {
-		if (!"net/minecraft/client/renderer/block/dispatch/BlockStateModel".equals(node.name)) return false;
-
-		boolean changed = false;
-		if (!hasMethod(node, "createGeometryKey",
-				"(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-						+ "Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/util/RandomSource;)"
-						+ "Ljava/lang/Object;")) {
-			MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, "createGeometryKey",
-					"(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-							+ "Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/util/RandomSource;)"
-							+ "Ljava/lang/Object;",
-					null, null);
-			method.instructions.add(new InsnNode(Opcodes.ACONST_NULL));
-			method.instructions.add(new InsnNode(Opcodes.ARETURN));
-			method.maxStack = 1;
-			method.maxLocals = 5;
-			node.methods.add(method);
-			changed = true;
-		}
-
-		if (!hasMethod(node, "particleMaterial",
-				"(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-						+ "Lnet/minecraft/world/level/block/state/BlockState;)"
-						+ "Lnet/minecraft/client/resources/model/sprite/Material$Baked;")) {
-			MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, "particleMaterial",
-					"(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-							+ "Lnet/minecraft/world/level/block/state/BlockState;)"
-							+ "Lnet/minecraft/client/resources/model/sprite/Material$Baked;",
-					null, null);
-			method.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			method.instructions.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE,
-					"net/minecraft/client/renderer/block/dispatch/BlockStateModel",
-					"particleMaterial",
-					"()Lnet/minecraft/client/resources/model/sprite/Material$Baked;",
-					true));
-			method.instructions.add(new InsnNode(Opcodes.ARETURN));
-			method.maxStack = 1;
-			method.maxLocals = 4;
-			node.methods.add(method);
-			changed = true;
-		}
-
-		if (!hasMethod(node, "materialFlags",
-				"(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-						+ "Lnet/minecraft/world/level/block/state/BlockState;)I")) {
-			MethodNode method = new MethodNode(Opcodes.ACC_PUBLIC, "materialFlags",
-					"(Lnet/minecraft/client/renderer/block/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;"
-							+ "Lnet/minecraft/world/level/block/state/BlockState;)I",
-					null, null);
-			method.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			method.instructions.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE,
-					"net/minecraft/client/renderer/block/dispatch/BlockStateModel",
-					"materialFlags", "()I", true));
-			method.instructions.add(new InsnNode(Opcodes.IRETURN));
-			method.maxStack = 1;
-			method.maxLocals = 4;
-			node.methods.add(method);
-			changed = true;
-		}
-
-		if (changed) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] added BlockStateModel default-method conflict resolvers");
-		}
-		return changed;
-	}
-
-	/**
-	 * Gives {@code CompoundTag} back the {@code builder()} static every {@code IForgeBlockPos.toCompoundTag()} and
-	 * {@code ForgeHooks.createEmptyStructure} links against.
-	 *
-	 * <p>Genuine Forge patches {@code public static INBTBuilder$Builder builder()} into {@code CompoundTag} with a
-	 * body that {@code new}s {@code CompoundTag$1} — an anonymous class the byte merge could not carry, because the
-	 * merged {@code CompoundTag$1} is a DIFFERENT anonymous class (the "pipeline-divergent anonymous sibling" in
-	 * merge-conflicts.txt). So the method was dropped whole, and a Forge mod is one ordinary call away from
-	 * {@code NoSuchMethodError} with a stack that names the mod, not the merge.
-	 *
-	 * <p>The body emitted here is not Forge's: it is {@code INBTBuilder.nbt()}'s own four instructions
-	 * ({@code NEW INBTBuilder$Builder; DUP; INVOKESPECIAL <init>; ARETURN}), which is what Forge's
-	 * {@code CompoundTag$1.nbt()} reduces to — the anonymous class only existed to implement the interface. Nothing
-	 * is invented: the carrier type is real, its no-arg constructor is public, and the descriptor is the one the
-	 * carrier's call sites carry. {@link ForeignType} does not apply: NeoForge has no {@code CompoundTag.builder}.
-	 * A rebuilt base that carries the method makes this stand down.
-	 */
-	private static boolean addTheMissingNbtBuilderFactory(ClassNode node) {
-		if (!"net/minecraft/nbt/CompoundTag".equals(node.name)) return false;
-		if (hasMethod(node, "builder", NBT_BUILDER_FACTORY_DESC)) return false;
-
-		MethodNode factory = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "builder",
-				NBT_BUILDER_FACTORY_DESC, null, null);
-		factory.instructions.add(new TypeInsnNode(Opcodes.NEW, FORGE_NBT_BUILDER));
-		factory.instructions.add(new InsnNode(Opcodes.DUP));
-		factory.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, FORGE_NBT_BUILDER, "<init>", "()V", false));
-		factory.instructions.add(new InsnNode(Opcodes.ARETURN));
-		factory.maxStack = 2;
-		factory.maxLocals = 0;
-		node.methods.add(factory);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] CompoundTag.builder() — 1 method added: genuine Forge's body news "
-				+ "CompoundTag$1, an anonymous class the merge could not carry (the merged CompoundTag$1 is a different "
-				+ "class), so the body emitted is INBTBuilder.nbt()'s own; IForgeBlockPos.toCompoundTag() and "
-				+ "ForgeHooks.createEmptyStructure link again");
-		return true;
-	}
-
-	/**
-	 * Posts MinecraftForge's {@code AddReloadListenerEvent} from the merged server reload.
-	 *
-	 * <p>Merged {@code ReloadableServerResources.lambda$loadResources$2} calls only NeoForge's
-	 * {@code EventHooks.onResourceReload}; the merged base names Forge's event nowhere. One owner redirect, same
-	 * name and descriptor, to {@code KernelForgeReload.onResourceReload}, whose body calls NeoForge's hook and then
-	 * the carrier's own {@code ForgeEventFactory.onResourceReload}. Exactly one call site is expected; more means
-	 * an unrecognised base and the repair stands down whole. Idempotent: a second pass finds no NeoForge-owned call.
-	 * The kill switch lives in the helper ({@code -Dforbric.forgeReloadListeners=off}), so the redirect is inert
-	 * rather than absent when it is off.
-	 */
-	private static boolean postMinecraftForgesReloadListenerEvent(ClassNode node) {
-		if (!RELOADABLE_SERVER_RESOURCES.equals(node.name)) return false;
-		String neo = ForeignType.EVENT_HOOKS.internal(Ecosystem.NEOFORGE);
-		List<MethodInsnNode> calls = new java.util.ArrayList<>();
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKESTATIC
-						&& neo.equals(call.owner) && "onResourceReload".equals(call.name)
-						&& RELOAD_HOOK_DESC.equals(call.desc)) {
-					calls.add(call);
-				}
-			}
-		}
-		if (calls.isEmpty()) return false;
-		if (calls.size() != 1) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] ReloadableServerResources calls EventHooks.onResourceReload "
-					+ "%d times, not once — not redirecting any of them, because MinecraftForge's reload event would "
-					+ "then be posted for some reloads and not others", calls.size());
-			return false;
-		}
-		calls.getFirst().owner = KERNEL_FORGE_RELOAD;
-		ForbricLog.info("[Forbric/MergedBaseCompat] ReloadableServerResources now posts both families' reload-listener "
-				+ "events (1 call site) — the merged base posted only NeoForge's, so a traditional-Forge mod's "
-				+ "AddReloadListenerEvent listeners never ran and its JSON data loaders were never registered");
-		return true;
-	}
-
-	/**
-	 * Gives MinecraftForge's {@code AddReloadListenerEvent.getConditionContext()} an answer instead of a
-	 * {@code NoSuchMethodError}.
-	 *
-	 * <p>The carrier compiles it as {@code invokevirtual ReloadableServerResources.getConditionContext()} returning
-	 * Forge's {@code ICondition$IContext}; the merged class declares only the NeoForge-typed overload. The one
-	 * invocation is rewritten to {@code invokestatic KernelForgeConditions.contextOf(ReloadableServerResources)} —
-	 * the receiver already on the stack becomes the argument, the Forge-typed context comes back, nothing else
-	 * moves. This edits a CARRIER class, as {@link #nameTheReloadListenersNeoForgeRefusesToName} does. Exactly one
-	 * site expected; idempotent once the kernel owner is present.
-	 */
-	private static boolean giveMinecraftForgesReloadEventItsConditionContext(ClassNode node) {
-		if (!FORGE_RELOAD_EVENT.equals(node.name)) return false;
-		List<MethodInsnNode> calls = new java.util.ArrayList<>();
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call)) continue;
-				if (KERNEL_FORGE_CONDITIONS.equals(call.owner) && "contextOf".equals(call.name)) return false;
-				if (call.getOpcode() == Opcodes.INVOKEVIRTUAL && RELOADABLE_SERVER_RESOURCES.equals(call.owner)
-						&& "getConditionContext".equals(call.name) && FORGE_CONDITION_CONTEXT_DESC.equals(call.desc)) {
-					calls.add(call);
-				}
-			}
-		}
-		if (calls.size() != 1) {
-			if (!calls.isEmpty()) {
-				ForbricLog.warn("[Forbric/MergedBaseCompat] AddReloadListenerEvent asks for its condition context at "
-						+ "%d sites, not one — leaving it alone", calls.size());
-			}
-			return false;
-		}
-		MethodInsnNode call = calls.getFirst();
-		call.setOpcode(Opcodes.INVOKESTATIC);
-		call.owner = KERNEL_FORGE_CONDITIONS;
-		call.name = "contextOf";
-		call.desc = "(L" + RELOADABLE_SERVER_RESOURCES + ";)L" + FORGE_ICONDITION + "$IContext;";
-		call.itf = false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] MinecraftForge's AddReloadListenerEvent now gets a condition context "
-				+ "adapted from NeoForge's (1 call site) — the Forge-typed accessor it compiled against does not "
-				+ "exist on the merged ReloadableServerResources, so asking for it was a NoSuchMethodError");
-		return true;
-	}
-
-	/**
-	 * Lets MinecraftForge ingredient types decode through the carrier's own dispatch.
-	 *
-	 * <p>Merged {@code Ingredient.<clinit>} stores {@code IngredientCodecs.codec(base)} into the single
-	 * {@code CODEC} with no Forge dispatch in front of it, so {@code forge:intersection} & co. were a recipe
-	 * parsing error. One instruction inserted immediately before that {@code PUTSTATIC}:
-	 * {@code KernelForgeIngredients.alsoAskMinecraftForge(Codec)Codec}, which returns
-	 * {@code ForgeHooks.ingredientBaseCodec(neo)} — Forge's real {@code either(registry dispatch, base)} with the
-	 * NeoForge codec as its base. Raw {@code Codec} in and out, stack unchanged; the shape of
-	 * {@link #letFabricResourceConditionsDecide}. Recognised only when the previous real instruction is NeoForge's
-	 * factory; already-wrapped stands down (idempotent), anything else stands down and says so. The kill switch
-	 * lives in the helper ({@code -Dforbric.forgeIngredients=off}).
-	 */
-	private static boolean letMinecraftForgeIngredientTypesDecode(ClassNode node) {
-		if (!"net/minecraft/world/item/crafting/Ingredient".equals(node.name)) return false;
-		MethodNode clinit = findMethod(node, "<clinit>", "()V");
-		if (clinit == null) return false;
-		FieldInsnNode store = null;
-		for (AbstractInsnNode insn = clinit.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTSTATIC
-					&& node.name.equals(field.owner) && "CODEC".equals(field.name)
-					&& "Lcom/mojang/serialization/Codec;".equals(field.desc)) {
-				if (store != null) {
-					ForbricLog.warn("[Forbric/MergedBaseCompat] Ingredient.<clinit> stores CODEC more than once — not "
-							+ "wrapping it, because the Forge dispatch would then cover one store and not the other");
-					return false;
-				}
-				store = field;
-			}
-		}
-		if (store == null) return false;
-		AbstractInsnNode previous = store.getPrevious();
-		while (previous != null && previous.getOpcode() < 0) previous = previous.getPrevious();
-		if (previous instanceof MethodInsnNode already && KERNEL_FORGE_INGREDIENTS.equals(already.owner)) {
-			return false;                       // already wrapped: idempotent
-		}
-		if (!(previous instanceof MethodInsnNode factory) || factory.getOpcode() != Opcodes.INVOKESTATIC
-				|| !NEO_INGREDIENT_CODECS.equals(factory.owner) || !"codec".equals(factory.name)
-				|| !CODEC_TO_CODEC.equals(factory.desc)) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] Ingredient.CODEC is not stored straight from NeoForge's "
-					+ "IngredientCodecs.codec — leaving it alone rather than wrapping an unrecognised shape");
-			return false;
-		}
-		clinit.instructions.insertBefore(store, new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_FORGE_INGREDIENTS,
-				"alsoAskMinecraftForge", CODEC_TO_CODEC, false));
-		ForbricLog.info("[Forbric/MergedBaseCompat] Ingredient.CODEC now asks MinecraftForge's ingredient serializers "
-				+ "before NeoForge's — forge:intersection/difference/compound/nbt and mod-registered Forge ingredient "
-				+ "types were a recipe parsing error on the merged base");
-		return true;
-	}
-
-	/**
-	 * Lets a MinecraftForge fluid supply its own render model and tint from {@code FluidRenderer.tesselate}.
-	 *
-	 * <p>Vanilla 26.2's {@code FluidStateModelSet} knows water and lava and answers the missing model for anything
-	 * else; genuine Forge's only seam is inside {@code tesselate} — after the model lookup it asks
-	 * {@code IClientFluidTypeExtensions.of(fluidState).getModel(...)}, and where the model carries no tint source it
-	 * asks {@code getTintColor()} instead of {@code -1}. The merge kept NeoForge's tesselate, with neither ask, so
-	 * every Forge modded fluid drew as the missing texture. Two sites, one repair, one flag:
-	 * <ul>
-	 * <li>A: after the single {@code FluidStateModelSet.get(FluidState)} and its {@code ASTORE n}, insert
-	 * {@code ALOAD n; ALOAD 5; ALOAD 1; ALOAD 2; INVOKESTATIC KernelForgeFluids.model; ASTORE n} — stack empty in,
-	 * empty out, no label crossed (locals: this=0, level=1, pos=2, output=3, blockState=4, fluidState=5).</li>
-	 * <li>B: the {@code IFNULL} after {@code FluidModel.fluidTintSource()} targets {@code ICONST_M1; ISTORE k}; the
-	 * constant becomes {@code ALOAD 5; INVOKESTATIC KernelForgeFluids.tintColor} — an int is pushed on both arms,
-	 * the label keeps its empty-stack frame.</li>
-	 * </ul>
-	 * Whole-or-nothing: unless both shapes match exactly once, nothing is edited and the reason is logged.
-	 * Idempotent once the kernel owner is named. The flag ({@code -Dforbric.forgeFluidModels=off}) lives in the
-	 * helper, which then returns the model by identity and {@code -1}.
-	 */
-	private static boolean letMinecraftForgeFluidsChooseTheirModel(ClassNode node) {
-		if (!FLUID_RENDERER.equals(node.name)) return false;
-		MethodNode tesselate = findMethod(node, "tesselate", TESSELATE_DESC);
-		if (tesselate == null) return false;
-
-		VarInsnNode modelStore = null;
-		InsnNode minusOne = null;
-		int lookups = 0, tintArms = 0;
-		for (AbstractInsnNode insn = tesselate.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof MethodInsnNode call && KERNEL_FORGE_FLUIDS.equals(call.owner)) return false;
-			if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKEVIRTUAL
-					&& "net/minecraft/client/renderer/block/FluidStateModelSet".equals(call.owner)
-					&& "get".equals(call.name) && ("(" + FLUID_STATE + ")" + FLUID_MODEL).equals(call.desc)) {
-				lookups++;
-				if (nextReal(call) instanceof VarInsnNode store && store.getOpcode() == Opcodes.ASTORE) modelStore = store;
-			}
-			if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKEVIRTUAL
-					&& "net/minecraft/client/renderer/block/FluidModel".equals(call.owner)
-					&& "fluidTintSource".equals(call.name)
-					&& nextReal(call) instanceof JumpInsnNode jump && jump.getOpcode() == Opcodes.IFNULL) {
-				AbstractInsnNode target = jump.label;
-				while (target != null && target.getOpcode() < 0) target = target.getNext();
-				if (target instanceof InsnNode constant && constant.getOpcode() == Opcodes.ICONST_M1
-						&& nextReal(constant) instanceof VarInsnNode store && store.getOpcode() == Opcodes.ISTORE) {
-					tintArms++;
-					minusOne = constant;
-				}
-			}
-		}
-		if (lookups != 1 || modelStore == null || tintArms != 1) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] FluidRenderer.tesselate does not have the expected shape "
-					+ "(%d model lookup(s), store %s, %d tint fallback arm(s)) — leaving MinecraftForge fluid models "
-					+ "unbridged rather than editing half of it", lookups, modelStore != null, tintArms);
-			return false;
-		}
-
-		int slot = modelStore.var;
-		InsnList funnel = new InsnList();
-		funnel.add(new VarInsnNode(Opcodes.ALOAD, slot));
-		funnel.add(new VarInsnNode(Opcodes.ALOAD, 5));
-		funnel.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		funnel.add(new VarInsnNode(Opcodes.ALOAD, 2));
-		funnel.add(new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_FORGE_FLUIDS, "model", FLUID_MODEL_FUNNEL_DESC, false));
-		funnel.add(new VarInsnNode(Opcodes.ASTORE, slot));
-		tesselate.instructions.insert(modelStore, funnel);
-
-		InsnList tint = new InsnList();
-		tint.add(new VarInsnNode(Opcodes.ALOAD, 5));
-		tint.add(new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_FORGE_FLUIDS, "tintColor", "(" + FLUID_STATE + ")I", false));
-		tesselate.instructions.insert(minusOne, tint);
-		tesselate.instructions.remove(minusOne);
-		tesselate.maxStack = Math.max(tesselate.maxStack, 4);
-		ForbricLog.info("[Forbric/MergedBaseCompat] FluidRenderer.tesselate now asks a MinecraftForge fluid's client "
-				+ "extensions for its model and tint — the merge kept NeoForge's tesselate, which never asks, so every "
-				+ "Forge modded fluid drew as the missing texture");
-		return true;
-	}
-
-	/**
-	 * Writes {@code WeightedVariants.first} in {@code <init>}, from the local the merged constructor already computes.
-	 *
-	 * <p>Forge's {@code particleMaterial(ModelData)} reads {@code first} (its only reader in the base) and the merge
-	 * dropped the write, so a Forge mod asking a weighted block model for its particle sprite the Forge way NPEs.
-	 * Genuine Forge's constructor writes it from the same {@code getFirst()/value()} chain the merged constructor
-	 * still computes into local 2; three instructions after that {@code ASTORE 2} restore it. Stands down if
-	 * anything already writes the field (rebuilt base) or the chain has a different shape.
-	 */
-	private static boolean giveMinecraftForgesParticleLookupItsFirstVariant(ClassNode node) {
-		if (!WEIGHTED_VARIANTS.equals(node.name)) return false;
-		String desc = "L" + BLOCK_STATE_MODEL + ";";
-		if (!hasField(node, "first", desc)) return false;
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTFIELD
-						&& WEIGHTED_VARIANTS.equals(field.owner) && "first".equals(field.name)) return false;
-			}
-		}
-		MethodNode init = findMethod(node, "<init>", "(Lnet/minecraft/util/random/WeightedList;)V");
-		if (init == null) return false;
-		VarInsnNode store = null;
-		for (AbstractInsnNode insn = init.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (!(insn instanceof VarInsnNode var) || var.getOpcode() != Opcodes.ASTORE || var.var != 2) continue;
-			// previousReal answers the nearest real instruction AT or before its cursor, so step off each one first.
-			AbstractInsnNode a = previousReal(var.getPrevious()), b = a == null ? null : previousReal(a.getPrevious()),
-					c = b == null ? null : previousReal(b.getPrevious()), d = c == null ? null : previousReal(c.getPrevious());
-			if (a instanceof TypeInsnNode castModel && castModel.getOpcode() == Opcodes.CHECKCAST
-					&& BLOCK_STATE_MODEL.equals(castModel.desc)
-					&& b instanceof MethodInsnNode value && "net/minecraft/util/random/Weighted".equals(value.owner)
-					&& "value".equals(value.name)
-					&& c instanceof TypeInsnNode castWeighted && castWeighted.getOpcode() == Opcodes.CHECKCAST
-					&& "net/minecraft/util/random/Weighted".equals(castWeighted.desc)
-					&& d instanceof MethodInsnNode first && "getFirst".equals(first.name)) {
-				store = var;
-				break;
-			}
-		}
-		if (store == null) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] WeightedVariants.<init> no longer computes the first model into "
-					+ "local 2 the way the merge left it — not writing 'first'");
-			return false;
-		}
-		InsnList write = new InsnList();
-		write.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		write.add(new VarInsnNode(Opcodes.ALOAD, 2));
-		write.add(new FieldInsnNode(Opcodes.PUTFIELD, WEIGHTED_VARIANTS, "first", desc));
-		init.instructions.insert(store, write);
-		init.maxStack = Math.max(init.maxStack, 2);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] WeightedVariants.first is written again (1 field, in <init>) — "
-				+ "Forge's particleMaterial(ModelData) is its only reader and the merge dropped genuine Forge's write");
-		return true;
-	}
-
-	private static boolean addMissingForgeFluidTypeBridge(ClassNode node) {
-		if ((node.access & (Opcodes.ACC_INTERFACE | Opcodes.ACC_ABSTRACT)) != 0) return false;
-		if (!node.name.startsWith("net/minecraft/world/level/material/")) return false;
-		if (!node.interfaces.contains("net/neoforged/neoforge/common/extensions/IFluidExtension")) return false;
-		if (hasMethod(node, "getFluidType", "()Lnet/minecraftforge/fluids/FluidType;")) return false;
-
-		MethodNode bridge = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_SYNTHETIC,
-				"getFluidType", "()Lnet/minecraftforge/fluids/FluidType;", null, null);
-		bridge.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		bridge.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC,
-				"net/forbric/kernel/interop/ForgeRuntimeInterop",
-				"forgeFluidType", "(Ljava/lang/Object;)Ljava/lang/Object;", false));
-		bridge.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraftforge/fluids/FluidType"));
-		bridge.instructions.add(new InsnNode(Opcodes.ARETURN));
-		bridge.maxStack = 1;
-		bridge.maxLocals = 1;
-		node.methods.add(bridge);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] added Forge FluidType bridge to %s",
-				node.name.replace('/', '.'));
-		return true;
-	}
-
-	private static boolean addMissingForgeKeyMappingLookupInitializer(ClassNode node) {
-		if (!"net/minecraft/client/KeyMapping".equals(node.name)) return false;
-		String forgeLookup = "Lnet/minecraftforge/client/settings/KeyMappingLookup;";
-		if (!hasField(node, "MAP", forgeLookup) || initializesStaticField(node, "MAP", forgeLookup)) return false;
-
-		MethodNode clinit = findMethod(node, "<clinit>", "()V");
-		if (clinit == null) {
-			clinit = new MethodNode(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
-			clinit.instructions.add(new InsnNode(Opcodes.RETURN));
-			clinit.maxLocals = 0;
-			node.methods.add(clinit);
-		}
-
-		boolean inserted = false;
-		for (AbstractInsnNode insn = clinit.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() != Opcodes.RETURN) continue;
-			clinit.instructions.insertBefore(insn, new TypeInsnNode(Opcodes.NEW,
-					ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.FORGE)));
-			clinit.instructions.insertBefore(insn, new InsnNode(Opcodes.DUP));
-			clinit.instructions.insertBefore(insn, new MethodInsnNode(Opcodes.INVOKESPECIAL,
-					ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.FORGE), "<init>", "()V", false));
-			clinit.instructions.insertBefore(insn, new FieldInsnNode(Opcodes.PUTSTATIC,
-					"net/minecraft/client/KeyMapping", "MAP", forgeLookup));
-			inserted = true;
-		}
-		if (!inserted) return false;
-
-		clinit.maxStack = Math.max(clinit.maxStack, 2);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] initialized Forge KeyMapping lookup on merged client base");
-		return true;
-	}
-
-	/**
-	 * Points {@code KeyMapping.click} at the key lookup that registration actually populates.
-	 *
-	 * <p>The byte-merge left {@code KeyMapping} with TWO static fields both named {@code MAP} — NeoForge's
-	 * {@code KeyMappingLookup} and MinecraftForge's (same name, different descriptor: legal in bytecode, unwritable
-	 * in Java source). Every WRITE goes to the NeoForge one ({@code registerMapping}, the constructors,
-	 * {@code setKeyModifierAndCode}, {@code resetMapping}), and {@code <clinit>} only ever assigned that one. The
-	 * merge also kept BOTH {@code forAllKeyMappings} overloads, and they READ different maps: the 3-arg one — used
-	 * by {@code KeyMapping.set}, which drives {@code isDown} — reads NeoForge's, while the 2-arg one, whose single
-	 * caller is {@code KeyMapping.click} (it drives {@code clickCount}), reads MinecraftForge's.
-	 *
-	 * <p>So the Forge lookup is permanently EMPTY and {@code click} matches nothing: {@code clickCount} never
-	 * increments and {@code consumeClick()} is forever false. That kills every {@code consumeClick}-driven key for
-	 * vanilla AND every mod — inventory (E), chat (T), command ({@code /}), drop (Q) — while {@code isDown} keys
-	 * (WASD, sneak, attack) keep working, because {@code set} reads the populated map. ESC still opens the pause
-	 * menu, because that is a direct key-code check in {@code KeyboardHandler}, not a {@code KeyMapping} — which is
-	 * exactly the "ESC pauses but E does nothing" shape this presents as.
-	 *
-	 * <p>Both {@code getAll(InputConstants$Key)} overloads return {@code List<KeyMapping>}, so redirecting the field
-	 * read and the call is descriptor-identical. {@link #addMissingForgeKeyMappingLookupInitializer} still runs, so
-	 * the Forge lookup stays non-null for any Forge code that reaches for it directly.
-	 */
-	private static boolean routeKeyMappingClickToPopulatedLookup(ClassNode node) {
-		if (!"net/minecraft/client/KeyMapping".equals(node.name)) return false;
-
-		String forgeLookup = "Lnet/minecraftforge/client/settings/KeyMappingLookup;";
-		String neoLookup = "Lnet/neoforged/neoforge/client/settings/KeyMappingLookup;";
-		// Only meaningful when the merge actually produced BOTH lookups; a single-ecosystem base is already coherent.
-		if (!hasField(node, "MAP", forgeLookup) || !hasField(node, "MAP", neoLookup)) return false;
-
-		MethodNode lookup = findMethod(node, "forAllKeyMappings",
-				"(Lcom/mojang/blaze3d/platform/InputConstants$Key;Ljava/util/function/Consumer;)V");
-		if (lookup == null) return false;
-
-		boolean changed = false;
-		for (AbstractInsnNode insn = lookup.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() == Opcodes.GETSTATIC && insn instanceof FieldInsnNode field
-					&& "MAP".equals(field.name) && forgeLookup.equals(field.desc)) {
-				field.desc = neoLookup;
-				changed = true;
-			} else if (insn instanceof MethodInsnNode call
-					&& ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.FORGE).equals(call.owner)
-					&& "getAll".equals(call.name)) {
-				call.owner = ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.NEOFORGE);
-				changed = true;
-			}
-		}
-		if (!changed) return false;
-
-		ForbricLog.warn("[Forbric/MergedBaseCompat] routed KeyMapping.click to the populated (NeoForge) key lookup "
-				+ "— the merge left it reading the Forge-side MAP, which is never written, so every consumeClick key "
-				+ "(inventory/chat/command/drop) was dead");
-		return true;
-	}
-
 	/**
 	 * Gives {@code ParticleResources}' vanilla-typed {@code providers} field a live view of the one that is written.
 	 *
-	 * <p>The same failure class as {@link #routeKeyMappingClickToPopulatedLookup}, at field level. Vanilla declares
+	 * <p>The same failure class as {@link #giveKeyMappingItsVanillaMap}, at field level. Vanilla declares
 	 * {@code providers} as {@code Int2ObjectMap} keyed by particle id; NeoForge 26.2.0.88 RE-TYPES that field to
-	 * {@code Map<Identifier, ?>}. Same name, different descriptor is legal, so the merge keeps both and the
-	 * surviving {@code <init>} writes only NeoForge's. The vanilla-typed one is null for the life of the process.
+	 * {@code Map<Identifier, ?>}. Same name, different descriptor is legal, so a base that carries both
+	 * declarations has a surviving {@code <init>} that writes only NeoForge's. The vanilla-typed one is null for
+	 * the life of the process.
 	 *
 	 * <p>The merge tool sees this pair and correctly declines to delete either — deleting the unwritten one trades
 	 * an NPE for a {@code NoSuchFieldError} at the same instruction — and it cannot repair it: its
@@ -1313,15 +483,14 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * injects at {@code registerProviders}'s RETURN, so a repair placed at the end of the constructor is still too
 	 * late and reproduces the crash while looking correct.
 	 *
-	 * <p>It also repoints {@code getProvider} at the live map. MinecraftForge added {@code providersByName} and
-	 * filled it from its own {@code register}, which the merge dropped — so the merged class initializes it, from
-	 * a synthetic default AFTER {@code registerProviders} has already run, and nothing ever puts anything in it.
-	 * The two maps held the same thing by construction (both keyed {@code getKey(type)}, same descriptor), so this
-	 * is a rename.
+	 * <p>It also repoints {@code getProvider} at the live map when a name-keyed {@code providersByName} twin is
+	 * present and nothing outside {@code <init>} fills it — the shape an extra carrier field leaves behind when
+	 * its producer is absent. The two maps hold the same thing by construction (both keyed
+	 * {@code getKey(type)}, same descriptor), so this is a rename.
 	 */
 	private static boolean giveTheVanillaParticleMapAViewOfTheLiveOne(ClassNode node) {
 		if (!PARTICLE_RESOURCES.equals(node.name)) return false;
-		// Only when the merge actually split it. A single-ecosystem or rebuilt base is already coherent.
+		// Only when the base actually carries both declarations. A coherent base is already fine.
 		if (!hasField(node, "providers", NAME_KEYED) || !hasField(node, "providers", ID_KEYED)) return false;
 
 		MethodNode init = findMethod(node, "<init>", "()V");
@@ -1372,161 +541,11 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	}
 
 	/**
-	 * Gives {@code ChunkGenerator.featuresPerStep} vanilla's descriptor back, and routes the one use that needed
-	 * MinecraftForge's through a guard.
-	 *
-	 * <h2>Why this one is not the ParticleResources shape</h2>
-	 *
-	 * <p>{@link #giveTheVanillaParticleMapAViewOfTheLiveOne} repairs a field the merge kept TWICE, one of them
-	 * unwritten. This is the other half of that family, and the worse half: MinecraftForge RE-TYPES the vanilla
-	 * field — {@code Supplier<List<StepFeatureData>>} becomes its own {@code ClearableLazy<...>}, so that
-	 * {@code refreshFeaturesPerStep()} has something to invalidate — and the merge keeps only MinecraftForge's
-	 * declaration. Vanilla's descriptor does not exist at all, so there is no unwritten field to give a view to.
-	 *
-	 * <p>A whole-artifact census of the merged base against stock 26.2 finds six vanilla fields in this state;
-	 * this is the one that costs a boot. fabric-api's {@code fabric-biome-api-v1} does not use an {@code @Accessor}
-	 * — {@code BiomeModificationImpl.lambda$finalizeWorldGen$1} is a plain access-widened
-	 * {@code putfield ChunkGenerator.featuresPerStep : Ljava/util/function/Supplier;} — so it gets
-	 * {@code NoSuchFieldError} and the DEDICATED SERVER DOES NOT START the moment any Fabric biome modification
-	 * applies. Installing balm, a library a large part of the Fabric ecosystem depends on, is enough to trigger it.
-	 * lithostitched's {@code @Accessor setFeaturesPerStep(Supplier)} fails to bind for the same reason, from the
-	 * other ecosystem.
-	 *
-	 * <h2>Why the repair is to move the field back rather than to add a second one</h2>
-	 *
-	 * <p>Because both descriptors can be satisfied by ONE field: {@code ClearableLazy extends Lazy extends
-	 * Supplier}, so the value MinecraftForge's constructor already stores IS a {@code Supplier}. Declaring the
-	 * field with vanilla's descriptor therefore keeps every existing reader correct while making the vanilla
-	 * descriptor — the one two ecosystems' mods spell — exist again. Adding a second, vanilla-typed field instead
-	 * would give fabric-api somewhere to write that nothing reads: the biome list would never be recomputed, the
-	 * server would boot, and the modification would silently not apply. That is the failure this project has paid
-	 * for more than once, and it is worse than the crash.
-	 *
-	 * <p>The rewrite is small and complete because the field has exactly FOUR instruction sites, all inside
-	 * {@code ChunkGenerator} itself — verified by a constant-pool scan of the whole merged base and of both
-	 * carriers, which find no other class naming it:
-	 * <ul>
-	 *   <li>{@code <init>}: {@code PUTFIELD} of {@code ClearableLazy.concurrentOf(...)} — descriptor only;</li>
-	 *   <li>{@code validate()} and {@code applyBiomeDecoration(...)}: {@code GETFIELD} then
-	 *       {@code ClearableLazy.get()} — retargeted to {@code Supplier.get()}, same descriptor, same stack;</li>
-	 *   <li>{@code refreshFeaturesPerStep()}: {@code GETFIELD} then {@code ClearableLazy.invalidate()} — the one
-	 *       use a plain {@code Supplier} cannot serve, so it goes to {@code KernelChunkGenerator.invalidate}.</li>
-	 * </ul>
-	 *
-	 * <p>A bare {@code CHECKCAST} in {@code refreshFeaturesPerStep} would compile and look right, and then throw
-	 * {@code ClassCastException} in worldgen the first time a Fabric modification had replaced the value — turning
-	 * this fix into a different crash for the same mods. The guard also reports that state once, which is the only
-	 * place either ecosystem could learn that MinecraftForge's refresh has become a no-op.
-	 *
-	 * <p>Stands down whole if it meets a site it does not recognise: a half-rewritten field is a
-	 * {@code NoSuchFieldError} somewhere less legible than here. Idempotent by the same guard — after one pass no
-	 * {@code ClearableLazy}-typed declaration remains, so the second pass finds nothing.
-	 */
-	private static boolean giveFeaturesPerStepItsVanillaDescriptorBack(ClassNode node) {
-		if (!CHUNK_GENERATOR.equals(node.name)) return false;
-		FieldNode field = null;
-		for (FieldNode candidate : node.fields) {
-			if (FEATURES_PER_STEP.equals(candidate.name) && CLEARABLE_LAZY_DESC.equals(candidate.desc)) {
-				field = candidate;
-			}
-		}
-		// Absent means vanilla's descriptor is already the only one — a rebuilt base, or this pass having run.
-		if (field == null) return false;
-		if (hasField(node, FEATURES_PER_STEP, SUPPLIER_DESC)) {
-			// Both declarations present is the ParticleResources shape, not this one, and retyping would then
-			// produce two fields with the same name AND descriptor, which is not a legal class.
-			ForbricLog.warn("[Forbric/MergedBaseCompat] ChunkGenerator declares featuresPerStep with BOTH "
-					+ "descriptors — that is the duplicate-field shape, which this repair must not touch");
-			return false;
-		}
-
-		// Collect first, rewrite second: every site has to be one of the three known shapes, or none is changed.
-		List<FieldInsnNode> sites = new ArrayList<>();
-		List<MethodInsnNode> gets = new ArrayList<>();
-		List<MethodInsnNode> invalidations = new ArrayList<>();
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof FieldInsnNode access) || !node.name.equals(access.owner)
-						|| !FEATURES_PER_STEP.equals(access.name) || !CLEARABLE_LAZY_DESC.equals(access.desc)) {
-					continue;
-				}
-				sites.add(access);
-				if (access.getOpcode() == Opcodes.PUTFIELD) continue;
-				if (access.getOpcode() != Opcodes.GETFIELD) {
-					ForbricLog.warn("[Forbric/MergedBaseCompat] ChunkGenerator.featuresPerStep is accessed as a "
-							+ "STATIC field in %s%s — not a shape this repair knows, so the field keeps "
-							+ "MinecraftForge's descriptor and fabric-api's biome API stays broken",
-							method.name, method.desc);
-					return false;
-				}
-				AbstractInsnNode next = access.getNext();
-				if (next instanceof MethodInsnNode call && CLEARABLE_LAZY.equals(call.owner)) {
-					if ("get".equals(call.name) && "()Ljava/lang/Object;".equals(call.desc)) {
-						gets.add(call);
-						continue;
-					}
-					if ("invalidate".equals(call.name) && "()V".equals(call.desc)) {
-						invalidations.add(call);
-						continue;
-					}
-				}
-				ForbricLog.warn("[Forbric/MergedBaseCompat] ChunkGenerator.featuresPerStep is read in %s%s and then "
-						+ "used in a way this repair does not recognise — standing down whole rather than leaving "
-						+ "the field half-retyped", method.name, method.desc);
-				return false;
-			}
-		}
-		if (sites.isEmpty()) return false;
-
-		field.desc = SUPPLIER_DESC;
-		// And the ACCESS the descriptor implies, which is not a tidy-up. fabric-api asks for exactly this field by
-		// (owner, name, DESCRIPTOR) in fabric-biome-api-v1.classtweaker — "accessible" and "mutable" — and the
-		// kernel applies class tweakers in the ACCESS phase, one phase BEFORE this one. So the request could not
-		// have matched the ClearableLazy-typed declaration and the field is still private final here. Restoring
-		// the descriptor alone therefore does not fix the boot, it only changes which error ends it:
-		// NoSuchFieldError becomes IllegalAccessError, at the same cross-class PUTFIELD in BiomeModificationImpl.
-		field.access = (field.access & ~(Opcodes.ACC_PRIVATE | Opcodes.ACC_PROTECTED | Opcodes.ACC_FINAL))
-				| Opcodes.ACC_PUBLIC;
-		// The generic signature is metadata, but a stale one contradicts the descriptor for anything that reads
-		// both (reflection, and this project's own artifact scans). Swap the prefix when it is the expected shape.
-		if (field.signature != null) {
-			String lazyPrefix = "L" + CLEARABLE_LAZY + "<";
-			field.signature = field.signature.startsWith(lazyPrefix)
-					? SUPPLIER_DESC.substring(0, SUPPLIER_DESC.length() - 1) + "<"
-							+ field.signature.substring(lazyPrefix.length())
-					: null;
-		}
-		for (FieldInsnNode access : sites) {
-			access.desc = SUPPLIER_DESC;
-		}
-		for (MethodInsnNode get : gets) {
-			get.owner = SUPPLIER;
-			get.itf = true;
-		}
-		for (MethodInsnNode invalidate : invalidations) {
-			// GETFIELD leaves exactly the receiver on the stack, which is this static call's only argument, so the
-			// replacement is one instruction for one instruction: no stack depth change, no frame to recompute.
-			invalidate.setOpcode(Opcodes.INVOKESTATIC);
-			invalidate.owner = KERNEL_CHUNK_GENERATOR;
-			invalidate.name = "invalidate";
-			invalidate.desc = "(" + SUPPLIER_DESC + ")V";
-			invalidate.itf = false;
-		}
-
-		ForbricLog.warn("[Forbric/MergedBaseCompat] ChunkGenerator.featuresPerStep carried MinecraftForge's "
-				+ "ClearableLazy descriptor and vanilla's had stopped existing, so fabric-api's biome API — which "
-				+ "writes that field directly — threw NoSuchFieldError and the server did not start. The field is "
-				+ "vanilla-typed again (%d access site(s), %d read(s) retargeted, %d invalidation(s) guarded)",
-				sites.size(), gets.size(), invalidations.size());
-		return true;
-	}
-
-	/**
 	 * Stops one ecosystem's condition dialect from failing the other ecosystem's data files — and with them the
 	 * whole registry load.
 	 *
-	 * <p>The merged {@code RegistryLoadTask$PendingRegistration.loadFromResource} carries NeoForge's patch: stock
-	 * Minecraft's body calls {@code Decoder.parse} straight, and the merged one wraps every element in
+	 * <p>The patched {@code RegistryLoadTask$PendingRegistration.loadFromResource} carries NeoForge's patch: stock
+	 * Minecraft's body calls {@code Decoder.parse} straight, and the patched one wraps every element in
 	 * {@code ConditionalOps.createConditionalCodec} first. There is no switch on it and no per-pack scoping, so
 	 * EVERY datapack-registry element from EVERY pack is judged by NeoForge's evaluator.
 	 *
@@ -1571,35 +590,21 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		clinit.instructions.insertBefore(target, new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_NEO_CONDITIONS,
 				"lenient", "(" + CODEC_DESC + ")" + CODEC_DESC, false));
 		ForbricLog.info("[Forbric/MergedBaseCompat] NeoForge's resource-condition codec now tolerates a condition "
-				+ "type it does not own — the merged base runs that evaluator over EVERY datapack element from "
+				+ "type it does not own — the patched base runs that evaluator over EVERY datapack element from "
 				+ "every pack, so a Fabric mod's own condition used to fail the whole registry load and the world "
 				+ "with it");
 		return true;
 	}
 
 	/**
-	 * The same wrap on MinecraftForge's {@code ICondition.CODEC} — the THIRD strict evaluator, and the one that
-	 * had not been hit yet.
-	 *
-	 * <p>The merged {@code ResourceManagerRegistryLoadTask.load} calls
-	 * {@code ConditionCodec.wrap} at offset 15 while its own {@code lambda$load$1} builds NeoForge's
-	 * {@code ConditionalOps}: both ecosystems' evaluators are live in the same method, over every datapack
-	 * registry element. {@code LootPool} names the MinecraftForge one too. So a mod whose condition type only
-	 * MinecraftForge cannot resolve fails a world load exactly the way waystones did on the NeoForge side.
-	 *
-	 * <p>Not {@code SAFE_CODEC}, which MinecraftForge already ships and which looks like the answer:
-	 * {@code <clinit>} offsets 24-35 show it is {@code CODEC.orElse(FalseCondition.INSTANCE)}, so an unparseable
-	 * condition evaluates FALSE and the element is dropped. Silently missing content is worse than the crash.
-	 */
-	/**
-	 * Converts a guest mixin's private "skip this file" sentinel before the merged reader casts it and dies.
+	 * Converts a guest mixin's private "skip this file" sentinel before the reader casts it and dies.
 	 *
 	 * <p>fabric-api's {@code SimpleJsonResourceReloadListenerMixin} is a producer and a consumer that only work
-	 * as a pair, and on the merged base exactly one of them applies. The producer — a {@code @WrapOperation} on
+	 * as a pair, and on this base at most one of them applies. The producer — a {@code @WrapOperation} on
 	 * {@code Codec.parse} — returns {@code DataResult.success(SKIP_DATA_MARKER)}, a bare {@code new Object()},
 	 * when a file's conditions say no. The consumer, an {@code @Inject} that recognises the marker, targets
-	 * {@code lambda$scanDirectory$0(Codec,Identifier,Map,Object)}; the merge left the class carrying TWO methods
-	 * of that name and the live {@code invokedynamic} binds the OTHER one,
+	 * {@code lambda$scanDirectory$0(Codec,Identifier,Map,Object)}; where the base carries TWO methods of that
+	 * name the live {@code invokedynamic} binds the OTHER one,
 	 * {@code (Identifier,Identifier,Map,Optional)}. So the marker reaches {@code DataResult.ifSuccess}, whose
 	 * consumer casts it to {@code Optional}, and the datapack load dies: "can't proceed with server load".
 	 *
@@ -1656,146 +661,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return true;
 	}
 
-	private static boolean letForeignResourceConditionsThroughMinecraftForge(ClassNode node) {
-		if (!FORGE_ICONDITION.equals(node.name)) return false;
-		MethodNode clinit = findMethod(node, "<clinit>", "()V");
-		if (clinit == null) return false;
-
-		FieldInsnNode target = null;
-		for (AbstractInsnNode insn = clinit.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTSTATIC
-					&& FORGE_ICONDITION.equals(field.owner) && "CODEC".equals(field.name)
-					&& CODEC_DESC.equals(field.desc)) {
-				if (target != null) {
-					ForbricLog.warn("[Forbric/MergedBaseCompat] MinecraftForge's ICondition.CODEC is assigned more "
-							+ "than once — not wrapping it, because only one of the assignments would survive");
-					return false;
-				}
-				target = field;
-			}
-		}
-		if (target == null) return false;
-		if (target.getPrevious() instanceof MethodInsnNode already
-				&& KERNEL_FORGE_CONDITIONS.equals(already.owner)) {
-			return false;                       // already wrapped: idempotent
-		}
-
-		clinit.instructions.insertBefore(target, new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_FORGE_CONDITIONS,
-				"lenient", "(" + CODEC_DESC + ")" + CODEC_DESC, false));
-		ForbricLog.info("[Forbric/MergedBaseCompat] MinecraftForge's resource-condition codec now tolerates a "
-				+ "condition type it does not own — the merged base runs that evaluator over every datapack "
-				+ "registry element AND every loot pool, so another ecosystem's condition used to fail the whole "
-				+ "registry load and the world with it. OPTIONAL_FEILD_CODEC and SAFE_CODEC derive from CODEC "
-				+ "later in the same <clinit>, so all three readers inherit this");
-		return true;
-	}
-
-	/**
-	 * Makes {@code DefaultAttributes} read BOTH ecosystems' mod-attribute maps, not just the one that won the merge.
-	 *
-	 * <p>Both families collect a mod's entity attributes into a map of their own —
-	 * {@code ForgeHooks.FORGE_ATTRIBUTES} and NeoForge's {@code CommonHooks} equivalent — and vanilla's
-	 * {@code DefaultAttributes} is the single consumer both patch. The merge keeps one patch, and it kept
-	 * NeoForge's: {@code javap} of the merged class shows {@code getSupplier} and {@code hasSupplier} each calling
-	 * {@code CommonHooks.getAttributesView()}, and a constant-pool scan of the whole merged base finds
-	 * {@code EntityAttributeCreationEvent} named nowhere.
-	 *
-	 * <p>So a traditional MinecraftForge mod's attributes went into a map with no reader — the producer/consumer
-	 * split this project has hit at field level before, here at method level. An {@code AttributeSupplier} is what
-	 * gives a living entity its health and movement and an entity without one is refused, so it is not a
-	 * degradation: {@code cursed_breeding} logged "has no attributes" 348 times in one boot and its mobs could not
-	 * exist.
-	 *
-	 * <p>Both call sites take no arguments and return {@code Map}, so each is an owner/name replacement on one
-	 * instruction with nothing on the stack moved.
-	 */
-	private static boolean serveDefaultAttributesBothEcosystems(ClassNode node) {
-		if (!DEFAULT_ATTRIBUTES.equals(node.name)) return false;
-		int redirected = 0;
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-						|| !NEO_COMMON_HOOKS.equals(call.owner) || !"getAttributesView".equals(call.name)
-						|| !ATTRIBUTES_VIEW.equals(call.desc)) {
-					continue;
-				}
-				call.owner = KERNEL_FORGE_ATTRIBUTES;
-				call.name = "attributesView";
-				redirected++;
-			}
-		}
-		if (redirected == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] DefaultAttributes now reads both ecosystems' mod-attribute maps "
-				+ "(%d call site(s)) — the merge kept only NeoForge's reader, so a traditional MinecraftForge mod's "
-				+ "entities had no attributes and could not exist", redirected);
-		return true;
-	}
-
-	static boolean restoreForgeClientInit(ClassNode node) {
-		if (!"net/minecraft/client/Minecraft".equals(node.name)
-				|| "off".equalsIgnoreCase(System.getProperty("forbric.forgeClientInit", "on"))) return false;
-		String owner = ForeignType.CLIENT_HOOKS.internal(Ecosystem.NEOFORGE);
-		String target = "net/forbric/kernel/runtime/KernelForgeClientInit";
-		String init = "(Lnet/minecraft/client/Minecraft;Lnet/minecraft/server/packs/resources/ReloadableResourceManager;)V";
-		String particles = "(Lnet/minecraft/client/particle/ParticleResources;)V";
-		List<MethodInsnNode> matches = new java.util.ArrayList<>();
-		MethodNode constructor = null;
-		int initializers = 0, providers = 0;
-		for (MethodNode method : node.methods) {
-			if (!"<init>".equals(method.name)) continue;
-			for (AbstractInsnNode instruction : method.instructions) {
-				if (!(instruction instanceof MethodInsnNode call)) continue;
-				if (!"initClientHooks".equals(call.name) && !"onRegisterParticleProviders".equals(call.name)) continue;
-				if (target.equals(call.owner)) return false;
-				if (!owner.equals(call.owner)) continue;
-				if (call.getOpcode() != Opcodes.INVOKESTATIC || call.itf) return false;
-				if ("initClientHooks".equals(call.name) && init.equals(call.desc)) initializers++;
-				else if ("onRegisterParticleProviders".equals(call.name) && particles.equals(call.desc)) providers++;
-				else return false;
-				if (constructor != null && constructor != method) return false;
-				constructor = method;
-				matches.add(call);
-			}
-		}
-		if (initializers != 1 || providers != 1) return false;
-		for (MethodInsnNode call : matches) call.owner = target;
-		// Both sites land or neither does (the checks above are whole-or-nothing), so both bridges are recorded
-		// here; EventBridges.verify(CLIENT_INIT) names them at the client setup hook if this repair stood down.
-		EventBridges.installed(GameEventBridge.CLIENT_INIT_HOOKS);
-		EventBridges.installed(GameEventBridge.PARTICLE_PROVIDERS);
-		ForbricLog.info("[Forbric/MergedBaseCompat] Minecraft now initializes both Forge families' client hooks and particles");
-		return true;
-	}
-
-	static boolean restoreForgeGeometryReload(ClassNode node) {
-		if (!"net/minecraft/client/resources/model/ModelManager".equals(node.name)
-				|| "off".equalsIgnoreCase(System.getProperty("forbric.forgeClientInit", "on"))) return false;
-		String desc = "(Lnet/minecraft/server/packs/resources/PreparableReloadListener$SharedState;Ljava/util/concurrent/Executor;"
-				+ "Lnet/minecraft/server/packs/resources/PreparableReloadListener$PreparationBarrier;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;";
-		MethodNode method = findMethod(node, "reload", desc);
-		if (method == null || (method.access & Opcodes.ACC_STATIC) != 0) return false;
-		for (AbstractInsnNode instruction : method.instructions) {
-			if (instruction instanceof MethodInsnNode call
-					&& (("net/forbric/kernel/runtime/KernelForgeClientInit".equals(call.owner)
-							&& "initGeometryLoaders".equals(call.name))
-						|| ("net/minecraftforge/client/model/geometry/GeometryLoaderManager".equals(call.owner)
-							&& "init".equals(call.name)))) return false;
-		}
-		AbstractInsnNode first = method.instructions.getFirst();
-		while (first != null && first.getOpcode() < 0) first = first.getNext();
-		if (!(first instanceof VarInsnNode load) || load.getOpcode() != Opcodes.ALOAD || load.var != 1) return false;
-		AbstractInsnNode next = first.getNext();
-		while (next != null && next.getOpcode() < 0) next = next.getNext();
-		if (!(next instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKEVIRTUAL
-				|| !"net/minecraft/server/packs/resources/PreparableReloadListener$SharedState".equals(call.owner)
-				|| !"resourceManager".equals(call.name)
-				|| !"()Lnet/minecraft/server/packs/resources/ResourceManager;".equals(call.desc)) return false;
-		method.instructions.insertBefore(first, new MethodInsnNode(Opcodes.INVOKESTATIC,
-				"net/forbric/kernel/runtime/KernelForgeClientInit", "initGeometryLoaders", "()V", false));
-		ForbricLog.info("[Forbric/MergedBaseCompat] ModelManager initializes Forge geometry loaders on every resource reload");
-		return true;
-	}
-
 	/**
 	 * Lets a Fabric mod add a client reload listener the way Fabric mods always have, without killing the client.
 	 *
@@ -1803,7 +668,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * asking {@code VanillaClientListeners.getNameForClass}, and when that returns null it THROWS: "A non-vanilla
 	 * reload listener … was added via mixin before the AddClientReloadListenerEvent!". The assertion is written
 	 * for an instance whose only mods are NeoForge mods. Adding a listener by mixin is ordinary Fabric practice —
-	 * there is no event for it to go through — so on a tri-ecosystem instance it fires on CORRECT mod code, from
+	 * there is no event for it to go through — so on a multi-ecosystem instance it fires on CORRECT mod code, from
 	 * inside {@code ClientHooks.initClientHooks}, which runs inside {@code Minecraft.<init>}: vistas took the whole
 	 * client down before it drew a frame.
 	 *
@@ -1841,7 +706,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 *
 	 * <p>The other half of {@link #letForeignResourceConditionsThrough}. That one stopped NeoForge's evaluator
 	 * failing a whole world load over an id it does not own; this one makes the answer come from the mod that
-	 * does own it. fabric-api reads that key from exactly two mixins and the merged base defeats both — one
+	 * does own it. fabric-api reads that key from exactly two mixins and the patched base defeats both — one
 	 * anchors at a {@code Decoder.parse} NeoForge's patch replaced with {@code Codec.parse}, the other targets a
 	 * lambda whose descriptor the same patch changed — and the kernel's own {@code defaultRequire} rewrite turns
 	 * the first into a SILENT soft-skip. So every Fabric mod's conditional data file has loaded unconditionally
@@ -1895,56 +760,8 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		}
 		ForbricLog.info("[Forbric/MergedBaseCompat] fabric:load_conditions has an evaluator again: ConditionalOps' "
 				+ "one codec factory is wrapped and %d other public entry point(s) funnel through it — datapack "
-				+ "registries, recipes, loot tables and advancements all decode through it. fabric-api's own two "
-				+ "mixins for this cannot apply on the merged base", funnelled);
-		return true;
-	}
-
-	/**
-	 * Lets monster rooms generate again, by giving the NeoForge data map a vanilla fallback.
-	 *
-	 * <p>The merged {@code MonsterRoomFeature.randomEntityId} is two instructions:
-	 * {@code invokestatic MonsterRoomHooks.getRandomMonsterRoomMob}. That reads a static {@code WeightedList} which
-	 * only a {@code DataMapsUpdatedEvent} listener fills, and nothing in a Forbric instance had ever loaded a data
-	 * map — a constant-pool scan of the whole merged base finds {@code DataMapLoader} named by nothing at all,
-	 * because the merge kept MinecraftForge's {@code ReloadableServerResources}. So the list was null and the
-	 * feature threw.
-	 *
-	 * <p>The kernel's previous answer was a {@code MethodBodyNeuter} on {@code MonsterRoomFeature.place}, which
-	 * does not fail — it means no dungeon, and therefore no spawner and no dungeon chest, in EVERY world every
-	 * player generates, with or without mods. A whole piece of vanilla, switched off silently, for everyone.
-	 *
-	 * <p>{@link net.forbric.kernel.runtime.KernelNeoWorldgen} now loads the data maps for real, so the primary
-	 * path works and a NeoForge mod's additions count. This redirect is what makes that recoverable rather than
-	 * load-bearing: when the data map is missing anyway, dungeons still generate from vanilla's own set. The two
-	 * sets are the same distribution — vanilla's {@code MOBS} array is {@code {SKELETON, ZOMBIE, ZOMBIE, SPIDER}}
-	 * and NeoForge's shipped data map is skeleton 100 / spider 100 / zombie 200 — so the fallback is vanilla's
-	 * behaviour and not an approximation of it.
-	 *
-	 * <p>One instruction for one: the call is static, takes the same argument and returns the same type, so
-	 * nothing on the stack or in a frame moves.
-	 */
-	private static boolean letDungeonsGenerateWithoutTheDataMap(ClassNode node) {
-		if (!MONSTER_ROOM_FEATURE.equals(node.name)) return false;
-		int redirected = 0;
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-						|| !MONSTER_ROOM_HOOKS.equals(call.owner)
-						|| !"getRandomMonsterRoomMob".equals(call.name)
-						|| !RANDOM_MONSTER_ROOM_MOB.equals(call.desc)) {
-					continue;
-				}
-				call.owner = KERNEL_NEO_WORLDGEN;
-				call.name = "randomMonsterRoomMob";
-				redirected++;
-			}
-		}
-		if (redirected == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] MonsterRoomFeature now picks its mob through the kernel "
-				+ "(%d call site(s)) — NeoForge's data map when it has one, vanilla's own set when it does not. "
-				+ "The alternative was the neutered place() this replaces, which meant no dungeon in any world",
-				redirected);
+			+ "registries, recipes, loot tables and advancements all decode through it. fabric-api's own two "
+			+ "mixins for this cannot apply on this base", funnelled);
 		return true;
 	}
 
@@ -1989,12 +806,10 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * {@code (int)(nextDouble() * size)} is then off the end of its array.</li>
 	 * </ul>
 	 *
-	 * <p>This is not a patch either ecosystem wrote. {@code patched-mc-forge-26.2.jar} carries vanilla's
-	 * {@code l2d/dmul}; {@code patched-mc-neoforge-26.2.jar} carries the float form, which is what NeoForge's
-	 * decompile-recompile pipeline emitted, and the byte merge kept the NeoForge body. It names no class from
-	 * either ecosystem, so {@code merge-conflicts.txt} — which reports conflicts by REFERENCE, on purpose — cannot
-	 * see it and never did. That is the general shape to watch for: a purely numeric method can be re-typed by the
-	 * pipeline and leave no trace in the conflict ledger.
+	 * <p>This is not a patch either ecosystem wrote by hand: the float form is what NeoForge's decompile-recompile
+	 * pipeline emitted, and it is what the patched jar carries. It names no class from any ecosystem, so a
+	 * reference-based differ cannot see it and never did. That is the general shape to watch for: a purely numeric
+	 * method can be re-typed by the pipeline and leave no trace in any conflict ledger.
 	 *
 	 * <p>Matched by SHAPE across the whole base rather than by a list of two class names, because the pipeline
 	 * decides where this lands, not us; the two known sources are declared as REQUIRED anchors so a rebuild that
@@ -2038,7 +853,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		}
 		if (repaired == 0) return false;
 		ForbricLog.info("[Forbric/MergedBaseCompat] %s scales its random bits in double again (%d site(s): %s) — the "
-				+ "merged body rounded through float, which displaces every noise octave's origin and lets "
+				+ "patched body rounded through float, which displaces every noise octave's origin and lets "
 				+ "nextDouble() return exactly 1.0",
 				node.name.replace('/', '.'), repaired, String.join(", ", methods));
 		return true;
@@ -2051,13 +866,13 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	private static final double RADIANS_TO_DEGREES = (double) (float) (180.0F / (float) Math.PI);
 
 	/**
-	 * Restores the radians-to-degrees constant vanilla folded, which the merged base recomputes at run time.
+	 * Restores the radians-to-degrees constant vanilla folded, which the patched base recomputes at run time.
 	 *
 	 * <p>Vanilla's source multiplies by a compile-time constant: {@code (double)(180.0F / (float)Math.PI)}, which
-	 * javac folds in FLOAT and widens, giving {@code ldc2_w 57.2957763671875; dmul}. The merged base instead
+	 * javac folds in FLOAT and widens, giving {@code ldc2_w 57.2957763671875; dmul}. The patched base instead
 	 * carries the expression — {@code ldc2_w 180.0; dmul; ldc2_w 3.1415927410125732; ddiv} — and evaluates it in
 	 * DOUBLE every time, which is a different number: 57.29577791868205. They differ by 1.55e-6, a relative
-	 * 2.7e-8, and the merged one is the more accurate of the two. Accuracy is not the question; being the game
+	 * 2.7e-8, and the patched one is the more accurate of the two. Accuracy is not the question; being the game
 	 * the same seed and the same inputs produce elsewhere is.
 	 *
 	 * <p>45 sites across 31 methods, and they are the ones that turn a direction into a rotation:
@@ -2065,12 +880,11 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * mob-specific siblings, {@code LookControl.getYRotD}, {@code Projectile.shoot} and {@code updateRotation},
 	 * {@code ProjectileUtil.rotateTowardsMovement}, {@code CommandSourceStack.facing}, the dragon phases,
 	 * {@code WitherBoss.aiStep}, {@code SignBlockEntity.isFacingFrontText}. Vanilla 26.2 has ZERO sites of this
-	 * shape; the merged base has 45.
+	 * shape; the patched base has 45.
 	 *
 	 * <p>Same origin as {@link #restoreDoublePrecisionToTheRandomSources(ClassNode)} and the same blind spot:
-	 * NeoForge's decompile-recompile pipeline wrote the folded constant back out as its expression, the byte
-	 * merge kept that body, and because the method names no class from any ecosystem,
-	 * {@code merge-conflicts.txt} — which reports conflicts by reference — never mentioned it. A differential
+	 * NeoForge's decompile-recompile pipeline wrote the folded constant back out as its expression, and because
+	 * the method names no class from any ecosystem, a reference-based differ never mentioned it. A differential
 	 * census of all 94,202 shared methods, normalised for everything a recompile may legally change, found
 	 * exactly two families of this kind: that one and this one.
 	 *
@@ -2101,7 +915,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		}
 		if (folded == 0) return false;
 		ForbricLog.info("[Forbric/MergedBaseCompat] %s turns radians into degrees by vanilla's folded constant again "
-				+ "(%d site(s)) — the merged body divided by pi at run time, which is a different number in the "
+				+ "(%d site(s)) — the patched body divided by pi at run time, which is a different number in the "
 				+ "eighth digit and moves every angle computed from a vector",
 				node.name.replace('/', '.'), folded);
 		return true;
@@ -2112,7 +926,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	private static final String PLAYER_ABILITIES_PACKET = "net/minecraft/network/protocol/game/ServerboundPlayerAbilitiesPacket";
 	/** NeoForge's {@code IFriendlyByteBufExtension.writeByte(byte)}: {@code return self().writeByte(value);}, nothing else. */
 	private static final String WRITE_BYTE_EXTENSION = "(B)Lnet/minecraft/network/FriendlyByteBuf;";
-	/** Vanilla's {@code FriendlyByteBuf.writeByte(int)}, which both vanilla and MinecraftForge's game call. */
+	/** Vanilla's {@code FriendlyByteBuf.writeByte(int)}, which vanilla's game calls. */
 	private static final String WRITE_BYTE_VANILLA = "(I)Lnet/minecraft/network/FriendlyByteBuf;";
 	static final String VANILLA_WRITE_BYTE_PROPERTY = "forbric.vanillaWriteByte";
 
@@ -2121,15 +935,15 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	}
 
 	/**
-	 * Calls vanilla's {@code FriendlyByteBuf.writeByte(int)} again where the merged body calls NeoForge's
+	 * Calls vanilla's {@code FriendlyByteBuf.writeByte(int)} again where the patched body calls NeoForge's
 	 * {@code writeByte(byte)}.
 	 *
 	 * <p>NeoForge's {@code IFriendlyByteBufExtension} declares {@code writeByte(byte)}, which only forwards to
 	 * {@code writeByte(int)}. Recompiling vanilla's source with that interface in place, javac binds every
 	 * {@code writeByte} handed a {@code byte} to the extension's overload — the more specific one — so NeoForge's game
-	 * calls it where vanilla and MinecraftForge's game call {@code writeByte(int)}: fourteen sites in ten network
-	 * {@code write} methods, through {@code FriendlyByteBuf} or {@code RegistryFriendlyByteBuf} as vanilla does. The
-	 * merge kept NeoForge's bodies, and a mixin anchored on vanilla's call bound nothing: ViaFabricPlus' 1.15.2 ability
+	 * calls it where vanilla's game calls {@code writeByte(int)}: fourteen sites in ten network
+	 * {@code write} methods, through {@code FriendlyByteBuf} or {@code RegistryFriendlyByteBuf} as vanilla does. A
+	 * mixin anchored on vanilla's call binds nothing: ViaFabricPlus' 1.15.2 ability
 	 * flags redirect {@code ServerboundPlayerAbilitiesPacket.write}'s {@code writeByte(int)}, a required injector, so
 	 * the strict policy stopped the client as soon as a world loaded.
 	 *
@@ -2180,8 +994,8 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 *
 	 * <p>NeoForge gives {@code ChunkStatus} a second heightmap set — {@code chunkSaveHeightmaps}, which is
 	 * {@code heightmapsAfter} plus {@code WORLD_SURFACE_WG} and {@code OCEAN_FLOOR_WG} for every status that is
-	 * not a full chunk — and points all three of {@code SerializableChunkData}'s uses at it. MinecraftForge's
-	 * patched jar does not; vanilla does not. So this is NeoForge's decision, not the pipeline's, and unlike its
+	 * not a full chunk — and points all three of {@code SerializableChunkData}'s uses at it. Vanilla does not. So
+	 * this is NeoForge's decision, not the pipeline's, and unlike its
 	 * other decisions it changes what the world looks like.
 	 *
 	 * <p>The cost is not the extra bytes. Those two are WORLDGEN heightmaps: {@code ProtoChunk.setBlockState}
@@ -2232,7 +1046,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * registries come back among the declared ones — so the neuter costs every NeoForge mod that adds ores, mobs
 	 * or features to a biome through {@code data/<ns>/neoforge/biome_modifier/*.json}.
 	 *
-	 * <p>Simply dropping the neuter is not the same thing, and the difference matters: the merged
+	 * <p>Simply dropping the neuter is not the same thing, and the difference matters: the patched
 	 * {@code DedicatedServer} and {@code IntegratedServer} both call NeoForge's {@code handleServerAboutToStart},
 	 * which calls {@code runModifiers} FIRST and posts {@code ServerAboutToStartEvent} after it. An unguarded
 	 * {@code lookupOrThrow} there does not cost the modifiers, it costs the boot — and it would do so on a
@@ -2267,296 +1081,11 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	}
 
 	/**
-	 * Removes a method whose whole body delegates to an interface default, when a SUPERCLASS has a real one.
+	 * Points {@code getProvider} at the live map instead of an empty {@code providersByName} twin.
 	 *
-	 * <h2>What the merge does</h2>
-	 *
-	 * <p>It injects these delegates blindly. Measured across the whole merged base against both unmerged bases:
-	 * 256 methods are pure {@code Iface.super.<same method>} delegates that shadow a superclass with a real
-	 * implementation, and 253 of them exist in neither unmerged base — so they are the merge's doing. The three
-	 * that are not are vanilla's own and are left alone by the rule below, because their superclass merely
-	 * delegates the same way.
-	 *
-	 * <p>What that costs depends on the method. {@code VehicleEntity.getDisplayName()} shadows
-	 * {@code Entity.getDisplayName()}, which is the method that applies team colours and prefixes — so a boat or
-	 * minecart loses its team formatting in every name it is shown under.
-	 *
-	 * <h2>Why THIS rule and not the older one</h2>
-	 *
-	 * <p>{@link #dropInterfaceDefaultShadowingOverrides} does the same thing for a hand-kept allowlist, and that
-	 * allowlist exists because a wider version once crashed every GUI screen at the title with
-	 * {@code IncompatibleClassChangeError: Conflicting default methods}: {@code getRectangle} is supplied as a
-	 * default by two unrelated interfaces, so removing the override left two competing candidates.
-	 *
-	 * <p>The condition here cannot hit that. A concrete superclass method always wins over any interface default,
-	 * so when the chain HAS one there is nothing for defaults to compete over — the crash happened precisely in
-	 * classes whose chain had none. That makes this rule both wider and safer than the list it complements, and
-	 * it needs no list to maintain.
-	 *
-	 * <h2>Why it is still limited to one method</h2>
-	 *
-	 * <p>Because VANILLA writes this shape on purpose too. {@code AbstractContainerWidget.nextFocusPath} is a
-	 * pure delegate over a superclass with a real implementation, and it is present in BOTH unmerged bases — so
-	 * "delegate over a real superclass method" alone does not mean "merge damage", and a rule keyed on the shape
-	 * would quietly change vanilla's own behaviour. A first version of this rule did exactly that, and the test
-	 * beside it caught it.
-	 *
-	 * <p>So the shape is necessary but not sufficient, and the set is measured rather than guessed: every such
-	 * method in the merged base was differenced against both unmerged bases, and
-	 * {@code getDisplayName()Lnet/minecraft/network/chat/Component;} is the entry whose 20 occurrences are all
-	 * merge-introduced AND whose bypassed implementation does something a player can see. Widening it means
-	 * repeating that measurement, not adding a name.
-	 *
-	 * <p>Stands down entirely without a class resolver: it cannot answer its own question without reading the
-	 * superclass chain, and guessing is what the allowlist exists to avoid.
-	 */
-	private boolean dropStubsThatBypassARealSuperclassMethod(ClassNode node) {
-		if (classBytes == null || node.superName == null || node.methods == null) return false;
-
-		List<MethodNode> shadowing = new java.util.ArrayList<>();
-		for (MethodNode method : node.methods) {
-			if ((method.access & (Opcodes.ACC_STATIC | Opcodes.ACC_ABSTRACT)) != 0) continue;
-			if (!MEASURED_MERGE_STUBS.contains(method.name + method.desc)) continue;
-			if (!isPureInterfaceDelegate(method)) continue;
-			if (!superclassHasARealImplementation(node.superName, method.name, method.desc)) continue;
-			shadowing.add(method);
-		}
-		if (shadowing.isEmpty()) return false;
-
-		node.methods.removeAll(shadowing);
-		for (MethodNode dropped : shadowing) {
-			ForbricLog.debug("[Forbric/MergedBaseCompat] dropped %s.%s%s — its whole body handed off to an "
-					+ "interface default while its superclass has a real implementation",
-					node.name.replace('/', '.'), dropped.name, dropped.desc);
-		}
-		return true;
-	}
-
-	/** Whether {@code method}'s entire body is {@code SomeInterface.super.<this very method>(args…)}. */
-	private static boolean isPureInterfaceDelegate(MethodNode method) {
-		if (method.instructions == null) return false;
-
-		List<AbstractInsnNode> body = new java.util.ArrayList<>();
-		for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() >= 0) body.add(insn);
-		}
-
-		Type[] args = Type.getArgumentTypes(method.desc);
-		// this + one load per parameter + the interface-default call + the return, and NOTHING else.
-		if (body.size() != args.length + 3) return false;
-
-		if (!(body.get(0) instanceof VarInsnNode self) || self.getOpcode() != Opcodes.ALOAD || self.var != 0) {
-			return false;
-		}
-
-		int slot = 1;
-		for (int i = 0; i < args.length; i++) {
-			if (!(body.get(1 + i) instanceof VarInsnNode load)
-					|| load.getOpcode() != args[i].getOpcode(Opcodes.ILOAD) || load.var != slot) {
-				return false;
-			}
-			slot += args[i].getSize();
-		}
-
-		if (!(body.get(args.length + 1) instanceof MethodInsnNode call)) return false;
-		if (call.getOpcode() != Opcodes.INVOKESPECIAL || !call.itf) return false;
-		return call.name.equals(method.name) && call.desc.equals(method.desc);
-	}
-
-	/**
-	 * Whether the superclass chain declares this method with a body that is NOT itself such a delegate.
-	 *
-	 * <p>A superclass that delegates the same way is not something to be shadowed — removing the subclass's copy
-	 * would change nothing — and those are exactly the three cases that exist in the unmerged bases too.
-	 *
-	 * <p>A class the resolver cannot produce ends the walk with "no": the honest answer when the chain cannot be
-	 * read is that nothing is known to be shadowed, and the method stays.
-	 */
-	private boolean superclassHasARealImplementation(String superName, String name, String desc) {
-		for (String at = superName; at != null; ) {
-			byte[] bytes = classBytes.apply(at.replace('.', '/') + ".class");
-			if (bytes == null) return false;
-
-			ClassNode parent = new ClassNode();
-			try {
-				new ClassReader(bytes).accept(parent, ClassReader.SKIP_FRAMES);
-			} catch (RuntimeException unreadable) {
-				return false;
-			}
-
-			for (MethodNode m : parent.methods) {
-				if (!m.name.equals(name) || !m.desc.equals(desc)) continue;
-				if ((m.access & Opcodes.ACC_ABSTRACT) != 0) return false;
-				return !isPureInterfaceDelegate(m);
-			}
-			at = parent.superName;
-		}
-		return false;
-	}
-
-	/**
-	 * Gives the three root game types the capability lifecycle methods their own merged code calls.
-	 *
-	 * <p>The merge put each root class under NeoForge's {@code AttachmentHolder}, which dropped MinecraftForge's
-	 * capability superclass and the two lifecycle methods that came with it — while keeping MinecraftForge's
-	 * method BODIES further down. {@code javap} on the merged {@code BlockEntity}: {@code onChunkUnloaded()} is
-	 * MinecraftForge's body and its one instruction is {@code invokevirtual BlockEntity.invalidateCaps}, a method
-	 * that resolves nowhere. Walking {@code BlockEntity} to {@code Object} finds no declaration, and the one
-	 * interface that could supply a default declares only {@code onChunkUnloaded} itself.
-	 *
-	 * <p>Nothing in the merged base calls that today — NeoForge's half removed the call site — so this is not a
-	 * live crash. It is a live TRAP: a MinecraftForge mod's block entity that overrides {@code invalidateCaps} and
-	 * calls {@code super}, which is ordinary in storage and machinery mods, links against a method that is not
-	 * there and dies at that call with a message naming neither the merge nor the kernel.
-	 *
-	 * <p>No-ops, deliberately, and this is NOT a capability system. There is nothing here to invalidate or revive:
-	 * the merged classes carry no MinecraftForge capability provider. A no-op makes the call link and do the
-	 * nothing that is already happening. Actually attaching capabilities means giving these classes a provider,
-	 * which is a merge-tool change, not a transformer one.
-	 */
-	private static boolean addTheMissingCapabilityLifecycleStubs(ClassNode node) {
-		if (!CAPABILITY_ROOTS.contains(node.name)) return false;
-
-		boolean changed = false;
-		for (String name : new String[] {"invalidateCaps", "reviveCaps"}) {
-			if (findMethod(node, name, "()V") != null) continue;
-
-			MethodNode stub = new MethodNode(Opcodes.ACC_PUBLIC, name, "()V", null, null);
-			stub.instructions.add(new InsnNode(Opcodes.RETURN));
-			stub.maxStack = 0;
-			stub.maxLocals = 1;
-			node.methods.add(stub);
-			changed = true;
-		}
-
-		if (changed) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] %s had no capability lifecycle methods while its own merged "
-					+ "code still calls them — a MinecraftForge mod overriding one and calling super would have "
-					+ "died on a method that resolves nowhere. They now exist and do nothing, which is what is "
-					+ "already happening: these classes carry no capability provider.", node.name.replace('/', '.'));
-		}
-		return changed;
-	}
-
-	/**
-	 * Fills in a {@code static final Logger} that survived the merge with nothing left to assign it.
-	 *
-	 * <p>When both families patch the same class, one family's {@code <clinit>} wins whole and the loser's
-	 * assignments go with it — including assignments to fields the loser ADDED, which are kept as declarations.
-	 * Such a field is then null forever, and there is no diagnostic: the class links, loads and works until
-	 * something reads it.
-	 *
-	 * <p>A scan of the whole merged base finds exactly one logger in this state,
-	 * {@code ResourceManagerRegistryLoadTask.LOGGER}, and it is read from the branch that handles a datapack
-	 * entry a condition has switched OFF — which is what a Forge-family datapack does whenever it guards content
-	 * on another mod being installed. So the branch meant to say "skipping this entry" threw instead, and the
-	 * world would not open.
-	 *
-	 * <p>Only loggers, and only unwritten ones. A logger has one obvious correct value and building it needs
-	 * nothing from the class; the other seven unwritten statics in this base carry codecs and callbacks that
-	 * cannot be invented here and need the merge itself to stop dropping them.
-	 */
-	private static boolean giveTheUnwrittenLoggerAValue(ClassNode node) {
-		boolean changed = false;
-		for (FieldNode field : node.fields) {
-			if ((field.access & Opcodes.ACC_STATIC) == 0) continue;
-			if (!LOGGER_DESC.equals(field.desc)) continue;
-			if (writesStatic(node, field.name)) continue;
-
-			MethodNode clinit = findMethod(node, "<clinit>", "()V");
-			if (clinit == null) {
-				clinit = new MethodNode(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
-				clinit.instructions.add(new InsnNode(Opcodes.RETURN));
-				node.methods.add(clinit);
-			}
-
-			// At the TOP of <clinit>, not before the RETURN: anything else the initialiser does may log, and a
-			// repair that lands last would leave exactly the window this is closing.
-			InsnList assign = new InsnList();
-			assign.add(new LdcInsnNode(Type.getObjectType(node.name)));
-			assign.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "org/slf4j/LoggerFactory", "getLogger",
-					"(Ljava/lang/Class;)Lorg/slf4j/Logger;", false));
-			assign.add(new FieldInsnNode(Opcodes.PUTSTATIC, node.name, field.name, LOGGER_DESC));
-			clinit.instructions.insert(assign);
-			clinit.maxStack = Math.max(clinit.maxStack, 1);
-
-			ForbricLog.warn("[Forbric/MergedBaseCompat] %s.%s is a logger the merge left with no assignment, so it "
-					+ "was null forever and whichever branch reads it threw instead of logging. It is now "
-					+ "initialised.", node.name.replace('/', '.'), field.name);
-			changed = true;
-		}
-		return changed;
-	}
-
-	/** Whether anything in {@code node} assigns the static field {@code name}. */
-	private static boolean writesStatic(ClassNode node, String name) {
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTSTATIC
-						&& node.name.equals(field.owner) && name.equals(field.name)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Points {@code Mob.getSpawnReason()} at the spawn field the game actually writes.
-	 *
-	 * <p>The merge left {@code Mob} carrying both families' spawn fields under different names —
-	 * {@code spawnType} and {@code spawnReason} — and every producer writes {@code spawnType}. {@code javap} on
-	 * the merged {@code Mob}: two {@code putfield spawnType}, zero {@code putfield spawnReason}. So
-	 * {@code getSpawnReason()} returned null for every mob that has ever existed.
-	 *
-	 * <p>What that costs is a whole category of mod behaviour rather than a crash: "was this mob spawned
-	 * naturally, from a spawner, by a spawn egg, or by a command" is how mob-drop, anti-farm, difficulty and
-	 * quest mods decide whether to act at all, and a null sends every one of them down the same branch — usually
-	 * the one that does nothing, silently.
-	 *
-	 * <p>Only the read moves. The field declaration stays, because an access widener or a mixin may name it, and
-	 * removing it would cost more than the dead field does.
-	 */
-	private static boolean readTheSpawnReasonThatIsActuallyWritten(ClassNode node) {
-		if (!"net/minecraft/world/entity/Mob".equals(node.name)) return false;
-		if (!hasField(node, "spawnReason", SPAWN_REASON) || !hasField(node, "spawnType", SPAWN_REASON)) return false;
-
-		// If anything ever writes spawnReason, the field is live and must be left alone — the same guard the
-		// particle-map reroute uses, and for the same reason: a future base may keep the other family's producer.
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTFIELD
-						&& node.name.equals(field.owner) && "spawnReason".equals(field.name)) {
-					return false;
-				}
-			}
-		}
-
-		boolean changed = false;
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.GETFIELD
-						&& node.name.equals(field.owner) && "spawnReason".equals(field.name)
-						&& SPAWN_REASON.equals(field.desc)) {
-					field.name = "spawnType";
-					changed = true;
-				}
-			}
-		}
-		if (changed) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] Mob.getSpawnReason() read a field nothing ever writes, so "
-					+ "it answered null for every mob — mods that branch on how a mob was spawned (spawner, egg, "
-					+ "command, natural) all took the same branch. It now reads the field the game writes");
-		}
-		return changed;
-	}
-
-	/**
-	 * Points {@code getProvider} at the live map instead of the empty {@code providersByName}.
-	 *
-	 * <p>Only when nothing outside {@code <init>} writes {@code providersByName}: if a base ever keeps
-	 * MinecraftForge's {@code register}, the field is live again and must be left alone. The declaration stays
-	 * either way — removing it would break any access widener that named it, for no gain.
+	 * <p>Only when nothing outside {@code <init>} writes {@code providersByName}: if a base ever keeps a live
+	 * producer for it, the field is live again and must be left alone. The declaration stays either way —
+	 * removing it would break any access widener that named it, for no gain.
 	 */
 	private static void routeGetProviderAtTheLiveMap(ClassNode node) {
 		if (!hasField(node, "providersByName", NAME_KEYED)) return;
@@ -2584,17 +1113,16 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	/**
 	 * Gives {@code KeyMapping} vanilla's {@code MAP:Ljava/util/Map;} back, as a view of the mappings by key.
 	 *
-	 * <p>Both ecosystems re-type vanilla's {@code MAP} to their own {@code KeyMappingLookup}; the merged class keeps
-	 * those two ({@link #routeKeyMappingClickToPopulatedLookup}) and not vanilla's, so a mod compiled against vanilla
-	 * that reads {@code KeyMapping.MAP} as a {@code Map} gets {@code NoSuchFieldError}. LiquidBounce reads it on every
+	 * <p>NeoForge re-types vanilla's {@code MAP} to its own {@code KeyMappingLookup}, so a mod compiled against
+	 * vanilla that reads {@code KeyMapping.MAP} as a {@code Map} gets {@code NoSuchFieldError}. LiquidBounce reads it on every
 	 * key press while a screen is open (its inventory movement), so the client died the first time a key was pressed
-	 * in a world. Nothing in the merged game reads vanilla's descriptor, so the field is added rather than moved, and
-	 * its value is {@code KernelKeyMappingMap}'s view of vanilla's {@code ALL}, which the merged class still keeps
+	 * in a world. Nothing in the game reads vanilla's descriptor, so the field is added rather than moved, and
+	 * its value is {@code KernelKeyMappingMap}'s view of vanilla's {@code ALL}, which the class still keeps
 	 * and fills: what vanilla's map holds, grouped on each read.
 	 *
 	 * <p>Public, because the access wideners that would make vanilla's private field accessible have already run when
-	 * this repair adds it (the same reason {@link #giveFeaturesPerStepItsVanillaDescriptorBack} widens its field).
-	 * Assigned right after {@code ALL} in {@code <clinit>}, before any mapping exists.
+	 * this repair adds it (the same widening rule the particle-map view follows). Assigned right after {@code ALL} in
+	 * {@code <clinit>}, before any mapping exists.
 	 */
 	private static boolean giveKeyMappingItsVanillaMap(ClassNode node) {
 		if (!KEY_MAPPING.equals(node.name)) return false;
@@ -2626,226 +1154,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 				+ "mappings by key — both ecosystems re-typed it to their own KeyMappingLookup, so a mod reading it as "
 				+ "vanilla's Map could not link to it");
 		return true;
-	}
-
-	/**
-	 * Gives {@code KeyMapping} back the MinecraftForge-typed accessors the merge dropped, and makes them mean
-	 * something.
-	 *
-	 * <p>Two halves of one defect, both found by onekeyminer dying in its client setup with
-	 * {@code AbstractMethodError: KeyMapping.setKeyConflictContext(…IKeyConflictContext) is abstract}.
-	 *
-	 * <p>First: the merged class kept NeoForge's accessors and MinecraftForge's constructors and FIELDS, but not
-	 * MinecraftForge's accessors — an abstract method has no body for the splice to take. Any Forge mod that
-	 * configures a keybinding therefore fails, and it fails in a class initializer, so the mod loses everything
-	 * downstream of it.
-	 *
-	 * <p>Second, and the reason re-adding the methods over the MinecraftForge fields would have been worse than
-	 * the crash: those fields are DEAD. Every live consumer reads NeoForge's — {@code same()} resolves conflicts
-	 * through the NeoForge-typed {@code getKeyConflictContext}, and {@code isActiveAndMatches} /
-	 * {@code setToDefault} / {@code isConflictContextAndModifierActive} all delegate into
-	 * {@code IKeyMappingExtension}. A setter that wrote the MinecraftForge field would stop the crash and leave
-	 * the binding behaving as though the mod had never set a context at all.
-	 *
-	 * <p>So the MinecraftForge face is adapted onto the NeoForge state, in both directions, through
-	 * {@code KernelForgeKeyBindings}. The same reason applies to the MinecraftForge-typed CONSTRUCTORS, which
-	 * write only the dead fields and leave the NeoForge ones null — a mod using one gets a mapping whose first
-	 * conflict check is a NullPointerException. Each of them gains a tail that mirrors what it wrote into the
-	 * fields the game reads.
-	 */
-	private static boolean giveKeyMappingItsMinecraftForgeFace(ClassNode node) {
-		if (!KEY_MAPPING.equals(node.name)) return false;
-		// Only when the merge actually split it: both sides' state present, only one side's accessors.
-		if (!hasField(node, "keyConflictContext", MF_CONTEXT) || !hasField(node, "keyConflictContext", NEO_CONTEXT)) {
-			return false;
-		}
-		if (findMethod(node, "setKeyConflictContext", "(" + MF_CONTEXT + ")V") != null) return false;
-
-		addAdapted(node, "setKeyConflictContext", "(" + MF_CONTEXT + ")V", "(" + NEO_CONTEXT + ")V",
-				"toNeoContext", MF_CONTEXT, NEO_CONTEXT);
-		addAdapted(node, "getKeyConflictContext", "()" + MF_CONTEXT, "()" + NEO_CONTEXT,
-				"toForgeContext", NEO_CONTEXT, MF_CONTEXT);
-		addAdapted(node, "getKeyModifier", "()" + MF_MODIFIER, "()" + NEO_MODIFIER,
-				"toForgeModifier", NEO_MODIFIER, MF_MODIFIER);
-		addAdapted(node, "getDefaultKeyModifier", "()" + MF_MODIFIER, "()" + NEO_MODIFIER,
-				"toForgeModifier", NEO_MODIFIER, MF_MODIFIER);
-		addSetKeyModifierAndCode(node);
-		int mirrored = mirrorForgeConstructorsIntoTheLiveFields(node);
-
-		ForbricLog.warn("[Forbric/MergedBaseCompat] gave KeyMapping its MinecraftForge accessors back and pointed "
-				+ "them at the NeoForge state the game actually reads — the merge kept both ecosystems' fields but "
-				+ "only one side's accessors, and the other side's fields are read by nothing (%d constructor(s) "
-				+ "also mirrored)", mirrored);
-		return true;
-	}
-
-	/**
-	 * Adds {@code name+forgeDesc} as a one-line delegate to {@code name+neoDesc}, converting through the kernel.
-	 *
-	 * <p>A getter pair differs only in return type, which no Java source can express and the JVM is perfectly
-	 * happy with — the descriptor is part of the identity.
-	 */
-	private static void addAdapted(ClassNode node, String name, String forgeDesc, String neoDesc,
-			String converter, String fromDesc, String toDesc) {
-		boolean setter = forgeDesc.endsWith(")V");
-		MethodNode m = new MethodNode(Opcodes.ACC_PUBLIC, name, forgeDesc, null, null);
-		m.visitVarInsn(Opcodes.ALOAD, 0);
-		if (setter) {
-			m.visitVarInsn(Opcodes.ALOAD, 1);
-			m.visitMethodInsn(Opcodes.INVOKESTATIC, KERNEL_KEYS, converter,
-					"(Ljava/lang/Object;)Ljava/lang/Object;", false);
-			m.visitTypeInsn(Opcodes.CHECKCAST, internal(toDesc));
-			m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, node.name, name, neoDesc, false);
-			m.visitInsn(Opcodes.RETURN);
-			m.maxStack = 2;
-			m.maxLocals = 2;
-		} else {
-			m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, node.name, name, neoDesc, false);
-			m.visitMethodInsn(Opcodes.INVOKESTATIC, KERNEL_KEYS, converter,
-					"(Ljava/lang/Object;)Ljava/lang/Object;", false);
-			m.visitTypeInsn(Opcodes.CHECKCAST, internal(toDesc));
-			m.visitInsn(Opcodes.ARETURN);
-			m.maxStack = 1;
-			m.maxLocals = 1;
-		}
-		node.methods.add(m);
-	}
-
-	/** The two-argument setter, whose second argument passes through untouched. */
-	private static void addSetKeyModifierAndCode(ClassNode node) {
-		String forgeDesc = "(" + MF_MODIFIER + INPUT_KEY + ")V";
-		String neoDesc = "(" + NEO_MODIFIER + INPUT_KEY + ")V";
-		if (findMethod(node, "setKeyModifierAndCode", forgeDesc) != null) return;
-		if (findMethod(node, "setKeyModifierAndCode", neoDesc) == null) return;
-		MethodNode m = new MethodNode(Opcodes.ACC_PUBLIC, "setKeyModifierAndCode", forgeDesc, null, null);
-		m.visitVarInsn(Opcodes.ALOAD, 0);
-		m.visitVarInsn(Opcodes.ALOAD, 1);
-		m.visitMethodInsn(Opcodes.INVOKESTATIC, KERNEL_KEYS, "toNeoModifier",
-				"(Ljava/lang/Object;)Ljava/lang/Object;", false);
-		m.visitTypeInsn(Opcodes.CHECKCAST, internal(NEO_MODIFIER));
-		m.visitVarInsn(Opcodes.ALOAD, 2);
-		m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, node.name, "setKeyModifierAndCode", neoDesc, false);
-		m.visitInsn(Opcodes.RETURN);
-		m.maxStack = 3;
-		m.maxLocals = 3;
-		node.methods.add(m);
-	}
-
-	/**
-	 * Copies what a MinecraftForge-typed constructor wrote into the fields the game reads.
-	 *
-	 * <p>Appended before every RETURN rather than woven into the assignments: the constructor may write its
-	 * fields in any order, and only at the end is the final value known. Fields, not the new setters — a setter
-	 * would re-enter the lookup registration the constructor has already done.
-	 */
-	private static int mirrorForgeConstructorsIntoTheLiveFields(ClassNode node) {
-		String forgeLookup = "L" + ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.FORGE) + ";";
-		String neoLookup = "L" + ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.NEOFORGE) + ";";
-
-		int mirrored = 0;
-		for (MethodNode m : node.methods) {
-			if (!"<init>".equals(m.name) || m.instructions == null) continue;
-			if (!m.desc.contains(MF_CONTEXT) && !m.desc.contains(MF_MODIFIER)) continue;
-
-			// WHERE, not just what. The constructor's own tail registers the binding:
-			//
-			//     88  ALL.put(name, this)
-			//     99  GETSTATIC KeyMapping.MAP : Lnet/minecraftforge/.../KeyMappingLookup;
-			//    102  ALOAD key ; ALOAD this
-			//    105  INVOKEVIRTUAL  net/minecraftforge/.../KeyMappingLookup.put(Key, KeyMapping)V
-			//    108  RETURN
-			//
-			// and that put reads the mapping back through getKeyModifier() — the MinecraftForge-faced accessor
-			// this transformer adds, which reads the NEOFORGE field. Mirroring before the RETURN put the write
-			// AFTER the read, so the Neo field was still null at offset 105, toForgeModifier answered for a null,
-			// and Forge's lookup did computeIfAbsent on the result. Every Forge-typed key binding died in its
-			// own <clinit> with an NPE raised inside MinecraftForge's code.
-			//
-			// So the mirror goes before the FIRST access of either lookup, and if there is none it falls back to
-			// the RETURNs — the shorter constructors delegate and have no put of their own.
-			AbstractInsnNode anchor = firstLookupAccess(m, forgeLookup, neoLookup);
-			boolean any = false;
-			if (anchor != null) {
-				m.instructions.insertBefore(anchor, mirrorFields(node));
-				any = true;
-			} else {
-				for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-					if (insn.getOpcode() != Opcodes.RETURN) continue;
-					m.instructions.insertBefore(insn, mirrorFields(node));
-					any = true;
-				}
-			}
-
-			// And the registration itself. Both getAll overloads read NeoForge's MAP (routeKeyMappingClickToPopulatedLookup
-			// points the last one that did not at it), so a binding put into MinecraftForge's lookup is in a map
-			// nothing ever reads: the key would exist, bind, show in the Controls screen and never fire. The two
-			// put methods are descriptor-identical — (InputConstants$Key, KeyMapping)V — so this is a field
-			// descriptor and an owner, nothing more.
-			if (retargetLookupRegistration(m, forgeLookup, neoLookup)) any = true;
-
-			if (any) {
-				m.maxStack = Math.max(m.maxStack, 3);
-				mirrored++;
-			}
-		}
-		return mirrored;
-	}
-
-	/** The three field copies, as one list. Built per insertion point because an InsnList can only be added once. */
-	private static InsnList mirrorFields(ClassNode node) {
-		InsnList mirror = new InsnList();
-		mirror.add(field(node, "keyConflictContext", MF_CONTEXT, NEO_CONTEXT, "toNeoContext"));
-		mirror.add(field(node, "keyModifier", MF_MODIFIER, NEO_MODIFIER, "toNeoModifier"));
-		mirror.add(field(node, "keyModifierDefault", MF_MODIFIER, NEO_MODIFIER, "toNeoModifier"));
-		return mirror;
-	}
-
-	/** The first read of either family's {@code MAP}, which is where the constructor starts registering. */
-	private static AbstractInsnNode firstLookupAccess(MethodNode m, String forgeLookup, String neoLookup) {
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() == Opcodes.GETSTATIC && insn instanceof FieldInsnNode field
-					&& "MAP".equals(field.name)
-					&& (forgeLookup.equals(field.desc) || neoLookup.equals(field.desc))) {
-				return insn;
-			}
-		}
-		return null;
-	}
-
-	/** Points a constructor's own {@code MAP.put} at the lookup the game reads. True when anything moved. */
-	private static boolean retargetLookupRegistration(MethodNode m, String forgeLookup, String neoLookup) {
-		boolean changed = false;
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() == Opcodes.GETSTATIC && insn instanceof FieldInsnNode field
-					&& "MAP".equals(field.name) && forgeLookup.equals(field.desc)) {
-				field.desc = neoLookup;
-				changed = true;
-			} else if (insn instanceof MethodInsnNode call && "put".equals(call.name)
-					&& ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.FORGE).equals(call.owner)) {
-				call.owner = ForeignType.KEY_MAPPING_LOOKUP.internal(Ecosystem.NEOFORGE);
-				changed = true;
-			}
-		}
-		return changed;
-	}
-
-	/** {@code this.<neo> = convert(this.<forge>)}, or nothing when either field is absent. */
-	private static InsnList field(ClassNode node, String name, String fromDesc, String toDesc, String converter) {
-		InsnList out = new InsnList();
-		if (!hasField(node, name, fromDesc) || !hasField(node, name, toDesc)) return out;
-		out.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		out.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		out.add(new FieldInsnNode(Opcodes.GETFIELD, node.name, name, fromDesc));
-		out.add(new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_KEYS, converter,
-				"(Ljava/lang/Object;)Ljava/lang/Object;", false));
-		out.add(new TypeInsnNode(Opcodes.CHECKCAST, internal(toDesc)));
-		out.add(new FieldInsnNode(Opcodes.PUTFIELD, node.name, name, toDesc));
-		return out;
-	}
-
-	/** {@code Lsome/Type;} to {@code some/Type}. */
-	private static String internal(String descriptor) {
-		return descriptor.substring(1, descriptor.length() - 1);
 	}
 
 	/**
@@ -2961,48 +1269,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return body.get(args.length + 2).getOpcode() == Type.getReturnType(method.desc).getOpcode(Opcodes.IRETURN);
 	}
 
-	/**
-	 * Sends the block-placement hook to NeoForge, whose type the merged snapshot list actually has.
-	 *
-	 * <p>{@code Level.capturedBlockSnapshots} survived the merge as
-	 * {@code ArrayList<net.neoforged.neoforge.common.util.BlockSnapshot>} — NeoForge's element type won, and there is
-	 * only ONE such field. But {@code ItemStack.useOn} kept calling MINECRAFTFORGE's
-	 * {@code ForgeHooks.onPlaceItemIntoWorld}, which drains that same list expecting
-	 * {@code net.minecraftforge.common.util.BlockSnapshot}. So placing ANY block threw
-	 * {@code ClassCastException: neoforge…BlockSnapshot cannot be cast to minecraftforge…BlockSnapshot} on the
-	 * server thread while handling {@code use_item_on} — the integrated server died the instant you right-clicked.
-	 *
-	 * <p>{@code CommonHooks.onPlaceItemIntoWorld(UseOnContext)} is NeoForge's counterpart with an IDENTICAL
-	 * descriptor, so retargeting the {@code invokestatic} is type-exact and makes the consumer match the producer.
-	 * Cost: MinecraftForge mods' {@code BlockEvent.EntityPlaceEvent} no longer fires (NeoForge's does). That is the
-	 * same trade the merge already made for the snapshot type itself — the alternative is that nobody can place
-	 * anything at all.
-	 */
-	private static boolean routePlaceItemHookToNeoForge(ClassNode node) {
-		if (!node.name.startsWith("net/minecraft/") || node.methods == null) return false;
-
-		boolean changed = false;
-		for (MethodNode method : node.methods) {
-			if (method.instructions == null) continue;
-
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC) continue;
-				if (!"net/minecraftforge/common/ForgeHooks".equals(call.owner)
-						|| !"onPlaceItemIntoWorld".equals(call.name)) {
-					continue;
-				}
-				call.owner = "net/neoforged/neoforge/common/CommonHooks";
-				changed = true;
-			}
-		}
-		if (!changed) return false;
-
-		ForbricLog.warn("[Forbric/MergedBaseCompat] routed %s's block-placement hook to NeoForge — the merged "
-				+ "Level.capturedBlockSnapshots holds NeoForge BlockSnapshots, so MinecraftForge's hook threw "
-				+ "ClassCastException on every block placed", node.name.replace('/', '.'));
-		return true;
-	}
-
 	private static final String STACK_COUNT_MESSAGE = "The stack count must be 1";
 
 	/**
@@ -3078,123 +1344,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return false;
 	}
 
-	/**
-	 * MinecraftForge's network channels pick the vanilla packet type for an outgoing payload from
-	 * {@code Connection.getProtocol()}, which reads a Forge-added {@code outboundProtocol} field. Forge's patch keeps
-	 * that field current from inside {@code setupOutboundProtocol} — a lambda chained onto the pipeline task — and
-	 * NeoForge won the merge of that method, so the lambda survives in the class and nothing calls it. The
-	 * constructor still seeds the field with the handshake protocol on the CLIENT flow (the server flow leaves it
-	 * null, and {@code getProtocol} then falls back to the inbound field, which the merged
-	 * {@code setupInboundProtocol} does maintain — so the server side never showed this). A Forbric client thus
-	 * reports HANDSHAKING for the life of the connection and every Forge channel send from the client throws
-	 * "Unsupported protocol HANDSHAKING in Forge Networking Channel" — its own channel declaration
-	 * ({@code ChannelListManager.addChannels}) first of all, so the server's {@code Channel.isRemotePresent} never
-	 * saw the client's channels.
-	 *
-	 * <p>Store the new protocol at the head of {@code setupOutboundProtocol}. Synchronous rather than
-	 * pipeline-ordered, which for this field's one reader is the better contract: a payload built after the switch
-	 * must already be a packet of the new protocol, because the pipeline task is queued ahead of it.
-	 */
-	private static boolean keepForgeOutboundProtocolCurrent(ClassNode node) {
-		if (!"net/minecraft/network/Connection".equals(node.name)) return false;
-		String protocolInfo = "Lnet/minecraft/network/ProtocolInfo;";
-		if (!hasField(node, "outboundProtocol", protocolInfo)) return false;
-		MethodNode setup = findMethod(node, "setupOutboundProtocol", "(" + protocolInfo + ")V");
-		if (setup == null) return false;
-
-		// Coherent already (a single-ecosystem base, or a merge that kept Forge's body): the method stores the field
-		// itself, or still chains the lambda that does.
-		if (writesField(setup, "outboundProtocol")) return false;
-		for (AbstractInsnNode insn = setup.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (!(insn instanceof InvokeDynamicInsnNode indy)) continue;
-			for (Object arg : indy.bsmArgs) {
-				if (arg instanceof Handle handle && node.name.equals(handle.getOwner())) {
-					MethodNode lambda = findMethod(node, handle.getName(), handle.getDesc());
-					if (lambda != null && writesField(lambda, "outboundProtocol")) return false;
-				}
-			}
-		}
-
-		InsnList store = new InsnList();
-		store.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		store.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		store.add(new FieldInsnNode(Opcodes.PUTFIELD, node.name, "outboundProtocol", protocolInfo));
-		setup.instructions.insert(store);
-		setup.maxStack = Math.max(setup.maxStack, 2);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] Connection.setupOutboundProtocol now updates MinecraftForge's "
-				+ "outboundProtocol — the merge dropped the lambda that did, so a client Connection reported HANDSHAKING "
-				+ "forever and every Forge channel send from the client threw");
-		return true;
-	}
-
-	private static boolean writesField(MethodNode method, String fieldName) {
-		for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() == Opcodes.PUTFIELD && insn instanceof FieldInsnNode field && fieldName.equals(field.name)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Stops the block-breaking overlay from crashing the render frame.
-	 *
-	 * <p>{@code LevelExtractor.extractBlockDestroyAnimation} asks the level for MinecraftForge's
-	 * {@code ModelDataManager} and dereferences it without a check. On a single-ecosystem base that is safe, because
-	 * Forge's own {@code ClientLevel} patch overrides the accessor; on the merged base NeoForge's override won, and
-	 * because the two return different types it does not override Forge's at all — so the call lands on Forge's
-	 * interface default, whose whole body is {@code return null}. Every frame drawn while any block is being broken
-	 * then dies with "Description: Render Frame", which is why this only showed up once, in a run where a break
-	 * animation happened to be on screen.
-	 *
-	 * <p>There is nothing to route it to: no path on this base ever builds a Forge-typed manager, so no Forge-typed
-	 * model data exists to find. The call therefore becomes the value Forge's own lookup returns for a position it
-	 * is not tracking — {@code ModelData.EMPTY} — which is what the overlay would have drawn with anyway. A mod's
-	 * dynamic model data still reaches the block itself through NeoForge's manager, which the level does have; only
-	 * the break overlay draws with defaults.
-	 */
-	private static boolean surviveTheMissingForgeModelDataManager(ClassNode node) {
-		if (!"net/minecraft/client/renderer/extract/LevelExtractor".equals(node.name)) return false;
-
-		boolean changed = false;
-		for (MethodNode m : node.methods) {
-			List<MethodInsnNode> lookups = new ArrayList<>();
-			for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn.getOpcode() == Opcodes.INVOKEVIRTUAL && insn instanceof MethodInsnNode call
-						&& FORGE_MODEL_DATA_MANAGER.equals(call.owner) && "getAtOrEmpty".equals(call.name)) {
-					lookups.add(call);
-				}
-			}
-			for (MethodInsnNode lookup : lookups) {
-				// The receiver expression, exactly: ALOAD this; GETFIELD level; INVOKEVIRTUAL getModelDataManager;
-				// then the position argument. Anything else means the method was rewritten upstream — leave it be.
-				AbstractInsnNode pos = previousRealInsn(lookup);
-				AbstractInsnNode manager = previousRealInsn(pos);
-				AbstractInsnNode level = previousRealInsn(manager);
-				AbstractInsnNode self = previousRealInsn(level);
-				if (pos == null || pos.getOpcode() != Opcodes.ALOAD
-						|| !(manager instanceof MethodInsnNode get) || !"getModelDataManager".equals(get.name)
-						|| level == null || level.getOpcode() != Opcodes.GETFIELD
-						|| self == null || self.getOpcode() != Opcodes.ALOAD) {
-					continue;
-				}
-				// The constant goes in where the receiver expression began, BEFORE the five are unlinked: a removed
-				// node's neighbours are no longer a usable anchor.
-				m.instructions.insertBefore(self,
-						new FieldInsnNode(Opcodes.GETSTATIC, FORGE_MODEL_DATA, "EMPTY", "L" + FORGE_MODEL_DATA + ";"));
-				for (AbstractInsnNode dead : new AbstractInsnNode[] {self, level, manager, pos, lookup}) {
-					m.instructions.remove(dead);
-				}
-				changed = true;
-			}
-		}
-		if (!changed) return false;
-		ForbricLog.warn("[Forbric/MergedBaseCompat] the block-breaking overlay no longer asks for MinecraftForge's "
-				+ "model-data manager — NeoForge won the level's accessor, so Forge's returned null and every frame "
-				+ "drawn while a block was being broken crashed the game");
-		return true;
-	}
-
 	private static final String FORGE_MODEL_DATA_MANAGER = "net/minecraftforge/client/model/data/ModelDataManager";
 	private static final String FORGE_MODEL_DATA = "net/minecraftforge/client/model/data/ModelData";
 	/** Forge-only, like {@link #FORGE_MODEL_DATA}: NeoForge has no INBTBuilder, so ForeignType has no pair for it. */
@@ -3222,63 +1371,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 					+ "Lnet/minecraft/world/item/TooltipFlag;Lnet/minecraft/world/item/Item$TooltipContext;"
 					+ "Lnet/minecraft/world/item/component/TooltipDisplay;)V";
 
-	/**
-	 * Posts NeoForge's {@code ItemTooltipEvent} beside MinecraftForge's, on the same list.
-	 *
-	 * <p>{@code getTooltipLines} carries exactly one event call and it is MinecraftForge's. NeoForge's event is
-	 * never constructed, so a NeoForge mod that appends a tooltip line appends it to nothing — Architectury and
-	 * RarityCore both do, and the only symptom either produced was a load-report row.
-	 *
-	 * <p>Inserted AFTER MinecraftForge's call rather than before, so each family sees the tooltip in the order its
-	 * own loader gives it. The six arguments are read from the frame the call site already has: the stack is
-	 * {@code this}, the player and flag are the ones MinecraftForge's call is loading, and the context and display
-	 * are the method's first parameter and its display local — so a listener asking for either gets the real one.
-	 */
-	private static boolean postNeoForgesItemTooltipEvent(ClassNode node) {
-		if (!ITEM_STACK.equals(node.name)) return false;
-
-		boolean changed = false;
-		for (MethodNode method : node.methods) {
-			if (!"getTooltipLines".equals(method.name)) continue;
-			// Already posted: a second pass over a repaired class must leave it exactly as it is, or the event
-			// fires twice and every NeoForge tooltip line appears twice.
-			for (AbstractInsnNode insn : method.instructions.toArray()) {
-				if (insn instanceof MethodInsnNode done && TOOLTIP_BRIDGE.equals(done.owner)) return false;
-			}
-			for (AbstractInsnNode insn : method.instructions.toArray()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC) continue;
-				if (!FORGE_EVENT_FACTORY.equals(call.owner) || !ON_ITEM_TOOLTIP.equals(call.name)) continue;
-
-				// The four operands MinecraftForge's call is about to consume, in its own order, reconstructed from
-				// the frame: this, player, list, flag. Their local slots are the ones the call site loads, so they
-				// are read off the preceding loads rather than assumed.
-				List<VarInsnNode> loads = precedingLoads(insn, 4);
-				if (loads.size() != 4) continue;
-				VarInsnNode display = displayLocal(method);
-				if (display == null) continue;
-
-				InsnList post = new InsnList();
-				for (VarInsnNode load : loads) post.add(new VarInsnNode(Opcodes.ALOAD, load.var));
-				post.add(new VarInsnNode(Opcodes.ALOAD, 1));
-				post.add(new VarInsnNode(Opcodes.ALOAD, display.var));
-				post.add(new MethodInsnNode(Opcodes.INVOKESTATIC, TOOLTIP_BRIDGE, "postNeoForge",
-						TOOLTIP_BRIDGE_DESC, false));
-				// After the POP that discards MinecraftForge's returned event, so the stack is empty here.
-				AbstractInsnNode after = insn.getNext();
-				while (after != null && after.getOpcode() == Opcodes.POP) after = after.getNext();
-				method.instructions.insertBefore(after != null ? after : insn.getNext(), post);
-				changed = true;
-				break;
-			}
-		}
-		if (changed) {
-			ForbricLog.info("[Forbric/MergedBaseCompat] %s.getTooltipLines now posts NeoForge's ItemTooltipEvent "
-					+ "beside MinecraftForge's, on the same list — the merged body carries only MinecraftForge's "
-					+ "call, so a NeoForge mod's tooltip lines went into a list nobody built", node.name);
-		}
-		return changed;
-	}
-
 	/** The {@code n} consecutive ALOADs immediately before {@code call}, in source order, or fewer. */
 	private static List<VarInsnNode> precedingLoads(AbstractInsnNode call, int n) {
 		java.util.Deque<VarInsnNode> loads = new java.util.ArrayDeque<>();
@@ -3291,94 +1383,15 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return new ArrayList<>(loads);
 	}
 
-	/** The {@code TooltipDisplay} local, by its declared type in the method's own variable table. */
-	private static VarInsnNode displayLocal(MethodNode method) {
-		if (method.localVariables == null) return null;
-		for (LocalVariableNode local : method.localVariables) {
-			if ("Lnet/minecraft/world/item/component/TooltipDisplay;".equals(local.desc)) {
-				return new VarInsnNode(Opcodes.ALOAD, local.index);
-			}
-		}
-		return null;
-	}
-
 	private static final String ATTRIBUTE_MODIFIERS_TYPE = "net/minecraft/world/item/component/ItemAttributeModifiers";
 	private static final String DATA_COMPONENTS = "net/minecraft/core/component/DataComponents";
 	private static final String NEO_ATTRIBUTES = "getAttributeModifiers";
-
-	/**
-	 * Gives an item's attributes back to the mod that computes them — which is what elytra flight hangs off.
-	 *
-	 * <p>The merge split one mechanism down the middle. {@code LivingEntity.canGlide} came from NeoForge, and
-	 * NeoForge's version does not look at the item at all: it asks whether the entity has the
-	 * {@code neoforge:gliding_flight} attribute above zero. {@code ItemStack.forEachModifier} came from vanilla
-	 * (Forge leaves it alone), and vanilla's version reads the raw {@code ATTRIBUTE_MODIFIERS} component. NeoForge's
-	 * version calls {@code getAttributeModifiers()}, whose whole purpose is to post
-	 * {@code ItemAttributeModifierEvent} — and {@code NeoForgeMod.onItemAttributeModifiers} is the ONLY thing
-	 * anywhere that adds the gliding attribute, off the item's {@code minecraft:glider} component.
-	 *
-	 * <p>So the producer was on one side of the merge and the consumer on the other: the attribute is a
-	 * {@code BooleanAttribute} defaulting to false, nothing ever raises it, {@code canGlide()} is permanently
-	 * false, {@code tryToStartFallFlying} refuses and {@code updateFallFlying} clears the flag every tick. Elytra
-	 * simply does not work, with no error anywhere.
-	 *
-	 * <p>The damage is wider than elytra — every mod that adds a modifier through that event was being ignored, and
-	 * elytra is only the case vanilla itself routes through it. The repair points the read at NeoForge's computed
-	 * answer: four instructions become one, same stack shape, no branch and no frame.
-	 *
-	 * <p>The merge-conflict report does not list this method. NeoForge's patch here is an unqualified call to a
-	 * method on {@code ItemStack} itself — an interface default from {@code IItemStackExtension}, which the merged
-	 * class still implements — so it names nothing under {@code net/neoforged/} for a detector to notice.
-	 */
-	private static boolean askNeoForgeWhatAnItemsAttributesAre(ClassNode node) {
-		if (!ITEM_STACK.equals(node.name)) return false;
-		boolean changed = false;
-		for (MethodNode method : node.methods) {
-			if (!"forEachModifier".equals(method.name) || method.instructions == null) continue;
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof FieldInsnNode type) || type.getOpcode() != Opcodes.GETSTATIC
-						|| !DATA_COMPONENTS.equals(type.owner) || !"ATTRIBUTE_MODIFIERS".equals(type.name)) {
-					continue;
-				}
-				AbstractInsnNode empty = nextReal(type);
-				AbstractInsnNode fetch = nextReal(empty);
-				AbstractInsnNode cast = nextReal(fetch);
-				// The exact vanilla shape and nothing else: getOrDefault(ATTRIBUTE_MODIFIERS, EMPTY) then a cast.
-				if (!(empty instanceof FieldInsnNode e) || e.getOpcode() != Opcodes.GETSTATIC
-						|| !ATTRIBUTE_MODIFIERS_TYPE.equals(e.owner) || !"EMPTY".equals(e.name)) {
-					continue;
-				}
-				if (!(fetch instanceof MethodInsnNode f) || !"getOrDefault".equals(f.name)) continue;
-				if (!(cast instanceof TypeInsnNode c) || c.getOpcode() != Opcodes.CHECKCAST
-						|| !ATTRIBUTE_MODIFIERS_TYPE.equals(c.desc)) {
-					continue;
-				}
-				AbstractInsnNode after = cast.getNext();
-				method.instructions.insert(cast, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, ITEM_STACK,
-						NEO_ATTRIBUTES, "()L" + ATTRIBUTE_MODIFIERS_TYPE + ";", false));
-				for (AbstractInsnNode dead : new AbstractInsnNode[] { type, empty, fetch, cast }) {
-					method.instructions.remove(dead);
-				}
-				insn = after == null ? method.instructions.getLast() : after;
-				changed = true;
-			}
-		}
-		if (changed) {
-			ForbricLog.info("[Forbric/MergedBaseCompat] ItemStack.forEachModifier now asks NeoForge what an item's "
-					+ "attributes are instead of reading the raw component — the merge took NeoForge's canGlide, which "
-					+ "reads an attribute only NeoForge's ItemAttributeModifierEvent ever sets, and vanilla's reader, "
-					+ "which never posts it. Elytra flight was the visible half of that");
-		}
-		return changed;
-	}
 
 	/** The next instruction that is not a label, line number or frame. */
 	// ---------------------------------------------------------------------------------------------------------------
 	// The legacy global_loot_modifiers.json index, seen by two managers with two ideas of what it is
 	// ---------------------------------------------------------------------------------------------------------------
 
-	static final String LOOT_MODIFIER_MANAGER_FORGE = ForeignType.LOOT_MODIFIER_MANAGER.internal(Ecosystem.FORGE);
-	static final String LOOT_MODIFIER_MANAGER_NEO = ForeignType.LOOT_MODIFIER_MANAGER.internal(Ecosystem.NEOFORGE);
 	static final String SIMPLE_JSON_LISTENER = "net/minecraft/server/packs/resources/SimpleJsonResourceReloadListener";
 	static final String PREPARE = "prepare";
 	static final String PREPARE_DESC = "(Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)Ljava/util/Map;";
@@ -3426,189 +1439,12 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return !"off".equalsIgnoreCase(System.getProperty(MIPMAP_PROPERTY, "on"));
 	}
 
-	/**
-	 * Lowering an atlas's mip level to fit its smallest sprite is VANILLA behaviour, and the merge made it opt-in.
-	 *
-	 * <p>MinecraftForge patches {@code SpriteLoader.stitch} to gate that lowering on
-	 * {@code ForgeConfig.CLIENT.allowMipmapLowering()}, whose default is FALSE — its own comment says so: "When
-	 * enabled, Forge will allow mipmaps to be lowered in real-time. This is the default behavior in vanilla."
-	 * NeoForge's patched {@code SpriteLoader} has no such gate. The byte merge kept MinecraftForge's, so one
-	 * ecosystem's opt-out became the rule for all three, including Fabric and NeoForge mods that were written
-	 * against vanilla and never agreed to it.
-	 *
-	 * <p>What that costs is the worst shape there is. The Logistics mod (NeoForge) registers its own atlas holding
-	 * an 8x8 sprite; vanilla lowers the atlas from mip 4 to 3, MinecraftForge's gate refuses, and the GPU rejects
-	 * the upload — "mipLevels must be at most 4 for a texture of width 8 and height 8". That throws out of the
-	 * FIRST resource reload, so Minecraft logs "Caught error loading resourcepacks, removing all selected
-	 * resourcepacks" and reloads; the same atlas fails the same way; the reload never completes, and the client
-	 * renders a BLACK SCREEN for the rest of the run. No crash report, no further log line, nothing on screen.
-	 *
-	 * <p>The gate is replaced by {@code true} — two instructions for one, no branch, so the frames this transformer
-	 * does not compute are unchanged. MinecraftForge's knob still agrees with the kernel when a player sets it to
-	 * true; {@code -Dforbric.mipmapLowering=off} gives its false default back.
-	 */
-	private static boolean letTheAtlasLowerItsMipLevelLikeVanilla(ClassNode node) {
-		if (!SPRITE_LOADER.equals(node.name) || !mipmapLoweringEnabled()) return false;
-		int forced = 0;
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; ) {
-				AbstractInsnNode next = insn.getNext();
-				if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKEVIRTUAL
-						&& FORGE_CLIENT_CONFIG.equals(call.owner) && MIPMAP_LOWERING.equals(call.name)
-						&& "()Z".equals(call.desc)) {
-					AbstractInsnNode receiver = insn.getPrevious();
-					if (receiver instanceof FieldInsnNode field && field.getOpcode() == Opcodes.GETSTATIC) {
-						method.instructions.remove(field);
-					}
-					method.instructions.set(insn, new InsnNode(Opcodes.ICONST_1));
-					forced++;
-				}
-				insn = next;
-			}
-		}
-		if (forced == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] SpriteLoader lowers an atlas's mip level to fit its smallest "
-				+ "sprite again (%d gate(s) forced) — the merge kept MinecraftForge's opt-in, whose default is off, "
-				+ "and one NeoForge mod's 8x8 sprite then killed the first resource reload and left the client black",
-				forced);
-		return true;
-	}
-
 	static final String INPUT_CONSTANTS = "com/mojang/blaze3d/platform/InputConstants";
 	/** {@code -Dforbric.keyModifierSuffix=off} hands the whole value back to vanilla's parse, which throws on it. */
 	static final String KEY_SUFFIX_PROPERTY = "forbric.keyModifierSuffix";
 
 	static boolean keyModifierSuffixEnabled() {
 		return !"off".equalsIgnoreCase(System.getProperty(KEY_SUFFIX_PROPERTY, "on"));
-	}
-
-	/**
-	 * {@code InputConstants.getKey} must not be handed MinecraftForge's {@code ":MODIFIER"} suffix.
-	 *
-	 * <p>MinecraftForge extends a key binding with a modifier and WRITES it into options.txt as
-	 * {@code key_key.jei.toggleOverlay:key.keyboard.o:CONTROL_OR_COMMAND}. Its own
-	 * {@code Options.processOptionsKeysOnly} then reads that value and calls {@code InputConstants.getKey(value)}
-	 * with the whole string BEFORE splitting the modifier off — and vanilla's {@code getKey} does
-	 * {@code Integer.parseInt("o:CONTROL_OR_COMMAND")}. That is MinecraftForge's own code, unchanged by the merge:
-	 * the same instruction order is in the forge-patched base, so this is not a merge artifact and switching it off
-	 * does not restore anything.
-	 *
-	 * <p>What it costs is out of all proportion to one key: {@code Options.load} wraps the whole file in one
-	 * try/catch, so a single modded binding with a modifier makes the client log "Failed to load options" and the
-	 * player loses EVERY setting — video, controls, language, and the accessibility-onboarding flag, which then
-	 * sits in front of the game on the next launch. JEI binds three of them by default.
-	 *
-	 * <p>The repair is the smallest thing that can be said: {@code name = name.split(":")[0]} at method entry. No
-	 * key name in {@code Key.NAME_MAP} contains a colon, so a name without one is unchanged, and MinecraftForge's
-	 * own modifier parse two instructions later still reads the suffix off the original value. Branch-free on
-	 * purpose — this transformer writes with {@code ClassWriter(0)} and computes no frames.
-	 */
-	private static boolean dropTheKeyModifierSuffixBeforeParsingAKeyName(ClassNode node) {
-		if (!INPUT_CONSTANTS.equals(node.name) || !keyModifierSuffixEnabled()) return false;
-		MethodNode getKey = findMethod(node, "getKey", "(Ljava/lang/String;)Lcom/mojang/blaze3d/platform/InputConstants$Key;");
-		if (getKey == null || getKey.instructions.size() == 0) return false;
-		// Idempotent: the first instruction of a repaired method is the ALOAD 0 of this prologue followed by the
-		// split. Re-running the pass over an already-written class must not stack a second copy.
-		for (AbstractInsnNode insn = getKey.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof MethodInsnNode call && "java/lang/String".equals(call.owner)
-					&& "split".equals(call.name)) {
-				return false;
-			}
-		}
-		InsnList prologue = new InsnList();
-		prologue.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		prologue.add(new LdcInsnNode(":"));
-		prologue.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/String", "split",
-				"(Ljava/lang/String;)[Ljava/lang/String;", false));
-		prologue.add(new InsnNode(Opcodes.ICONST_0));
-		prologue.add(new InsnNode(Opcodes.AALOAD));
-		prologue.add(new VarInsnNode(Opcodes.ASTORE, 0));
-		getKey.instructions.insert(prologue);
-		getKey.maxStack = Math.max(getKey.maxStack, 2);
-		ForbricLog.info("[Forbric/MergedBaseCompat] InputConstants.getKey now drops MinecraftForge's \":MODIFIER\" "
-				+ "suffix before parsing a key name — one modded binding with a modifier used to throw out of "
-				+ "options.txt parsing, and Options.load wraps the WHOLE file, so the player lost every setting");
-		return true;
-	}
-
-	static final String WITHOUT_INDEX = "withoutTheLegacyIndex";
-	static final String WITHOUT_INDEX_DESC = "(Lnet/minecraft/server/packs/resources/ResourceManager;)Lnet/minecraft/server/packs/resources/ResourceManager;";
-
-	/**
-	 * MinecraftForge's loot-modifier manager reads {@code loot_modifiers/global_loot_modifiers.json} BY NAME as
-	 * its list of enabled modifiers, then scans the directory and drops what the list does not name; NeoForge's
-	 * has no list-file concept, scans the same directory with {@code IGlobalLootModifier.DIRECT_CODEC}, and logs
-	 * {@code Couldn't parse data file '…global_loot_modifiers'} for every index it meets — two permanent ERROR
-	 * lines on every tri-ecosystem boot (the MinecraftForge carrier ships one, mods ship another), which is what
-	 * makes a genuinely broken loot modifier indistinguishable from the furniture.
-	 *
-	 * <p>Both managers' DIRECTORY scans now run over a view of the resource manager that hides
-	 * {@code *&#47;loot_modifiers/global_loot_modifiers.json}; MinecraftForge's own by-name read of its index is on
-	 * the original manager and untouched, so the one path that owns the file keeps it. NeoForge's manager has no
-	 * {@code prepare} of its own, so one is synthesized ({@code super.prepare(withoutTheLegacyIndex(rm), p)});
-	 * MinecraftForge's existing {@code prepare} gets the same wrap on the {@code aload_1} feeding its
-	 * {@code super.prepare} call. Keyed on the {@code LOOT_MODIFIER_MANAGER} pair; each half stands down on its own.
-	 */
-	private static boolean hideTheLegacyLootModifierIndexFromTheDirectoryScan(ClassNode node) {
-		if (LOOT_MODIFIER_MANAGER_NEO.equals(node.name)) return synthesizeNeoForgePrepare(node);
-		if (LOOT_MODIFIER_MANAGER_FORGE.equals(node.name)) return wrapMinecraftForgePrepare(node);
-		return false;
-	}
-
-	private static boolean synthesizeNeoForgePrepare(ClassNode node) {
-		if (!SIMPLE_JSON_LISTENER.equals(node.superName)) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] %s no longer extends SimpleJsonResourceReloadListener — the legacy "
-					+ "loot-modifier index is not hidden from its scan", node.name.replace('/', '.'));
-			return false;
-		}
-		if (findMethod(node, PREPARE, PREPARE_DESC) != null) return false;    // its own prepare now, or a second pass
-		MethodNode prepare = new MethodNode(Opcodes.ACC_PROTECTED, PREPARE, PREPARE_DESC, null, null);
-		prepare.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		prepare.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		prepare.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_LOOT_MODIFIERS, WITHOUT_INDEX, WITHOUT_INDEX_DESC, false));
-		prepare.instructions.add(new VarInsnNode(Opcodes.ALOAD, 2));
-		prepare.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, SIMPLE_JSON_LISTENER, PREPARE, PREPARE_DESC, false));
-		prepare.instructions.add(new InsnNode(Opcodes.ARETURN));
-		prepare.maxStack = 3;
-		prepare.maxLocals = 3;
-		node.methods.add(prepare);
-		ForbricLog.info("[Forbric/MergedBaseCompat] NeoForge's LootModifierManager scans loot_modifiers/ without the legacy "
-				+ "global_loot_modifiers.json index (applied at 1 site) — it has no list-file concept and logged a parse "
-				+ "error for each one");
-		return true;
-	}
-
-	private static boolean wrapMinecraftForgePrepare(ClassNode node) {
-		MethodNode prepare = findMethod(node, PREPARE, PREPARE_DESC);
-		if (prepare == null) return false;
-		MethodInsnNode site = null;
-		int sites = 0;
-		for (AbstractInsnNode insn = prepare.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKESPECIAL && SIMPLE_JSON_LISTENER.equals(call.owner)
-					&& PREPARE.equals(call.name) && PREPARE_DESC.equals(call.desc)) {
-				sites++;
-				site = call;
-			}
-			if (insn instanceof MethodInsnNode call && KERNEL_LOOT_MODIFIERS.equals(call.owner)) return false;    // second pass
-		}
-		if (sites != 1) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] MinecraftForge's LootModifierManager.prepare calls super.prepare %d "
-					+ "time(s), not once — its directory scan is not wrapped", sites);
-			return false;
-		}
-		// aload_0; aload_1; aload_2; invokespecial — wrap the manager argument, the aload_1 two instructions back.
-		AbstractInsnNode profiler = previousReal(site.getPrevious());
-		AbstractInsnNode manager = previousReal(profiler.getPrevious());
-		if (!(profiler instanceof VarInsnNode p) || p.var != 2 || !(manager instanceof VarInsnNode m) || m.var != 1) {
-			ForbricLog.warn("[Forbric/MergedBaseCompat] MinecraftForge's LootModifierManager.prepare feeds super.prepare in a "
-					+ "shape that is not aload_1/aload_2 — its directory scan is not wrapped");
-			return false;
-		}
-		prepare.instructions.insert(manager, new MethodInsnNode(Opcodes.INVOKESTATIC, KERNEL_LOOT_MODIFIERS, WITHOUT_INDEX,
-				WITHOUT_INDEX_DESC, false));
-		ForbricLog.info("[Forbric/MergedBaseCompat] MinecraftForge's LootModifierManager scans loot_modifiers/ without the legacy "
-				+ "index too (applied at 1 site) — it still reads its own index by name, on the original manager");
-		return true;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -3698,83 +1534,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 			"$SwitchMap$net$minecraft$core$Direction",
 			"net/minecraft/core/Direction",
 			Map.of(1, "UP", 2, "DOWN")));
-
-	/**
-	 * Replaces {@code getstatic $SwitchMap; <load>; invokevirtual ordinal; iaload; lookupswitch/tableswitch} with a
-	 * chain of {@code <load>; getstatic Enum.CONST; if_acmpeq <case label>} ending in {@code goto <default>} —
-	 * the same three-way decision without the holder class. The branch targets are the switch's own labels, so
-	 * the frames already there stay right; the sequence replaced was straight-line with an empty stack before it
-	 * and after it, and the replacement is too. Both-or-nothing: a switch key the table does not name, or a
-	 * shape other than the one javac emits, leaves the method untouched.
-	 */
-	private static boolean inlineTheSwitchMapTheMergeLost(ClassNode node) {
-		int inlined = 0;
-		for (LostSwitchMap lost : LOST_SWITCH_MAPS) {
-			if (!lost.user().equals(node.name)) continue;
-			for (MethodNode method : node.methods) {
-				for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-					if (!(insn instanceof FieldInsnNode get) || get.getOpcode() != Opcodes.GETSTATIC
-							|| !lost.holder().equals(get.owner) || !lost.field().equals(get.name)) {
-						continue;
-					}
-					AbstractInsnNode load = nextReal(get);
-					AbstractInsnNode ordinal = nextReal(load);
-					AbstractInsnNode iaload = nextReal(ordinal);
-					AbstractInsnNode sw = nextReal(iaload);
-					if (!(load instanceof VarInsnNode var) || var.getOpcode() != Opcodes.ALOAD
-							|| !(ordinal instanceof MethodInsnNode call) || !"ordinal".equals(call.name)
-							|| !lost.enumType().equals(call.owner) || iaload == null || iaload.getOpcode() != Opcodes.IALOAD
-							|| !(sw instanceof org.objectweb.asm.tree.LookupSwitchInsnNode
-									|| sw instanceof org.objectweb.asm.tree.TableSwitchInsnNode)) {
-						ForbricLog.warn("[Forbric/MergedBaseCompat] %s.%s reads %s.%s in a shape that is not javac's switch "
-								+ "map — not inlined", node.name.replace('/', '.'), method.name, lost.holder(), lost.field());
-						continue;
-					}
-					List<Integer> keys = new ArrayList<>();
-					List<LabelNode> labels = new ArrayList<>();
-					LabelNode dflt;
-					if (sw instanceof org.objectweb.asm.tree.LookupSwitchInsnNode lookup) {
-						keys.addAll(lookup.keys);
-						labels.addAll(lookup.labels);
-						dflt = lookup.dflt;
-					} else {
-						org.objectweb.asm.tree.TableSwitchInsnNode table = (org.objectweb.asm.tree.TableSwitchInsnNode) sw;
-						for (int k = table.min; k <= table.max; k++) keys.add(k);
-						labels.addAll(table.labels);
-						dflt = table.dflt;
-					}
-					boolean allNamed = true;
-					for (int key : keys) if (!lost.cases().containsKey(key)) allNamed = false;
-					if (!allNamed) {
-						ForbricLog.warn("[Forbric/MergedBaseCompat] %s.%s switches on a case the table does not name (%s) "
-								+ "— not inlined", node.name.replace('/', '.'), method.name, keys);
-						continue;
-					}
-					InsnList chain = new InsnList();
-					String enumDesc = "L" + lost.enumType() + ";";
-					for (int i = 0; i < keys.size(); i++) {
-						chain.add(new VarInsnNode(Opcodes.ALOAD, var.var));
-						chain.add(new FieldInsnNode(Opcodes.GETSTATIC, lost.enumType(), lost.cases().get(keys.get(i)), enumDesc));
-						chain.add(new JumpInsnNode(Opcodes.IF_ACMPEQ, labels.get(i)));
-					}
-					chain.add(new JumpInsnNode(Opcodes.GOTO, dflt));
-					AbstractInsnNode last = chain.getLast();    // insertBefore empties `chain`
-					method.instructions.insertBefore(get, chain);
-					// Drop the five instructions, leaving any label/line/frame nodes between them where they are.
-					for (AbstractInsnNode victim : List.of(get, load, ordinal, iaload, sw)) method.instructions.remove(victim);
-					method.maxStack = Math.max(method.maxStack, 2);
-					inlined++;
-					insn = last;
-				}
-			}
-		}
-		if (inlined == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] %s decides %d enum switch(es) by direct comparison — javac's "
-				+ "$SwitchMap$ holder class for them was MinecraftForge's, and the merge kept NeoForge's class of the "
-				+ "same name instead, so the read was a NoSuchFieldError on every Forge ITEM_HANDLER ask of a furnace",
-				node.name.replace('/', '.'), inlined);
-		return true;
-	}
 
 	private static AbstractInsnNode nextReal(AbstractInsnNode cursor) {
 		AbstractInsnNode next = cursor == null ? null : cursor.getNext();
@@ -3939,19 +1698,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	private static boolean hasField(ClassNode node, String name, String desc) {
 		for (FieldNode field : node.fields) {
 			if (field.name.equals(name) && field.desc.equals(desc)) return true;
-		}
-		return false;
-	}
-
-	private static boolean initializesStaticField(ClassNode node, String name, String desc) {
-		for (MethodNode method : node.methods) {
-			if (!method.name.equals("<clinit>") || !method.desc.equals("()V")) continue;
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.PUTSTATIC
-						&& field.owner.equals(node.name) && field.name.equals(name) && field.desc.equals(desc)) {
-					return true;
-				}
-			}
 		}
 		return false;
 	}
@@ -4295,116 +2041,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 			if (method.name.equals(name)) return method;
 		}
 		return null;
-	}
-	/**
-	 * Sends the burn-time question through the kernel so both ecosystems answer it.
-	 *
-	 * <p>The merged {@code FuelValues.burnDuration} calls MinecraftForge's {@code getItemBurnTime} and nothing
-	 * else, so NeoForge's {@code FurnaceFuelBurnTimeEvent} is never posted — measured, and {@code balm} in the
-	 * test pack subscribes to it. This is the reverse of every bridge in this tree, where NeoForge won and
-	 * MinecraftForge is re-emitted, and it cannot be fixed by a listener: NeoForge's side is a static call, not
-	 * something to subscribe to.
-	 *
-	 * <p>NeoForge's hook needs the {@code FuelValues} instance, which MinecraftForge's three-argument shape does
-	 * not carry, so the receiver is pushed before the call and the descriptor widened. Only in INSTANCE methods:
-	 * in a static one, slot 0 is the first parameter and pushing it would hand NeoForge an ItemStack typed as a
-	 * FuelValues.
-	 */
-	private static boolean letBothEcosystemsSetBurnTime(ClassNode node) {
-		if (!FUEL_VALUES.equals(node.name)) return false;
-		int redirected = 0;
-		for (MethodNode method : node.methods) {
-			if ((method.access & Opcodes.ACC_STATIC) != 0) continue;
-			if (method.instructions == null) continue;
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-						|| !"net/minecraftforge/event/ForgeEventFactory".equals(call.owner)
-						|| !"getItemBurnTime".equals(call.name)
-						|| !FORGE_BURN_TIME_DESC.equals(call.desc)) {
-					continue;
-				}
-				method.instructions.insertBefore(call, new VarInsnNode(Opcodes.ALOAD, 0));
-				call.owner = KERNEL_FUEL_VALUES;
-				call.name = "burnDuration";
-				call.desc = KERNEL_BURN_TIME_DESC;
-				method.maxStack = Math.max(method.maxStack, 5);
-				redirected++;
-			}
-		}
-		if (redirected == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] FuelValues now asks both ecosystems how long something burns "
-				+ "(%d call site(s)) — the merge kept only MinecraftForge's hook, so NeoForge's "
-				+ "FurnaceFuelBurnTimeEvent was posted nowhere", redirected);
-		return true;
-	}
-
-	/**
-	 * Routes the spawner call to the kernel before SpawnerFinalizeInjector adds its proven ValueInput.
-	 *
-	 * <p>Both ecosystems patched {@code BaseSpawner.serverTick}, NeoForge's body won, and
-	 * {@code onFinalizeSpawnSpawner} is therefore called from nowhere — while {@code collective}, in the test
-	 * pack, subscribes to the event it posts. Putting MinecraftForge's own instruction run back would mean
-	 * splicing it into a body with NeoForge's local numbering, which is the three-way merge this tree does not
-	 * have. This first exchange preserves the descriptor. The following injector adds the actual ValueInput
-	 * from the entity-loading data flow; without it, the legacy entry reports the missing input rather than
-	 * inventing a null Forge argument or pretending an already-finalized mob can be changed retroactively.
-	 *
-	 * <p>A method that already calls MinecraftForge's own finalize hook is left alone: the kernel entry would post
-	 * that event a second time. SpawnerFinalizeInjector reports such a caller.
-	 */
-	private static boolean letMinecraftForgeSeeSpawnerMobs(ClassNode node) {
-		if (!BASE_SPAWNER.equals(node.name)) return false;
-		int redirected = 0;
-		for (MethodNode method : node.methods) {
-			if (method.instructions == null || SpawnerFinalizeInjector.carriesForgeFinalize(method)) continue;
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-						|| !NEO_EVENT_HOOKS.equals(call.owner)
-						|| !"finalizeMobSpawnSpawner".equals(call.name)
-						|| !SpawnerFinalizeInjector.OLD_DESC.equals(call.desc)) {
-					continue;
-				}
-				call.owner = KERNEL_SPAWNER_FINALIZE;
-				redirected++;
-			}
-		}
-		if (redirected == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] BaseSpawner finalization routed through the kernel "
-				+ "(%d call site(s)); the input injector supplies the Forge event's actual ValueInput", redirected);
-		return true;
-	}
-
-	/**
-	 * Sends every pack-repository population through the kernel, so MinecraftForge is asked for finders too.
-	 *
-	 * <p>Four call sites, in two client screens and two {@code ServerPacksSource} factories, and no single class
-	 * to anchor on — hence a scanned claim rather than a fixed one. MinecraftForge's own call site is gone from
-	 * all of them and NeoForge's survived, so a Forge-family mod contributing a data pack is never asked.
-	 */
-	private static boolean letMinecraftForgeAddPackFinders(ClassNode node) {
-		// Not the redirect TARGET itself. Its whole body is a call to the method being redirected, so rewriting
-		// that call points it at itself: the first pack repository built recurses until the stack ends, and the
-		// server never reaches Done. A scanned repair with no fixed anchor has to say what it is not allowed to
-		// touch, because nothing else will.
-		if (KERNEL_PACK_FINDERS.equals(node.name)) return false;
-		int redirected = 0;
-		for (MethodNode method : node.methods) {
-			if (method.instructions == null) continue;
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-						|| !NEO_RESOURCE_PACK_LOADER.equals(call.owner)
-						|| !"populatePackRepository".equals(call.name)) {
-					continue;
-				}
-				call.owner = KERNEL_PACK_FINDERS;
-				redirected++;
-			}
-		}
-		if (redirected == 0) return false;
-		ForbricLog.info("[Forbric/MergedBaseCompat] %s now populates its pack repository through the kernel "
-				+ "(%d call site(s)) — the merge kept only NeoForge's, so MinecraftForge mods were never asked "
-				+ "for pack finders", node.name, redirected);
-		return true;
 	}
 
 }

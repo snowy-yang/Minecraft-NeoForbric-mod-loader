@@ -234,40 +234,29 @@ class DevelopmentWorkflowTest(unittest.TestCase):
             subprocess.run([str(bin_dir / ('jar' + suffix)), '--create', '--file', str(jar), '-C',
                             str(java.parent / 'classes'), '.'], check=True)
 
-        library(stage / 'forge-patched/patched-mc-forge-26.2.jar', 'net.minecraftforge.Game')
         library(stage / 'neoforge-runtime/neoforge-runtime.jar', 'net.neoforged.Carrier')
         mixin = work / 'sponge-mixin-0.17.jar'
         library(mixin, 'org.spongepowered.Plugin')
-        forge, neo = sources / 'livemod-src', sources / 'livemod-src-neoforge'
-        for tree, body in ((forge, 'net.minecraftforge.Game g; org.spongepowered.Plugin p;'),
-                           (neo, 'net.neoforged.Carrier c;')):
-            (tree / 'live').mkdir(parents=True)
-            (tree / 'live/Probe.java').write_text('package live; class Probe { ' + body + ' }')
-            (tree / 'data/live').mkdir(parents=True)
-            (tree / 'data/live/probe.json').write_text('{}')
-            (tree / 'notes.txt').write_text('not packaged')
-        (forge / 'META-INF').mkdir()
-        (forge / 'META-INF/mods.toml').write_text('modLoader="javafml"')
-        (forge / 'forbriclive.mixins.json').write_text('{}')
-        (forge / 'assets/live').mkdir(parents=True)
-        (forge / 'assets/live/setup_probe.txt').write_text('probe')
+        neo = sources / 'livemod-src-neoforge'
+        (neo / 'live').mkdir(parents=True)
+        (neo / 'live/Probe.java').write_text('package live; class Probe { net.neoforged.Carrier c; }')
+        (neo / 'data/live').mkdir(parents=True)
+        (neo / 'data/live/probe.json').write_text('{}')
+        (neo / 'notes.txt').write_text('not packaged')
         (neo / 'META-INF').mkdir()
         (neo / 'META-INF/neoforge.mods.toml').write_text('modLoader="javafml"')
-        # What an earlier prepare left must not survive in either place.
-        (stage / 'livemod-src/stale').mkdir(parents=True)
+        # What an earlier prepare left must not survive.
+        (stage / 'livemod-src-neoforge/stale').mkdir(parents=True)
 
         dev.stage_canaries(stage, [mixin], env['JAVA_HOME'], sources)
 
-        with zipfile.ZipFile(stage / 'forge-runtime/forbriclive.jar') as archive:
-            names = set(archive.namelist())
-        self.assertTrue({'live/Probe.class', 'META-INF/mods.toml', 'forbriclive.mixins.json', 'data/live/probe.json',
-                         'assets/live/setup_probe.txt'} <= names, names)
-        self.assertFalse({'live/Probe.java', 'notes.txt'} & names)
         with zipfile.ZipFile(stage / 'neoforge-runtime/forbricneolive.jar') as archive:
             names = set(archive.namelist())
         self.assertTrue({'live/Probe.class', 'META-INF/neoforge.mods.toml', 'data/live/probe.json'} <= names, names)
-        self.assertEqual((stage / 'livemod-src/live/Probe.java').read_text(), (forge / 'live/Probe.java').read_text())
-        self.assertFalse((stage / 'livemod-src/stale').exists())
+        self.assertFalse({'live/Probe.java', 'notes.txt'} & names)
+        self.assertEqual((stage / 'livemod-src-neoforge/live/Probe.java').read_text(),
+                         (neo / 'live/Probe.java').read_text())
+        self.assertFalse((stage / 'livemod-src-neoforge/stale').exists())
         self.assertTrue((stage / 'livemod-src-neoforge/data/live/probe.json').is_file())
 
     def test_canaries_take_only_mixin_and_asm_from_the_kernel_classpath(self):

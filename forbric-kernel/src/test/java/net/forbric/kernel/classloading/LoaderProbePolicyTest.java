@@ -29,58 +29,42 @@ import net.forbric.api.ForeignType;
 /**
  * Covers which loader a guest class is allowed to see.
  *
- * <p>The two Forge families were grouped under one constant, so a NeoForge-only mod probing for TRADITIONAL
- * MinecraftForge's loader class was told it exists. On a real NeoForge instance it does not, and that probe is
- * exactly how a mod decides which family's branch to take — so the grouping sent it down the other family's.
+ * <p>Traditional MinecraftForge is no longer an ecosystem this loader runs, so the only Forge-family marker left is
+ * NeoForge's. A NeoForge mod must still be answered honestly about the loaders it did not ship as, and a Fabric
+ * class asking about NeoForge's loader — or a NeoForge class asking about Fabric's — takes a branch it was never
+ * built for if the answer is wrong.
  */
 class LoaderProbePolicyTest {
-	private static final String FORGE_MARKER = ForeignType.FML_LOADER.binary(Ecosystem.FORGE);
 	private static final String NEO_MARKER = ForeignType.FML_LOADER.binary(Ecosystem.NEOFORGE);
 
 	@Test
-	void theTwoForgeFamiliesHaveDifferentMarkerClasses() {
-		// The premise of the whole fix. If a future carrier ever made these the same string, grouping them would
-		// be right again and this test is where that shows up.
-		assertTrue(!FORGE_MARKER.equals(NEO_MARKER), FORGE_MARKER + " and " + NEO_MARKER + " must differ");
-		assertTrue(LoaderProbePolicy.isProbe(FORGE_MARKER));
-		assertTrue(LoaderProbePolicy.isProbe(NEO_MARKER));
+	void theNeoForgeMarkerIsAProbe() {
+		assertTrue(LoaderProbePolicy.isProbe(NEO_MARKER), NEO_MARKER + " must be a probe");
 	}
 
 	@Test
 	void eachEcosystemMapsToItsOwnFamily() {
 		assertEquals(LoaderProbePolicy.Family.FABRIC, LoaderProbePolicy.familyOf(Ecosystem.FABRIC));
-		assertEquals(LoaderProbePolicy.Family.FORGE, LoaderProbePolicy.familyOf(Ecosystem.FORGE));
 		assertEquals(LoaderProbePolicy.Family.NEOFORGE, LoaderProbePolicy.familyOf(Ecosystem.NEOFORGE));
 		assertNull(LoaderProbePolicy.familyOf(null), "an unowned jar has no family and probes as before");
 	}
 
 	@Test
-	void aNeoForgeClassIsToldTraditionalForgeIsAbsent() {
+	void aNeoForgeClassIsToldTheFabricLoaderIsAbsent() {
 		assertTrue(LoaderProbePolicy.enabled(), "the test JVM never sets -Dforbric.loaderProbes=off");
 
 		assertThrows(ClassNotFoundException.class, () -> LoaderProbePolicy.forName(
-				FORGE_MARKER, false, LoaderProbePolicyTest.class.getClassLoader(),
+				"net.fabricmc.loader.api.FabricLoader", false, LoaderProbePolicyTest.class.getClassLoader(),
 				LoaderProbePolicy.Family.NEOFORGE.name()),
-				"this is the probe the grouping used to answer yes to");
+				"this is the probe a NeoForge mod uses to pick its Fabric branch");
 	}
 
 	@Test
-	void aTraditionalForgeClassIsToldNeoForgeIsAbsent() {
-		assertTrue(LoaderProbePolicy.enabled(), "the test JVM never sets -Dforbric.loaderProbes=off");
-
-		assertThrows(ClassNotFoundException.class, () -> LoaderProbePolicy.forName(
-				NEO_MARKER, false, LoaderProbePolicyTest.class.getClassLoader(),
-				LoaderProbePolicy.Family.FORGE.name()));
-	}
-
-	@Test
-	void aFabricClassIsToldBothForgeLoadersAreAbsent() {
+	void aFabricClassIsToldTheNeoForgeLoaderIsAbsent() {
 		assertTrue(LoaderProbePolicy.enabled(), "the test JVM never sets -Dforbric.loaderProbes=off");
 		ClassLoader here = LoaderProbePolicyTest.class.getClassLoader();
 		String fabric = LoaderProbePolicy.Family.FABRIC.name();
 
-		assertThrows(ClassNotFoundException.class,
-				() -> LoaderProbePolicy.forName(FORGE_MARKER, false, here, fabric));
 		assertThrows(ClassNotFoundException.class,
 				() -> LoaderProbePolicy.forName(NEO_MARKER, false, here, fabric));
 	}
@@ -93,7 +77,7 @@ class LoaderProbePolicyTest {
 		assertTrue(!LoaderProbePolicy.isProbe("java.lang.String"));
 
 		assertEquals(String.class, assertDoesNotThrowClass(
-				"java.lang.String", LoaderProbePolicy.Family.FORGE.name()));
+				"java.lang.String", LoaderProbePolicy.Family.NEOFORGE.name()));
 	}
 
 	@Test

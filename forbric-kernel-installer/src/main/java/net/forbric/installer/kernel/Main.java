@@ -156,7 +156,7 @@ public final class Main {
 		out.println();
 		out.println("  --dir DIR        the Minecraft directory to install into");
 		out.println("  --mc " + Pins.MINECRAFT + "        the base version (default " + Pins.MINECRAFT + ")");
-		out.println("  --artifacts DIR  developers only: a merged game base and both runtimes you built from");
+		out.println("  --artifacts DIR  developers only: the game base and NeoForge runtime you built from");
 		out.println("                   source, used instead of building them. Leave it out: the installer");
 		out.println("                   downloads and builds everything it needs.");
 		out.println("  --jdk PATH       a JVM (Java " + JdkLocator.MINIMUM_FEATURE

@@ -106,14 +106,12 @@ public final class MergedBaseCalleeSwaps {
 							+ "Lnet/minecraft/client/resources/model/cuboid/CuboidModel;",
 					"Lnet/neoforged/neoforge/client/model/UnbakedModelParser;parse(Ljava/io/Reader;)"
 							+ "Lnet/minecraft/client/resources/model/UnbakedModel;",
-					Set.of(Ecosystem.FABRIC, Ecosystem.FORGE),
+					Set.of(Ecosystem.FABRIC),
 					"both calls turn the model file's Reader into the model, on the thread that loads it, and that is the "
 							+ "whole of what the lambda does with them; NeoForge's parse reads it through CuboidModel.GSON, "
 							+ "whose UnbakedModel adapter is NeoForge's loader dispatch, and a model it does not own reaches "
 							+ "the same vanilla CuboidModel$Deserializer fromStream used (ModelFormatFunnelInjector). So "
-							+ "BEFORE the call is still 'this model's file is about to be parsed': fusion (MinecraftForge) "
-							+ "stores the model's id there, and its hook in that deserializer reads it back to name every "
-							+ "connected-texture model it builds"));
+							+ "BEFORE the call is still 'this model's file is about to be parsed'"));
 
 	/**
 	 * A private vanilla method the surviving carrier REPLACED at its one call site with a method of its own that takes,
@@ -164,15 +162,13 @@ public final class MergedBaseCalleeSwaps {
 							SETTINGS + ".getBoundingBox()Lnet/minecraft/world/level/levelgen/structure/BoundingBox;",
 							SETTINGS + ".shouldFinalizeEntities()Z", "$3"),
 					Set.of(Ecosystem.FABRIC),
-					"NeoForge's placeInWorld hands the placement settings to addEntitiesToWorld where vanilla's read the "
-							+ "mirror, rotation, pivot, bounding box and finalize flag off them and called placeEntities, "
-							+ "under the same isIgnoreEntities check; both are private and that call is each one's only "
-							+ "caller. addEntitiesToWorld places the template's entities as placeEntities did, after "
-							+ "NeoForge's processEntityInfos has run the settings' processors over them: a HEAD injection "
-							+ "that cancels (MoogsStructureLib places processed entities itself and cancels) skips that "
-							+ "pass too, as it skipped vanilla's placement; one that does not leaves it running. "
-							+ "MinecraftForge's own shape (placeEntities taking the settings last) is a different "
-							+ "descriptor and stays where it is"));
+						"NeoForge's placeInWorld hands the placement settings to addEntitiesToWorld where vanilla's read the "
+								+ "mirror, rotation, pivot, bounding box and finalize flag off them and called placeEntities, "
+								+ "under the same isIgnoreEntities check; both are private and that call is each one's only "
+								+ "caller. addEntitiesToWorld places the template's entities as placeEntities did, after "
+								+ "NeoForge's processEntityInfos has run the settings' processors over them: a HEAD injection "
+								+ "that cancels (MoogsStructureLib places processed entities itself and cancels) skips that "
+								+ "pass too, as it skipped vanilla's placement; one that does not leaves it running"));
 
 	private MergedBaseCalleeSwaps() {
 	}

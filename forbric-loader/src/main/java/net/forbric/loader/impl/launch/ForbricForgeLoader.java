@@ -49,18 +49,18 @@ public final class ForbricForgeLoader {
 	private final boolean identity; // Mojmap-canonical: NeoForge mods are already Mojmap -> no remap
 	/** Mod ids present this boot (Fabric + wrapped Forge), lowercased; drives soft-dependency downgrade. */
 	private final java.util.Set<String> presentModIds;
-	/** Which Forge family this boot loads ({@code FORGE} / {@code NEOFORGE}) — stamps wraps, filters nested mods. */
+	/** Which Forge family this boot loads ({@code NEOFORGE}) — stamps wraps, filters nested mods. */
 	private final net.forbric.loader.impl.metadata.ModEcosystem family;
 
 	public ForbricForgeLoader(ForbricMappings mappings, List<Path> remapClasspath, ForbricCache cache, String mappingsKey) {
 		this(mappings, remapClasspath, cache, mappingsKey, false, java.util.Set.of(),
-				net.forbric.loader.impl.metadata.ModEcosystem.FORGE);
+				net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE);
 	}
 
 	public ForbricForgeLoader(ForbricMappings mappings, List<Path> remapClasspath, ForbricCache cache,
 			String mappingsKey, java.util.Set<String> presentModIds) {
 		this(mappings, remapClasspath, cache, mappingsKey, false, presentModIds,
-				net.forbric.loader.impl.metadata.ModEcosystem.FORGE);
+				net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE);
 	}
 
 	private ForbricForgeLoader(ForbricMappings mappings, List<Path> remapClasspath, ForbricCache cache,
@@ -72,7 +72,7 @@ public final class ForbricForgeLoader {
 		this.mappingsKey = mappingsKey;
 		this.identity = identity;
 		this.presentModIds = presentModIds == null ? java.util.Set.of() : presentModIds;
-		this.family = family == null ? net.forbric.loader.impl.metadata.ModEcosystem.FORGE : family;
+		this.family = family == null ? net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE : family;
 	}
 
 	/**
@@ -87,10 +87,10 @@ public final class ForbricForgeLoader {
 
 	/** As {@link #identity(ForbricCache)}, with the set of present mod ids for soft-dependency downgrade. */
 	public static ForbricForgeLoader identity(ForbricCache cache, java.util.Set<String> presentModIds) {
-		return identity(cache, presentModIds, net.forbric.loader.impl.metadata.ModEcosystem.FORGE);
+		return identity(cache, presentModIds, net.forbric.loader.impl.metadata.ModEcosystem.NEOFORGE);
 	}
 
-	/** As above, for a specific Forge family ({@code FORGE} / {@code NEOFORGE}) — the active game base's. */
+	/** As above, for a specific Forge family ({@code NEOFORGE}) — the active game base's. */
 	public static ForbricForgeLoader identity(ForbricCache cache, java.util.Set<String> presentModIds,
 			net.forbric.loader.impl.metadata.ModEcosystem family) {
 		return new ForbricForgeLoader(null, List.of(), cache, "mojmap-identity", true, presentModIds, family);

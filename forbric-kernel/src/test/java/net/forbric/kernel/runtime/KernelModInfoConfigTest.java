@@ -104,7 +104,7 @@ class KernelModInfoConfigTest {
 	void puzzlesLibReadsItsAuthorsAndHomepage() throws Exception {
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(PUZZLES), "the popular pack's Puzzles Lib jar is not here");
 		DiscoveredMod declared = new ForbricModDiscoverer().discoverJar(PUZZLES).get(0);
-		Path guava = KernelForgeModInfoTest.newestUnder("com/google/guava/guava");
+		Path guava = newestGuava();
 		TestFixtures.require(Fixture.MC_LIBRARIES, guava != null, "no Guava in the local Minecraft library tree");
 		try (URLClassLoader runtime = runtimeLoader();
 				URLClassLoader puzzles = new URLClassLoader(new URL[] {PUZZLES.toUri().toURL(), guava.toUri().toURL()}, runtime)) {
@@ -245,4 +245,18 @@ class KernelModInfoConfigTest {
 		List<URL> urls = new ArrayList<>(List.of(compiled.toUri().toURL(), carrier.toUri().toURL()));
 		return new URLClassLoader(urls.toArray(new URL[0]), KernelModInfoConfigTest.class.getClassLoader());
 	}
+	/** The newest Guava in the local Minecraft library tree, as the deleted Forge twin test used to find it. */
+	private static Path newestGuava() {
+		java.nio.file.Path root = TestFixtures.minecraftLibraries();
+		try (var walk = java.nio.file.Files.walk(root, 20)) {
+			return walk.filter(p -> {
+						String n = String.valueOf(p.getFileName());
+						return n.startsWith("guava-") && n.endsWith(".jar") && !n.contains("sources");
+					}).sorted((x, y) -> String.valueOf(x.getFileName()).compareTo(String.valueOf(y.getFileName())))
+					.reduce((x, y) -> y).orElse(null);
+		} catch (java.io.IOException unavailable) {
+			return null;
+		}
+	}
+
 }
