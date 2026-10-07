@@ -49,8 +49,7 @@ import net.forbric.kernel.discovery.ModAnnotationScanner.ModClassInfo;
  *
  * <p>A container left standing for a mod whose constructor threw passes {@code instanceof} and hands out an
  * event bus that nothing will ever post to, so a library mod resolving it registers into nothing and the failure
- * surfaces later somewhere that names neither mod. The MinecraftForge half withdrew; the NeoForge half did not,
- * and both now go through this.
+ * surfaces later somewhere that names neither mod.
  */
 class KernelModLoaderWithdrawalTest {
 
@@ -277,18 +276,6 @@ class KernelModLoaderWithdrawalTest {
 				KernelModLoader.settleNeo(otherSide, Set.of("rolling_gate"), failed.keySet());
 		assertFalse(KernelModLoader.neoNeedsWithdrawal(Set.of("rolling_gate"), settled.kept()));
 		assertEquals(Set.of("rolling_gate"), settled.degraded());
-	}
-
-	@Test
-	void aMinecraftForgeClassThatThrowsIsLeftToTheForgeWithdrawal() {
-		// The MinecraftForge half withdraws by what constructed, on its own list; a NeoForge settlement must not
-		// see its ids at all.
-		Set<String> otherSide = new LinkedHashSet<>();
-		Map<String, List<String>> failed = new LinkedHashMap<>();
-		KernelModLoader.recordNeoOutcome(new ModClassInfo("demo.ForgeMod", "demo", Ecosystem.NEOFORGE), true,
-				new RuntimeException("boom"), otherSide, failed);
-		assertTrue(failed.isEmpty());
-		assertTrue(otherSide.isEmpty());
 	}
 
 	@Test

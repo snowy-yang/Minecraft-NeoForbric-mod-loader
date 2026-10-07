@@ -1002,7 +1002,7 @@ public final class DuplicateModArbiter {
 		// someone wrote months ago must still read back.
 		Ecosystem parsed = Ecosystem.parse(raw);
 		if (parsed == null) {
-			ForbricLog.warn("[Forbric/DupeId] %s: '%s' is not a loader — use fabric, neoforge or minecraftforge",
+			ForbricLog.warn("[Forbric/DupeId] %s: '%s' is not a loader — use fabric or neoforge",
 					where, raw.trim());
 		}
 		return parsed;

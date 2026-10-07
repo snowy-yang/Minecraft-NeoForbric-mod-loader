@@ -90,7 +90,7 @@ public final class PortingLayerAudit {
 				for (ZipEntry entry : zip.stream().toList()) {
 					String name = entry.getName();
 					if (!name.endsWith(".class")) continue;
-					if (!name.startsWith("net/neoforged/") && !name.startsWith("net/minecraftforge/")) continue;
+					if (!name.startsWith("net/neoforged/")) continue;
 					byte[] theirs;
 					try (InputStream in = zip.getInputStream(entry)) {
 						theirs = in.readAllBytes();
@@ -130,7 +130,7 @@ public final class PortingLayerAudit {
 					skew.onlyInJar(), skew.onlyInCarrier());
 		}
 		ForbricLog.warn("[Forbric/PortAudit] %d of %d shadowed class(es) disagree with the carrier. A Fabric mod "
-				+ "that re-implements net.neoforged.* / net.minecraftforge.* loses to the carrier by design; where "
+				+ "that re-implements net.neoforged.* loses to the carrier by design; where "
 				+ "the two disagree, every consumer of that API breaks, and the error surfaces in the CONSUMER",
 				report.skews().size(), report.shadowed());
 	}

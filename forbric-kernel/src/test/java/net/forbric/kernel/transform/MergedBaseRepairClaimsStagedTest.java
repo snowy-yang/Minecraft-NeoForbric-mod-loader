@@ -50,7 +50,7 @@ import net.forbric.kernel.TestFixtures.Fixture;
  */
 class MergedBaseRepairClaimsStagedTest {
 	private static final Path RUN = TestFixtures.stagedRoot();
-	private static final List<Path> JARS = List.of(RUN.resolve("merged-base/patched-mc-merged-26.2.jar"),
+	private static final List<Path> JARS = List.of(RUN.resolve("neoforge-base/patched-mc-neoforge-26.2.jar"),
 			RUN.resolve("neoforge-runtime/neoforge-runtime.jar"), RUN.resolve("forge-runtime/forge-runtime.jar"));
 	private static final TransformContext CTX = new TransformContext(EnvType.CLIENT, false, "intermediary");
 	private static final String KEY_MAPPING = "net.minecraft.client.KeyMapping";

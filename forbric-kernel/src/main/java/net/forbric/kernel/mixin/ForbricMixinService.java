@@ -293,7 +293,6 @@ public final class ForbricMixinService
 		FabricRegistryInitializationMixinAdapter.adapt(node);
 		FabricFreezeHookMixinAdapter.adapt(node, this::mergedBaseNode);
 		FabricCreativePagerMixinAdapter.adapt(node);
-		KernelClientHookMixinAnchors.adapt(node, this::mergedBaseNodeWithCode);
 		GuiItemCaptureMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		BarrelRollCameraAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		// …and a redirect of a vanilla call the carrier replaced at the same place, whose handler only conditions it,

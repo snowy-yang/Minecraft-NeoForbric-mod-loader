@@ -109,23 +109,6 @@ class ItemUseOnInjectorExecutionTest {
 						}
 					}
 					"""),
-			Map.entry(ItemUseOnInjector.FORGE_HOOKS, """
-					package net.minecraftforge.common;
-
-					import java.util.function.Function;
-					import net.minecraft.world.InteractionResult;
-					import net.minecraft.world.item.context.UseOnContext;
-
-					public class ForgeHooks {
-						public static InteractionResult onItemUse(UseOnContext context, Function<UseOnContext, InteractionResult> callback) {
-							return callback.apply(context);
-						}
-
-						public static InteractionResult onPlaceItemIntoWorld(UseOnContext context) {
-							return context.getItemInHand().getItem().useOn(context);
-						}
-					}
-					"""),
 			Map.entry("net.neoforged.bus.api.Event", """
 					package net.neoforged.bus.api;
 
@@ -206,7 +189,7 @@ class ItemUseOnInjectorExecutionTest {
 					}
 					"""));
 
-	private static final List<String> TARGETS = List.of(STACK, ItemUseOnInjector.NEO_HOOKS, ItemUseOnInjector.FORGE_HOOKS);
+	private static final List<String> TARGETS = List.of(STACK, ItemUseOnInjector.NEO_HOOKS);
 
 	private static ClassLoader transformed(Map<String, byte[]> original) {
 		Map<String, byte[]> classes = new HashMap<>(original);
@@ -250,12 +233,6 @@ class ItemUseOnInjectorExecutionTest {
 		assertEquals(List.of(ItemUseOnInjector.RELAY, ItemUseOnInjector.RELAY), callers(loader),
 				"server and client both reach Item.useOn through the relay Fabric's wrap is pointed at");
 
-		// A mod calling MinecraftForge's own hook goes through the same relay.
-		Object item = InjectorExecution.construct(loader.loadClass("net.minecraft.world.item.Item"));
-		Object context = InjectorExecution.construct(loader.loadClass(CONTEXT),
-				InjectorExecution.construct(loader.loadClass(STACK), item), false);
-		InjectorExecution.invokeStatic(loader.loadClass(ItemUseOnInjector.FORGE_HOOKS), "onPlaceItemIntoWorld", context);
-		assertEquals(ItemUseOnInjector.RELAY, callers(loader).get(2));
 
 		ClassLoader merged = InjectorExecution.load(original);
 		List<String> unposted = new ArrayList<>();

@@ -90,7 +90,7 @@ public final class InterfaceDefaultConflictRepair {
 
 	/** Owners whose interfaces are part of the base rather than something a mod brought. */
 	private static final List<String> BASE_PACKAGES =
-			List.of("net/minecraft/", "net/neoforged/", "net/minecraftforge/", "com/mojang/");
+			List.of("net/minecraft/", "net/neoforged/", "com/mojang/");
 
 	/**
 	 * {@code owner#name+desc} → the overload of the same name the override calls instead of either default.

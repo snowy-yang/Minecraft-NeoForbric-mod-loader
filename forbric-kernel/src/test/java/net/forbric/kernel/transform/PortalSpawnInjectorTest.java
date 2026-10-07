@@ -30,64 +30,49 @@ class PortalSpawnInjectorTest {
 	private final TransformContext context = new TransformContext(EnvType.CLIENT, false, "mojmap");
 	@AfterEach void reset() { System.clearProperty(PortalSpawnInjector.PROPERTY); }
 
-	@Test void onlyTheHookOwnerChangesOnTheRealMergedBase() throws Exception {
-		byte[] original = staged("merged-base/patched-mc-merged-26.2.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
-		// A base whose merge restored MinecraftForge's own call carries the proved pair: each family's call is routed
-		// through its own runtime entry. A base that lost it gets the wrapper that forwards to Forge itself. Either
-		// way only call targets change.
-		boolean restored = calls(host(parse(original))).stream().anyMatch(c -> c.owner.equals(PortalSpawnInjector.FORGE));
+	@Test void onlyTheHookOwnerChangesOnTheRealBase() throws Exception {
+		byte[] original = staged("neoforge-base/patched-mc-neoforge-26.2.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
 		byte[] changed = injector.transform(PortalSpawnInjector.TARGET, original, context);
 		assertNotSame(original, changed);
 		ClassNode after = parse(changed);
-		List<MethodInsnNode> runtime = calls(host(after)).stream().filter(c -> c.owner.equals(PortalSpawnInjector.RUNTIME)).toList();
-		assertEquals(restored ? List.of(PortalSpawnInjector.NEO_ONLY, PortalSpawnInjector.FORGE_ONLY) : List.of("onTrySpawnPortal"),
-				runtime.stream().map(hook -> hook.name).toList());
+		List<MethodInsnNode> runtime = calls(host(after)).stream()
+				.filter(c -> c.owner.equals(PortalSpawnInjector.RUNTIME)).toList();
+		assertEquals(List.of("onTrySpawnPortal"), runtime.stream().map(hook -> hook.name).toList());
 		for (MethodInsnNode hook : runtime) assertEquals(PortalSpawnInjector.HOOK_DESC, hook.desc);
 		new Analyzer<>(new BasicVerifier()).analyze(after.name, host(after));
 		for (MethodInsnNode hook : runtime) {
-			hook.owner = hook.name.equals(PortalSpawnInjector.FORGE_ONLY) ? PortalSpawnInjector.FORGE : PortalSpawnInjector.NEO;
+			hook.owner = PortalSpawnInjector.NEO;
 			hook.name = "onTrySpawnPortal";
 		}
 		assertEquals(trace(parse(original)), trace(after), "all operands, frames, branches and the Optional consumer must be unchanged");
 		assertSame(changed, injector.transform(PortalSpawnInjector.TARGET, changed, context));
 	}
 
-	@Test void switchedOffTheRealMergedBaseCarriesOnlyTheReviewedNeoForgeCaller() throws Exception {
-		byte[] original = staged("merged-base/patched-mc-merged-26.2.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
-		boolean restored = calls(host(parse(original))).stream().anyMatch(c -> c.owner.equals(PortalSpawnInjector.FORGE));
+	@Test void switchedOffTheRealBaseIsLeftExactlyAsTheCarrierShippedIt() throws Exception {
+		byte[] original = staged("neoforge-base/patched-mc-neoforge-26.2.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
 		System.setProperty(PortalSpawnInjector.PROPERTY, "off");
-		byte[] changed = injector.transform(PortalSpawnInjector.TARGET, original, context);
-		if (!restored) assertSame(original, changed, "a base that lost MinecraftForge's call is left to the legacy forward");
-		ClassNode after = parse(changed);
-		assertEquals(List.of(PortalSpawnInjector.NEO), calls(host(after)).stream()
-				.filter(c -> c.name.startsWith("onTrySpawnPortal")).map(c -> c.owner).toList());
-		new Analyzer<>(new BasicVerifier()).analyze(after.name, host(after));
-		assertEquals(PortalSpawnInjector.NATIVE_BODY, net.forbric.kernel.mixin.MixinInstructionFingerprint.hash(host(after)),
-				"switched off, the caller is exactly the reviewed one the legacy forward was built for");
-		assertSame(changed, injector.transform(PortalSpawnInjector.TARGET, changed, context));
+		assertSame(original, injector.transform(PortalSpawnInjector.TARGET, original, context));
+		assertTrue(injector.anchors().anchors().isEmpty());
 	}
 
-	@Test void bothActualCarrierHooksHaveTheRedirectedStaticDescriptor() throws Exception {
-		for (String[] entry : List.of(new String[] {"forge-runtime/forge-runtime.jar", PortalSpawnInjector.FORGE},
-				new String[] {"neoforge-runtime/neoforge-runtime.jar", PortalSpawnInjector.NEO})) {
-			ClassNode carrier = parse(staged(entry[0], entry[1]));
-			MethodNode method = carrier.methods.stream().filter(m -> m.name.equals("onTrySpawnPortal") && m.desc.equals(PortalSpawnInjector.HOOK_DESC)).findFirst().orElseThrow();
-			assertTrue((method.access & Opcodes.ACC_STATIC) != 0);
-		}
+	@Test void theCarriersOwnHookHasTheRedirectedStaticDescriptor() throws Exception {
+		ClassNode carrier = parse(staged("neoforge-runtime/neoforge-runtime.jar", PortalSpawnInjector.NEO));
+		MethodNode method = carrier.methods.stream()
+				.filter(m -> m.name.equals("onTrySpawnPortal") && m.desc.equals(PortalSpawnInjector.HOOK_DESC))
+				.findFirst().orElseThrow();
+		assertTrue((method.access & Opcodes.ACC_STATIC) != 0);
 	}
 
-	@Test void unexpectedOrAlreadyComposedCallSitesRetainTheirOriginalBytes() {
+	@Test void unexpectedOrAlreadyRoutedCallSitesRetainTheirOriginalBytes() {
 		for (Consumer<ClassNode> change : List.<Consumer<ClassNode>>of(
 				n -> host(n).access |= Opcodes.ACC_STATIC,
 				n -> host(n).desc = "()V",
 				n -> hook(host(n)).desc = "()V",
 				n -> hook(host(n)).setOpcode(Opcodes.INVOKEVIRTUAL),
 				n -> hook(host(n)).itf = true,
-				n -> hook(host(n)).owner = PortalSpawnInjector.FORGE,
 				n -> hook(host(n)).owner = PortalSpawnInjector.RUNTIME,
 				n -> host(n).instructions.insert(hook(host(n)), new InsnNode(Opcodes.POP)),
 				n -> host(n).instructions.insert(new MethodInsnNode(Opcodes.INVOKESTATIC, PortalSpawnInjector.NEO, "onTrySpawnPortal", PortalSpawnInjector.HOOK_DESC, false)),
-				n -> host(n).instructions.insert(new MethodInsnNode(Opcodes.INVOKESTATIC, PortalSpawnInjector.FORGE, "onTrySpawnPortal", PortalSpawnInjector.HOOK_DESC, false)),
 				n -> n.name = "other/Type")) {
 			ClassNode node = fixture(); change.accept(node); byte[] bytes = write(node);
 			assertSame(bytes, injector.transform(PortalSpawnInjector.TARGET, bytes, context));

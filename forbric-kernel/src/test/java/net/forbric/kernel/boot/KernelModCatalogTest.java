@@ -56,8 +56,7 @@ class KernelModCatalogTest {
 
 		assertEquals(3, ModCatalog.all().size());
 		assertEquals(1, ModCatalog.count(Ecosystem.FABRIC));
-		assertEquals(1, ModCatalog.count(Ecosystem.NEOFORGE));
-		assertEquals(1, ModCatalog.count(Ecosystem.NEOFORGE));
+		assertEquals(2, ModCatalog.count(Ecosystem.NEOFORGE));
 	}
 
 	@Test

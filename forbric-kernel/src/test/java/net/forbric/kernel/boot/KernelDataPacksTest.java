@@ -98,15 +98,15 @@ class KernelDataPacksTest {
 	@Test
 	void servesForgeFamilyJarsAndLeavesFabricOnesToFabricApi() throws Exception {
 		Path neo = jar("neo.jar", ForbricModDiscoverer.NEOFORGE_MANIFEST, "data/neo/recipe/a.json");
-		Path forge = jar("forge.jar", ForbricModDiscoverer.FORGE_MANIFEST, "data/forge/recipe/b.json");
+		Path traditional = jar("forge.jar", ForbricModDiscoverer.FORGE_MANIFEST, "data/forge/recipe/b.json");
 		Path fabric = jar("fabric.jar", ForbricModDiscoverer.FABRIC_MANIFEST, "data/fabric/recipe/c.json");
 		Path neoNoData = jar("neo-empty.jar", ForbricModDiscoverer.NEOFORGE_MANIFEST, "assets/neo/lang/en_us.json");
 		Path plainLibrary = jar("library.jar", null, "data/lib/recipe/d.json");
 
 		List<Path> served = KernelDataPacks.forgeFamilyJarsWithData(
-				List.of(neo, forge, fabric, neoNoData, plainLibrary));
+				List.of(neo, traditional, fabric, neoNoData, plainLibrary));
 
-		assertEquals(List.of(neo, forge), served);
+		assertEquals(List.of(neo), served, "a traditional MinecraftForge jar is not this loader's to serve");
 	}
 
 	@Test

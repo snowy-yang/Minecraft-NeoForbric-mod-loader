@@ -58,7 +58,7 @@ import net.forbric.kernel.TestFixtures.Fixture;
  * off MinecraftForge's own holder class.
  */
 class MergedBaseLostSwitchMapTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final Path FORGE_PATCHED = TestFixtures.stagedRoot().resolve("forge-patched/patched-mc-forge-26.2.jar");
 	private static final ForbricMergedBaseCompatTransformer.LostSwitchMap FURNACE =
 			ForbricMergedBaseCompatTransformer.LOST_SWITCH_MAPS.get(0);

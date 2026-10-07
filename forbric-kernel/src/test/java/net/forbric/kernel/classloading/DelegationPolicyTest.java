@@ -34,7 +34,6 @@ class DelegationPolicyTest {
 	@Test
 	void gameAndEcosystemClassesAreDefinedByTheTransformingLoader() {
 		assertTrue(DelegationPolicy.alwaysGame("net.minecraft.world.level.Level"));
-		assertTrue(DelegationPolicy.alwaysGame("net.minecraftforge.registries.NamespacedWrapper"));
 		assertTrue(DelegationPolicy.alwaysGame("net.neoforged.neoforge.resource.ResourcePackLoader"));
 		assertFalse(DelegationPolicy.alwaysParent("net.minecraft.world.level.Level"));
 	}

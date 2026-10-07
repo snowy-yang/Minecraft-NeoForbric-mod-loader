@@ -117,12 +117,7 @@ class AccessCensusTest {
 				new ModCatalog.Entry(Ecosystem.NEOFORGE, "xmod", "X", "1", "", List.of(), "x.jar", "", ""),
 				new ModCatalog.Entry(Ecosystem.NEOFORGE, "other", "Other", "1", "", List.of(), "other.jar", "", "")));
 		AccessCensus.unmatched("AW", "x.jar", "field com/example/Target nope J", true, true);
-		AccessCensus.unmatched("AW", "carrier:forge-runtime.jar", "field com/example/Target alsoNope J", true, true);
-		// A re-typing a named kernel repair already satisfies marks nobody: the ACCESS phase runs before the
-		// COREMOD one, so the widener looks before the repair has happened.
-		for (String satisfied : AccessCensus.allSatisfiedElsewhere().keySet()) {
-			AccessCensus.unmatched("AW", "satisfied.jar", satisfied, true, true);
-		}
+		AccessCensus.unmatched("AW", "carrier:neoforge-runtime.jar", "field com/example/Target alsoNope J", true, true);
 		AccessCensus.unmatched("AT", "other.jar", "public com/example/Target stale", false, false);
 		AccessCensus.unmatched("AT", "other.jar", "public com/example/Target overload(I)V", false, true);
 		AccessCensus.report();
@@ -141,26 +136,6 @@ class AccessCensusTest {
 		assertTrue(AccessCensus.entries().isEmpty());
 	}
 
-	/**
-	 * Every "already satisfied" row claims a repair does the directive's whole job. That claim is what makes the
-	 * row safe to suppress a report on, and it is the thing that rots: the repair gets renamed, or narrowed, or
-	 * deleted, and the row keeps quietly hiding a real loss. So the member it names has to still be named by a
-	 * repair in the transformer that is supposed to do it.
-	 */
-	@Test
-	void everySatisfiedRowNamesAMemberSomeRepairStillHandles() throws Exception {
-		String transformer = java.nio.file.Files.readString(java.nio.file.Path.of(
-				"src/main/java/net/forbric/kernel/transform/ForbricMergedBaseCompatTransformer.java"));
-		List<String> orphaned = new java.util.ArrayList<>();
-		for (String directive : AccessCensus.allSatisfiedElsewhere().keySet()) {
-			String[] parts = directive.split(" ");
-			// "field <owner> <name> <desc>" — the member name is what a repair has to still be about.
-			if (parts.length < 4 || !transformer.contains(parts[2])) orphaned.add(directive);
-		}
-		assertTrue(orphaned.isEmpty(), "these rows suppress an access-widener report on the strength of a repair "
-				+ "that no longer mentions the member: " + orphaned);
-	}
-
 	private static byte[] sampleClass() {
 		ClassWriter cw = new ClassWriter(0);
 		cw.visit(Opcodes.V17, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL, OWNER, null, "java/lang/Object", null);
@@ -168,7 +143,7 @@ class AccessCensusTest {
 		// A field an ECOSYSTEM re-typed: its descriptor names a class stock Minecraft does not ship, so no
 		// version of the game ever declared it that way and the miss is a cost this instance introduced.
 		cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "lazy",
-				"Lnet/minecraftforge/common/util/ClearableLazy;", null, null).visitEnd();
+				"Lnet/neoforged/neoforge/common/util/Lazy;", null, null).visitEnd();
 		// VANILLA's own drift, and the shape that made the old rule wrong: ItemStack.item became a Holder<Item>
 		// in the game itself, on every base, so a mod carried forward names the old type and a native loader
 		// ignores the line in exactly the same way. Both descriptors are object types, so only the carrier-package

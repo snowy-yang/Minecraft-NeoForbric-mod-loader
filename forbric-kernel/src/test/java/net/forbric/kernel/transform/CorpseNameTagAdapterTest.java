@@ -25,7 +25,7 @@ class CorpseNameTagAdapterTest {
  private ClassNode corpse()throws Exception{Path jar=Path.of("run/client-merged-pack/mods/corpse-neoforge-1.1.17+26.2.jar");TestFixtures.requireFiles(Fixture.THIRD_PARTY,"local merged mod pack",jar);return read(jar,CorpseNameTagAdapter.TARGET);}
  private Map<String,ClassNode> declarations()throws Exception{return new HashMap<>(Map.of(
   CorpseNameTagAdapter.NATIVE,read(OLD.resolve("run/neoforge-runtime/neoforge-runtime.jar"),CorpseNameTagAdapter.NATIVE),
-  CorpseNameTagAdapter.ATTRIBUTES,read(OLD.resolve("run/merged-base/patched-mc-merged-26.2.jar"),CorpseNameTagAdapter.ATTRIBUTES)));}
+  CorpseNameTagAdapter.ATTRIBUTES,read(OLD.resolve("run/neoforge-base/patched-mc-neoforge-26.2.jar"),CorpseNameTagAdapter.ATTRIBUTES)));}
  private byte[] adapt(ClassNode c,Map<String,ClassNode> declarations){return new CorpseNameTagAdapter(declarations::get).transform(c.name.replace('/','.'),bytes(c),null);}
  private MethodNode constructor(ClassNode c){return c.methods.stream().filter(m->m.name.equals("<init>")&&m.desc.equals(CorpseNameTagAdapter.CONSTRUCTOR)).findFirst().orElseThrow();}
  @Test void actualReviewedConstructorMovesOneReadAndKeepsTheOriginalJarAndOtherInstructions()throws Exception{

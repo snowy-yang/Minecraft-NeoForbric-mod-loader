@@ -43,7 +43,7 @@ import org.objectweb.asm.tree.MethodNode;
 class DeadEventAuditStagedTest {
 	@Test
 	void theMergedItemStackPostsOnlyMinecraftForgesTooltipEvent() throws Exception {
-		Path merged = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar").normalize();
+		Path merged = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar").normalize();
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(merged), "staged merged base absent");
 		ClassNode node = new ClassNode();
 		try (ZipFile zip = new ZipFile(merged.toFile())) {

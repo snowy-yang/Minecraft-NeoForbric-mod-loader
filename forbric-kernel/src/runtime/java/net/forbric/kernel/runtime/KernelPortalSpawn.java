@@ -23,10 +23,4 @@ public final class KernelPortalSpawn {
 		Optional<PortalShape> neo = EventHooks.onTrySpawnPortal(level, position, original);
 		return neo == null || neo.isEmpty() ? Optional.empty() : neo;
 	}
-
-	/** Only for a caller whose own dispatch, veto guards and result consumer were proved. */
-	public static Optional<PortalShape> onTrySpawnPortalNeoOnly(LevelAccessor level, BlockPos position,
-			Optional<PortalShape> original) {
-		return onTrySpawnPortal(level, position, original);
-	}
 }

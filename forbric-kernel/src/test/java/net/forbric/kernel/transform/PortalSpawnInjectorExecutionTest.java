@@ -15,13 +15,12 @@ import org.junit.jupiter.api.io.TempDir;
 import net.fabricmc.api.EnvType;
 
 /**
- * {@link PortalSpawnInjector}'s output on a fire block whose {@code onPlace} asks only NeoForge's portal hook: the
- * portal is asked of NeoForge's listeners and then MinecraftForge's, and either can refuse it, as each family's own
- * game does; where as merged a MinecraftForge mod's veto never reached the fire.
+ * {@link PortalSpawnInjector}'s output on a fire block whose {@code onPlace} asks NeoForge's portal hook: the hook's
+ * complete result — including a replacement shape a listener returns — reaches the block's Optional writeback, and an
+ * empty answer still means no portal, as on NeoForge.
  *
- * <p>The proved two-call path of the injector is pinned to the fingerprint of the real merged body and is not
- * reproduced here; this is the one-call path. The hook is the kernel's real {@code KernelPortalSpawn}, compiled from
- * {@code src/runtime/java} against stand-ins for the game and both families' event factories.
+ * <p>The hook is the kernel's real {@code KernelPortalSpawn}, compiled from {@code src/runtime/java} against
+ * stand-ins for the game and NeoForge's event factory.
  */
 @ExecutesInjector(PortalSpawnInjector.class)
 class PortalSpawnInjectorExecutionTest {
@@ -62,22 +61,6 @@ class PortalSpawnInjectorExecutionTest {
 						}
 					}
 					"""),
-			Map.entry("net.minecraftforge.event.ForgeEventFactory", """
-					package net.minecraftforge.event;
-
-					import java.util.Optional;
-					import fixture.Trace;
-					import net.minecraft.core.BlockPos;
-					import net.minecraft.world.level.LevelAccessor;
-					import net.minecraft.world.level.portal.PortalShape;
-
-					public class ForgeEventFactory {
-						public static Optional<PortalShape> onTrySpawnPortal(LevelAccessor level, BlockPos pos, Optional<PortalShape> shape) {
-							Trace.events.add("MinecraftForge asked");
-							return Trace.veto.equals("minecraftforge") ? Optional.empty() : shape;
-						}
-					}
-					"""),
 			Map.entry(FIRE, """
 					package net.minecraft.world.level.block;
 
@@ -109,7 +92,7 @@ class PortalSpawnInjectorExecutionTest {
 		return List.copyOf(events);
 	}
 
-	@Test void bothFamiliesAreAskedInOrderAndEitherCanRefuseThePortal(@TempDir Path work) throws Throwable {
+	@Test void theHooksVerdictReachesTheFireAndAVetoKeepsItUnlit(@TempDir Path work) throws Throwable {
 		assertTrue(Files.isRegularFile(HOOK_SOURCE), "the game-side hook's source is part of the checkout: " + HOOK_SOURCE.toAbsolutePath());
 		Map<String, String> sources = new HashMap<>(STAND_INS);
 		sources.put("net/forbric/kernel/runtime/KernelPortalSpawn.java", Files.readString(HOOK_SOURCE));
@@ -121,14 +104,9 @@ class PortalSpawnInjectorExecutionTest {
 		ClassLoader loader = InjectorExecution.load(classes);
 		assertEquals("", InjectorExecution.verify(routed, loader));
 
-		assertEquals(List.of("NeoForge asked", "MinecraftForge asked", "portal lit"), light(loader, ""));
-		assertEquals(List.of("NeoForge asked", "MinecraftForge asked"), light(loader, "minecraftforge"),
-				"a MinecraftForge mod's veto keeps the portal unlit");
-		assertEquals(List.of("NeoForge asked"), light(loader, "neoforge"),
-				"a NeoForge veto ends it before MinecraftForge is asked, as on NeoForge");
+		assertEquals(List.of("NeoForge asked", "portal lit"), light(loader, ""));
+		assertEquals(List.of("NeoForge asked"), light(loader, "neoforge"), "a NeoForge veto keeps the portal unlit");
 
-		assertEquals(List.of("NeoForge asked", "portal lit"), light(InjectorExecution.load(original), "minecraftforge"),
-				"premise: as merged, MinecraftForge's veto never reaches the fire");
 		assertSame(routed, InjectorExecution.transform(new PortalSpawnInjector(), FIRE, routed, EnvType.SERVER),
 				"a routed onPlace is left alone");
 	}

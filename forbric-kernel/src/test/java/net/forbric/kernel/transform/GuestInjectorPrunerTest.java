@@ -55,7 +55,7 @@ import net.forbric.kernel.mixin.MixinFit;
  * other eight can.
  */
 class GuestInjectorPrunerTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final Path CLIENT_MODS =
 			Path.of(System.getProperty("user.dir"), "run", "client-kernel", "mods").normalize();
 	private static final String MIXIN_ENTRY =

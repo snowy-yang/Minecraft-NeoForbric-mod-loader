@@ -102,7 +102,7 @@ class MixinAtWidenedCallTest {
 
 	@Test void actualFabricRegistryListReplacementTargetsTheCurrentFiveArgumentLoader() throws Exception {
 		java.nio.file.Path api = TestFixtures.fabricApi();
-		java.nio.file.Path base = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+		java.nio.file.Path base = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 		TestFixtures.require(Fixture.STAGED, java.nio.file.Files.isRegularFile(api) && java.nio.file.Files.isRegularFile(base),
 				"actual Fabric API and game inputs required");
 		byte[] mixinBytes = null, targetBytes;
@@ -400,7 +400,7 @@ class MixinAtWidenedCallTest {
 
 	/** Every reviewed row is a static method of the merged base that keeps the vanilla form it widened, both declared. */
 	@Test void everyRedirectableRowIsAStaticCallBesideTheVanillaFormItWidened() throws Exception {
-		java.nio.file.Path merged = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+		java.nio.file.Path merged = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 		TestFixtures.require(Fixture.STAGED, java.nio.file.Files.isRegularFile(merged), "staged merged base required");
 		java.nio.file.Path vanilla = TestFixtures.vanillaJar();
 		TestFixtures.require(Fixture.MC_LIBRARIES, java.nio.file.Files.isRegularFile(vanilla), "vanilla 26.2 required");

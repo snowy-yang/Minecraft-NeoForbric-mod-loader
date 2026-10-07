@@ -94,13 +94,7 @@ public final class MergedBaseFrameRecomputer implements ClassTransformer {
 	 * the build rather than the player's game.
 	 */
 	static final Set<String> LOST_ANCESTORS = Set.of(
-			// Entity, Level and BlockEntity all took NeoForge's AttachmentHolder; 251 merged classes lost the
-			// MinecraftForge chain above them, which is the one every Forge mod was compiled against.
-			"net/minecraftforge/common/capabilities/CapabilityProvider",
-			"net/minecraftforge/common/capabilities/CapabilityProvider$Entities",
-			"net/minecraftforge/common/capabilities/CapabilityProvider$Levels",
-			"net/minecraftforge/common/capabilities/CapabilityProvider$BlockEntities",
-			// Two anonymous-class supers the merge materialised from the other side.
+			// Two anonymous-class supers the carrier's patch materialised.
 			"net/minecraft/server/commands/FunctionCommand$FunctionCustomExecutor",
 			"net/minecraft/commands/execution/CustomCommandExecutor$WithErrorHandling");
 
@@ -110,7 +104,6 @@ public final class MergedBaseFrameRecomputer implements ClassTransformer {
 	 * precisely: the gate runs on every class that loads, the confirmation on a handful.
 	 */
 	private static final String[] NEEDLES = {
-			"net/minecraftforge/common/capabilities/CapabilityProvider",
 			"net/minecraft/server/commands/FunctionCommand$FunctionCustomExecutor",
 			"net/minecraft/commands/execution/CustomCommandExecutor$WithErrorHandling",
 	};

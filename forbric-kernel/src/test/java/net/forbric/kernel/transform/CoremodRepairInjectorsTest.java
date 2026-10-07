@@ -21,42 +21,13 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class CoremodRepairInjectorsTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED = STAGED.resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final Path NEO = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 
 	@AfterEach void reset() {
-		for (String key : List.of(NativeCoremodParity.PROPERTY, NativeCoremodParity.FLOWER_POT, NativeCoremodParity.BIOME,
+		for (String key : List.of(NativeCoremodParity.PROPERTY, NativeCoremodParity.BIOME,
 				LiquidBlockFluidInjector.PROPERTY)) System.clearProperty(key);
-	}
-
-	@Test void theFlowerPotStoresItsPlantLooksUpEveryFamilyAndRecordsAddPlant() throws Exception {
-		byte[] original = NativeCoremodParityTest.read(MERGED, FlowerPotRepairInjector.OWNER);
-		byte[] out = new FlowerPotRepairInjector().transform(FlowerPotRepairInjector.TARGET, original, null);
-		assertNotSame(original, out);
-		ClassNode node = node(out);
-		MethodNode ctor = method(node, "<init>", FlowerPotRepairInjector.BLOCK_CTOR);
-		FieldInsnNode store = find(ctor, FieldInsnNode.class, f -> f.getOpcode() == Opcodes.PUTFIELD && f.name.equals("potted"));
-		assertTrue(store.getPrevious() instanceof VarInsnNode load && load.var == 1, "potted = the plant, as vanilla");
-		assertNotNull(find(ctor, FieldInsnNode.class, f -> f.name.equals("POTTED_BY_CONTENT")), "and in POTTED_BY_CONTENT, as vanilla");
-		MethodNode use = method(node, "useItemOn", FlowerPotRepairInjector.USE_ITEM_ON);
-		assertNull(find(use, MethodInsnNode.class, c -> c.name.equals("getDelegateOrThrow") || c.name.equals("getOrDefault")));
-		assertNull(find(use, TypeInsnNode.class, t -> t.desc.equals("java/util/function/Supplier")));
-		assertNotNull(find(use, MethodInsnNode.class, c -> c.owner.equals(FlowerPotRepairInjector.RUNTIME) && c.name.equals("fullPotFor")));
-		MethodNode add = method(node, "addPlant", FlowerPotRepairInjector.ADD_PLANT);
-		assertNotNull(find(add, MethodInsnNode.class, c -> c.name.equals("put")));
-		for (MethodNode m : List.of(ctor, use, add)) new Analyzer<>(new BasicVerifier()).analyze(node.name, m);
-		assertEquals(0, FlowerPotRepairInjector.storePlant(node) + FlowerPotRepairInjector.lookUpAllFamilies(node) + FlowerPotRepairInjector.recordAddedPlant(node),
-				"a second pass changes nothing");
-	}
-
-	@Test void vanillasFlowerPotAndTheSwitchAreLeftAlone() throws Exception {
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "vanilla 26.2 absent");
-		byte[] vanilla = NativeCoremodParityTest.read(VANILLA, FlowerPotRepairInjector.OWNER);
-		assertSame(vanilla, new FlowerPotRepairInjector().transform(FlowerPotRepairInjector.TARGET, vanilla, null));
-		System.setProperty(NativeCoremodParity.FLOWER_POT, "off");
-		byte[] merged = NativeCoremodParityTest.read(MERGED, FlowerPotRepairInjector.OWNER);
-		assertSame(merged, new FlowerPotRepairInjector().transform(FlowerPotRepairInjector.TARGET, merged, null));
 	}
 
 	@Test void theLiquidBlocksGetterReadsTheFieldBeforeTheSupplier() throws Exception {

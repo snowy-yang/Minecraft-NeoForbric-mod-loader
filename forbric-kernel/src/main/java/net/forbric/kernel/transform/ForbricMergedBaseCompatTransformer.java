@@ -1344,11 +1344,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return false;
 	}
 
-	private static final String FORGE_MODEL_DATA_MANAGER = "net/minecraftforge/client/model/data/ModelDataManager";
-	private static final String FORGE_MODEL_DATA = "net/minecraftforge/client/model/data/ModelData";
-	/** Forge-only, like {@link #FORGE_MODEL_DATA}: NeoForge has no INBTBuilder, so ForeignType has no pair for it. */
-	private static final String FORGE_NBT_BUILDER = "net/minecraftforge/common/util/INBTBuilder$Builder";
-	private static final String NBT_BUILDER_FACTORY_DESC = "()L" + FORGE_NBT_BUILDER + ";";
 
 	/**
 	 * Takes the loader brand out of the window title.
@@ -1363,14 +1358,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	 * changes shape is left alone rather than half-rewritten.
 	 */
 	private static final String ITEM_STACK = "net/minecraft/world/item/ItemStack";
-	private static final String FORGE_EVENT_FACTORY = "net/minecraftforge/event/ForgeEventFactory";
-	private static final String ON_ITEM_TOOLTIP = "onItemTooltip";
-	private static final String TOOLTIP_BRIDGE = "net/forbric/kernel/runtime/KernelItemTooltips";
-	private static final String TOOLTIP_BRIDGE_DESC =
-			"(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/player/Player;Ljava/util/List;"
-					+ "Lnet/minecraft/world/item/TooltipFlag;Lnet/minecraft/world/item/Item$TooltipContext;"
-					+ "Lnet/minecraft/world/item/component/TooltipDisplay;)V";
-
 	/** The {@code n} consecutive ALOADs immediately before {@code call}, in source order, or fewer. */
 	private static List<VarInsnNode> precedingLoads(AbstractInsnNode call, int n) {
 		java.util.Deque<VarInsnNode> loads = new java.util.ArrayDeque<>();
@@ -1430,7 +1417,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 		return true;
 	}
 	static final String SPRITE_LOADER = "net/minecraft/client/renderer/texture/SpriteLoader";
-	static final String FORGE_CLIENT_CONFIG = "net/minecraftforge/common/ForgeConfig$Client";
 	static final String MIPMAP_LOWERING = "allowMipmapLowering";
 	/** {@code -Dforbric.mipmapLowering=off} hands the decision back to MinecraftForge's config (and its false default). */
 	static final String MIPMAP_PROPERTY = "forbric.mipmapLowering";
@@ -1792,7 +1778,7 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	private static final String PIP_RENDERERS = "pictureInPictureRenderers";
 	private static final String PIP_POOLS = "pictureInPictureRendererPools";
 	private static final String PIP_PREPARE = "preparePictureInPictureState";
-	private static final String PIP_BUILDER_OWNER = "net/forbric/kernel/runtime/KernelForgePipRenderers";
+	private static final String PIP_BUILDER_OWNER = "net/forbric/kernel/runtime/KernelPipRenderers";
 	private static final String PIP_BRIDGE = "forbric$prepareOrphanedPip";
 
 	/**
@@ -1853,13 +1839,14 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 	}
 
 	/**
-	 * Assigns the orphaned map in {@code GuiRenderer.<init>}, from MinecraftForge's registration event.
+	 * Assigns the orphaned map in {@code GuiRenderer.<init>}, from the constructor's own list.
 	 *
-	 * <p>The field is declared, read in one place, and <b>written nowhere</b>: NeoForge's constructor won the byte
-	 * merge and fills its pooled map instead, so vanilla's plain one stays null. That is two failures in one. A
-	 * MinecraftForge mod's picture-in-picture renderer has nothing to register into, because the event that would
-	 * have filled this map is posted by nobody; and the fallback above reads the map WITHOUT a null check, so the
-	 * first frame reaching a state class with no pool would throw inside the game's own render loop.
+	 * <p>The field is declared, read in one place, and <b>written nowhere</b>: NeoForge's patched constructor won
+	 * and fills its pooled map instead, so vanilla's plain one stays null. That is two failures in one. A guest
+	 * mod's picture-in-picture renderer — the shape a minimap or an in-world preview uses, appended to the
+	 * constructor's list by its mixin — has nothing registered into; and the fallback above reads the map WITHOUT
+	 * a null check, so the first frame reaching a state class with no pool would throw inside the game's own
+	 * render loop.
 	 *
 	 * <p>Appended before each RETURN of the constructor, which is where a final field may still be assigned.
 	 */

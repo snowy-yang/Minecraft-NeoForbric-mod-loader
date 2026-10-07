@@ -685,7 +685,6 @@ public final class KernelBoot {
 		// NeoForge's coremods never run on the merged base; NativeCoremodParity does their rewrites after Mixin. These
 		// are the parts that must come before it: the flower pot's constructor, lookup and addPlant; the biome modifier
 		// pass starting from the biome's current climate, and the biome's getters yielding to a later replacement.
-		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.FlowerPotRepairInjector());
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.BiomeInfoRebaseInjector());
 		chain.register(TransformPhase.COREMOD, new net.forbric.kernel.transform.BiomeLateWriteInjector());
 		// A merge repair beside them, not a coremod: MinecraftForge's liquid getter over NeoForge's constructor.

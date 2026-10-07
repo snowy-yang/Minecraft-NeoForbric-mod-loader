@@ -30,7 +30,7 @@ import net.forbric.kernel.TestFixtures.Fixture;
 @ResourceLock("system-properties")
 class MergedRecordOptionalDefaultsTest {
 	private static final Path MERGED = TestFixtures.stagedRoot()
-			.resolve("merged-base/patched-mc-merged-26.2.jar");
+			.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final String STATUS = "net.minecraft.network.protocol.status.ServerStatus";
 
 	@AfterEach void reset() { System.clearProperty(MergedRecordOptionalDefaults.PROPERTY); }

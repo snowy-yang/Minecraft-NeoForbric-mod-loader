@@ -17,10 +17,7 @@
 package net.forbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
@@ -51,17 +48,15 @@ import net.forbric.kernel.TestFixtures.Fixture;
 /**
  * The once-per-configuration-phase guard on NeoForge's {@code initializeOtherConnection} call sites in the client
  * configuration listener: an unguarded site gets {@code initializedConnection} checked in front of its
- * {@code isOther} test, a site NeoForge already guards is left alone, and the real merged class still verifies.
+ * {@code isOther} test, a site NeoForge already guards is left alone, and the real class still verifies.
  */
 class CommonNetworkInteropInjectorTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final String LISTENER = "net/minecraft/client/multiplayer/ClientConfigurationPacketListenerImpl";
 	private static final String LISTENER_NAME = LISTENER.replace('/', '.');
 	private static final String CONNECTION_TYPE = "net/neoforged/neoforge/network/connection/ConnectionType";
 	private static final String CLIENT_REGISTRY = "net/neoforged/neoforge/client/network/registration/ClientNetworkRegistry";
 	private static final String INITIALIZE_DESC = "(L" + LISTENER + ";)V";
-	private static final String INTEROP = "net/forbric/kernel/interop/PayloadInterop";
-	private static final String SYNC_CONFIG_TASK = "net/minecraftforge/network/tasks/SyncConfigTask";
 
 	@Test
 	void theUnguardedSiteGetsTheFlagCheckAndTheGuardedOneIsLeftAlone() throws Exception {
@@ -89,8 +84,8 @@ class CommonNetworkInteropInjectorTest {
 	}
 
 	@Test
-	void theRealMergedListenerGetsExactlyTwoNewGuardsAndVerifies() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
+	void theRealListenerGetsAtMostTwoNewGuardsAndVerifies() throws Exception {
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged base absent — skipping real-bytecode check");
 		byte[] in = readClass(LISTENER + ".class");
 		ClassNode before = parse(in);
 		byte[] out = new CommonNetworkInteropInjector().transform(LISTENER_NAME, in, null);
@@ -148,174 +143,7 @@ class CommonNetworkInteropInjectorTest {
 	}
 
 	/**
-	 * The play-phase server handler must reach NeoForge's dispatcher when MinecraftForge does not take the payload.
-	 *
-	 * <p>The merged {@code ServerGamePacketListenerImpl.handleCustomPayload} is MinecraftForge's override and its
-	 * whole body is: ask {@code ForgeHooks.onCustomPayload}, {@code POP} the answer, {@code RETURN}. It never
-	 * reaches NeoForge's dispatch. So a NeoForge mod's play-phase packet to the server arrived, was offered to
-	 * MinecraftForge, declined and stopped — no exception, no log, the mod's server handler simply never ran. Carry
-	 * On's carry key is one such packet: with it dropped, nothing could ever be picked up.
-	 */
-	@Test
-	void thePlayServerHandlerReachesNeoForgesDispatcher() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		String listener = "net/minecraft/server/network/ServerGamePacketListenerImpl";
-		ClassNode node = transformed(listener);
-		MethodNode handler = method(node, "handleCustomPayload",
-				"(Lnet/minecraft/network/protocol/common/ServerboundCustomPayloadPacket;)V");
-
-		boolean popsTheAnswer = false;
-		boolean callsSuper = false;
-		boolean callsNeoForge = false;
-		boolean branches = false;
-		boolean gated = false;
-		for (AbstractInsnNode insn : handler.instructions) {
-			if (insn.getOpcode() == Opcodes.POP) popsTheAnswer = true;
-			if (insn.getOpcode() == Opcodes.IFNE) branches = true;
-			if (!(insn instanceof MethodInsnNode call)) continue;
-			if ("handleCustomPayload".equals(call.name)
-					&& "net/minecraft/server/network/ServerCommonPacketListenerImpl".equals(call.owner)) {
-				callsSuper = true;
-			}
-			if (call.getOpcode() == Opcodes.INVOKESTATIC && "handleModdedPayload".equals(call.name)
-					&& "net/neoforged/neoforge/network/registration/NetworkRegistry".equals(call.owner)) {
-				callsNeoForge = true;
-			}
-			if (INTEROP.equals(call.owner) && "neoForgeWillHandle".equals(call.name)) gated = true;
-		}
-
-		assertFalse(popsTheAnswer,
-				"the hook's answer must be branched on, not discarded — discarding it is the whole defect");
-		assertTrue(branches, "MinecraftForge taking the payload must skip the hand-over");
-		assertTrue(callsNeoForge,
-				"and not taking it must reach NeoForge's NetworkRegistry.handleModdedPayload, the call NeoForge's own "
-						+ "super body makes for a mod payload");
-		assertFalse(callsSuper,
-				"NOT through super: fabric-api's handler in ServerCommonPacketListenerImpl.handleCustomPayload serves "
-						+ "only the configuration listener and throws \"Unknown addon\" for this one — measured, it "
-						+ "disconnected the player the moment Carry On sent its key");
-		// GATED: NeoForge's dispatcher disconnects on a channel it never registered, where vanilla's empty play
-		// override drops a payload nobody took.
-		assertTrue(gated,
-				"the hand-over must be gated on NeoForge actually owning the payload — ungated, NeoForge disconnects "
-						+ "on any payload nobody else took");
-		// The frame authored at the branch target has to be right, or the class fails verification at link time
-		// and every play-phase packet on the server becomes a VerifyError instead.
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, handler);
-	}
-
-	/** On unless switched off: a dropped packet is a mod that silently does not work. */
-	@Test
-	void thePlayHandOverIsOnByDefaultAndHasAnOffSwitch() {
-		String previous = System.getProperty("forbric.playPayloadFallThrough");
-		try {
-			System.clearProperty("forbric.playPayloadFallThrough");
-			assertTrue(CommonNetworkInteropInjector.playFallThroughEnabled(),
-					"on by default — off, every NeoForge mod's play-phase packet to the server is dropped");
-			System.setProperty("forbric.playPayloadFallThrough", "off");
-			assertFalse(CommonNetworkInteropInjector.playFallThroughEnabled(), "-Dforbric.playPayloadFallThrough=off");
-		} finally {
-			if (previous == null) System.clearProperty("forbric.playPayloadFallThrough");
-			else System.setProperty("forbric.playPayloadFallThrough", previous);
-		}
-	}
-
-	@Test
-	void theMergedConnectionStartsForgesNetworkingWhenItGoesActive() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		String connection = "net/minecraft/network/Connection";
-		ClassNode node = transformed(connection);
-		MethodNode active = method(node, "channelActive", "(Lio/netty/channel/ChannelHandlerContext;)V");
-
-		int hooks = 0;
-		for (AbstractInsnNode insn : active.instructions) {
-			if (!(insn instanceof MethodInsnNode call) || !INTEROP.equals(call.owner)) continue;
-			assertEquals("onConnectionActive", call.name);
-			// It must land after the channel field is stored (Forge's own moment) and before the disconnect check.
-			AbstractInsnNode next = insn.getNext();
-			while (next != null && next.getOpcode() < 0) next = next.getNext();
-			assertEquals(Opcodes.ALOAD, next.getOpcode());
-			hooks++;
-		}
-		assertEquals(1, hooks, "exactly one activation hook");
-		assertTrue(storesFieldBefore(active, "channel", "onConnectionActive"),
-				"Forge's handler needs the netty channel, so the hook must follow the channel store");
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, active);
-	}
-
-	@Test
-	void theMergedServerGathersForgesConfigurationTasksAfterNeoForges() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		ClassNode node = transformed("net/minecraft/server/network/ServerConfigurationPacketListenerImpl");
-		MethodNode run = method(node, "runConfiguration", "()V");
-
-		int index = 0, neo = -1, forge = -1;
-		for (AbstractInsnNode insn : run.instructions) {
-			if (insn instanceof MethodInsnNode call) {
-				if ("configureEarlyTasks".equals(call.name)) neo = index;
-				if (INTEROP.equals(call.owner) && "gatherForgeConfigurationTasks".equals(call.name)) forge = index;
-			}
-			index++;
-		}
-		assertTrue(neo >= 0, "NeoForge's early-task call is the anchor and must still be there");
-		assertTrue(forge > neo, "Forge's tasks are gathered after NeoForge's, into the same queue");
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, run);
-	}
-
-	@Test
-	void configurationTasksStartThroughForgesContextInstead() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		ClassNode node = transformed("net/minecraft/server/network/ServerConfigurationPacketListenerImpl");
-		MethodNode start = method(node, "startNextTask", "()V");
-
-		MethodInsnNode dispatch = null;
-		for (AbstractInsnNode insn : start.instructions) {
-			if (insn instanceof MethodInsnNode call && "net/minecraft/server/network/ConfigurationTask".equals(call.owner)
-					&& "start".equals(call.name)) {
-				assertNull(dispatch, "one dispatch only");
-				dispatch = call;
-			}
-		}
-		assertNotNull(dispatch);
-		assertEquals("(Lnet/minecraftforge/network/config/ConfigurationTaskContext;)V", dispatch.desc,
-				"Forge's own tasks throw on the vanilla overload; every other task reaches it through the default");
-		AbstractInsnNode arg = dispatch.getPrevious();
-		while (arg != null && arg.getOpcode() < 0) arg = arg.getPrevious();
-		assertTrue(arg instanceof FieldInsnNode field && "taskContext".equals(field.name)
-				&& Opcodes.GETFIELD == field.getOpcode(), "the argument is the listener's own task context");
-		// Nothing builds the captured consumer any more (other lambdas in the method — the error message's string
-		// concatenation — are untouched).
-		for (AbstractInsnNode insn : start.instructions) {
-			if (!(insn instanceof org.objectweb.asm.tree.InvokeDynamicInsnNode indy)) continue;
-			assertFalse(indy.desc.endsWith(")Ljava/util/function/Consumer;"),
-					"the packet-sending consumer is no longer built: " + indy.name + indy.desc);
-		}
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, start);
-	}
-
-	@Test
-	void theClientRunsForgesConfigurationCompleteBeforeItEntersPlay() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		ClassNode node = transformed("net/minecraft/client/multiplayer/ClientConfigurationPacketListenerImpl");
-		MethodNode finished = method(node, "handleConfigurationFinished",
-				"(Lnet/minecraft/network/protocol/configuration/ClientboundFinishConfigurationPacket;)V");
-
-		int index = 0, neo = -1, forge = -1, reply = -1;
-		for (AbstractInsnNode insn : finished.instructions) {
-			if (insn instanceof MethodInsnNode call) {
-				if ("onConfigurationFinished".equals(call.name)) neo = index;
-				if (INTEROP.equals(call.owner) && "onClientConfigurationFinished".equals(call.name)) forge = index;
-				if ("send".equals(call.name) && reply < 0 && forge >= 0) reply = index;
-			}
-			index++;
-		}
-		assertTrue(neo >= 0 && forge > neo, "Forge's hook runs after NeoForge's own finish");
-		assertTrue(reply > forge, "…and before the client tells the server it is entering play");
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, finished);
-	}
-
-	/**
-	 * Every hook this injector splices into the real merged listeners resolves to a real method.
+	 * Every hook this injector splices into the real listeners resolves to a real method.
 	 *
 	 * <p>The tests above assert that a call was emitted, where it sits, and what it is handed — none of them
 	 * assert the call goes anywhere. Owner, name and descriptor are three independent strings here, so renaming
@@ -324,34 +152,15 @@ class CommonNetworkInteropInjectorTest {
 	 */
 	@Test
 	void everyHookSplicedIntoTheRealListenersResolves() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged base absent — skipping real-bytecode check");
 		for (String entry : List.of(
-				"net/minecraft/network/Connection",
 				"net/minecraft/server/network/ServerConfigurationPacketListenerImpl",
-				"net/minecraft/client/multiplayer/ClientConfigurationPacketListenerImpl",
-				"net/minecraft/client/multiplayer/ClientCommonPacketListenerImpl",
-				"net/minecraft/server/network/ServerCommonPacketListenerImpl")) {
+				"net/minecraft/client/multiplayer/ClientConfigurationPacketListenerImpl")) {
 			byte[] in = readClass(entry + ".class");
 			byte[] out = new CommonNetworkInteropInjector().transform(entry.replace('/', '.'), in, null);
 			assertTrue(out != in, entry + " must still need the injection");
 			InteropHookAssertions.assertEveryInteropCallResolves(out);
 		}
-	}
-
-	private static boolean storesFieldBefore(MethodNode m, String field, String hook) {
-		boolean stored = false;
-		for (AbstractInsnNode insn : m.instructions) {
-			if (insn.getOpcode() == Opcodes.PUTFIELD && field.equals(((FieldInsnNode) insn).name)) stored = true;
-			if (insn instanceof MethodInsnNode call && hook.equals(call.name)) return stored;
-		}
-		return false;
-	}
-
-	private static ClassNode transformed(String internalName) throws Exception {
-		byte[] in = readClass(internalName + ".class");
-		byte[] out = new CommonNetworkInteropInjector().transform(internalName.replace('/', '.'), in, null);
-		assertTrue(out != in, internalName + " must still need the injection — if it stopped, re-derive the anchors");
-		return parse(out);
 	}
 
 	// --- helpers -------------------------------------------------------------------------------------------------
@@ -411,114 +220,6 @@ class CommonNetworkInteropInjectorTest {
 		throw new AssertionError("no flag check in " + m.name);
 	}
 
-	/**
-	 * The one instruction this repair moves. MinecraftForge's {@code SyncConfigTask.run} is
-	 * {@code Files.readAllBytes(config.getFullPath())} inside {@code catch (IOException)
-	 * connection.disconnect("Connection closed - Failed to read config on server")} — so the read owns the join.
-	 * After the transform the call goes to the kernel, and nothing else about the method has changed: same
-	 * instruction count, same exception table, still verifies.
-	 */
-	@Test
-	void theConfigReadGoesThroughTheKernelAndTheMethodIsOtherwiseUntouched() throws Exception {
-		byte[] in = syncConfigTask(true);
-		ClassNode before = parse(in);
-		MethodNode was = method(before, "run");
-
-		byte[] out = new CommonNetworkInteropInjector().transform(
-				SYNC_CONFIG_TASK.replace('/', '.'), in, null);
-		assertTrue(out != in, "the task is transformed");
-		ClassNode after = parse(out);
-		MethodNode now = method(after, "run");
-
-		assertEquals(0, readAllBytesCalls(now, "java/nio/file/Files"), "nothing reads through Files any more");
-		assertEquals(1, readAllBytesCalls(now, INTEROP), "the read goes to the kernel");
-		assertEquals(was.instructions.size(), now.instructions.size(), "no instruction was added or removed");
-		assertEquals(was.tryCatchBlocks.size(), now.tryCatchBlocks.size(), "the IOException handler is untouched");
-		new Analyzer<>(new BasicVerifier()).analyze(after.name, now);
-	}
-
-	/**
-	 * A carrier whose task no longer reads the file this way is a carrier where the disconnect cannot happen, so
-	 * the repair declines rather than guessing — and the class comes back byte-identical, which is what makes the
-	 * claim's "matched nothing" mean something.
-	 */
-	@Test
-	void aTaskThatNoLongerReadsTheFileIsLeftAlone() {
-		byte[] in = syncConfigTask(false);
-		assertSame(in, new CommonNetworkInteropInjector().transform(
-				SYNC_CONFIG_TASK.replace('/', '.'), in, null), "nothing to redirect, nothing rewritten");
-	}
-
-	/**
-	 * The redirect swaps an owner and a name onto a call whose descriptor stays {@code (Ljava/nio/file/Path;)[B}.
-	 * If the hook ever stops matching that exactly — a widened parameter, a dropped {@code static}, a renamed
-	 * method — the only symptom in the game is a {@code NoSuchMethodError} thrown from inside Forge's
-	 * {@code catch (IOException)}, i.e. the disconnect this repair exists to prevent. So it is asserted here.
-	 */
-	@Test
-	void theKernelHookHasExactlyTheSignatureTheRedirectAssumes() throws Exception {
-		java.lang.reflect.Method hook = net.forbric.kernel.interop.PayloadInterop.class
-				.getDeclaredMethod("readForgeServerConfig", Path.class);
-		assertTrue(java.lang.reflect.Modifier.isStatic(hook.getModifiers()), "must be INVOKESTATIC-able");
-		assertTrue(java.lang.reflect.Modifier.isPublic(hook.getModifiers()), "called from another package");
-		assertEquals(byte[].class, hook.getReturnType());
-		assertEquals(org.objectweb.asm.Type.getMethodDescriptor(
-				org.objectweb.asm.Type.getType(byte[].class), org.objectweb.asm.Type.getType(Path.class)),
-				org.objectweb.asm.Type.getMethodDescriptor(hook),
-				"the descriptor the transformer writes onto the call site");
-		assertEquals(List.of(java.io.IOException.class), List.of(hook.getExceptionTypes()),
-				"Forge's catch (IOException) must still be able to catch what the hook throws");
-	}
-
-	private static int readAllBytesCalls(MethodNode m, String owner) {
-		int n = 0;
-		for (AbstractInsnNode insn : m.instructions) {
-			if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKESTATIC
-					&& owner.equals(call.owner) && "(Ljava/nio/file/Path;)[B".equals(call.desc)) n++;
-		}
-		return n;
-	}
-
-	/**
-	 * MinecraftForge's task in miniature, from its disassembly: read the path, build the payload, send it; on
-	 * IOException log and disconnect. With {@code reads} false the read is replaced by a constant, standing for a
-	 * carrier that gets the bytes some other way.
-	 */
-	private static byte[] syncConfigTask(boolean reads) {
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-		cw.visit(Opcodes.V21, Opcodes.ACC_SUPER, SYNC_CONFIG_TASK, null, "java/lang/Object", null);
-		MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC, "run",
-				"(Ljava/nio/file/Path;)V", null, null);
-		Label start = new Label();
-		Label end = new Label();
-		Label handler = new Label();
-		Label done = new Label();
-		mv.visitCode();
-		mv.visitTryCatchBlock(start, end, handler, "java/io/IOException");
-		mv.visitLabel(start);
-		if (reads) {
-			mv.visitVarInsn(Opcodes.ALOAD, 0);
-			mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/nio/file/Files", "readAllBytes",
-					"(Ljava/nio/file/Path;)[B", false);
-		} else {
-			mv.visitInsn(Opcodes.ICONST_0);
-			mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BYTE);
-		}
-		mv.visitVarInsn(Opcodes.ASTORE, 1);
-		mv.visitLabel(end);
-		mv.visitJumpInsn(Opcodes.GOTO, done);
-		mv.visitLabel(handler);
-		mv.visitVarInsn(Opcodes.ASTORE, 1);
-		mv.visitLdcInsn("Connection closed - Failed to read config on server");
-		mv.visitInsn(Opcodes.POP);
-		mv.visitLabel(done);
-		mv.visitInsn(Opcodes.RETURN);
-		mv.visitMaxs(0, 0);
-		mv.visitEnd();
-		cw.visitEnd();
-		return cw.toByteArray();
-	}
-
 	private static ClassNode parse(byte[] bytes) {
 		ClassNode node = new ClassNode();
 		new ClassReader(bytes).accept(node, ClassReader.EXPAND_FRAMES);
@@ -542,7 +243,7 @@ class CommonNetworkInteropInjectorTest {
 	private static byte[] readClass(String entry) throws Exception {
 		try (ZipFile zip = new ZipFile(MERGED_BASE.toFile())) {
 			ZipEntry found = zip.getEntry(entry);
-			assertNotNull(found, entry + " missing from the staged merged base");
+			assertNotNull(found, entry + " missing from the staged base");
 			try (InputStream in = zip.getInputStream(found)) {
 				return in.readAllBytes();
 			}

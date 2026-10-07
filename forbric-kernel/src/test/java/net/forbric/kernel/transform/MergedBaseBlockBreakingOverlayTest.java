@@ -49,7 +49,7 @@ import net.forbric.kernel.TestFixtures.Fixture;
  * MinecraftForge's own empty model data.
  */
 class MergedBaseBlockBreakingOverlayTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 
 	private static final String EXTRACTOR = "net/minecraft/client/renderer/extract/LevelExtractor";
 	private static final String FORGE_MANAGER = "net/minecraftforge/client/model/data/ModelDataManager";

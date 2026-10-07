@@ -110,9 +110,9 @@ class InstallerLoaderBrandTest {
 				"a NeoForge coordinate here would be a second answer to a one-answer question");
 		assertFalse(block.contains("minecraftforge"),
 				"a MinecraftForge coordinate here would be a second answer to a one-answer question");
-		// Both are still SUPPOSED to be named, just not as something a launcher matches on.
-		assertTrue(block.contains("\"forge\"") && block.contains("\"neoforge\""),
-				"the other two ecosystems must still be named — the block is what a reader opens to find out "
+		// The other ecosystem is still SUPPOSED to be named, just not as something a launcher matches on.
+		assertTrue(block.contains("\"neoforge\""),
+				"the other ecosystem must still be named — the block is what a reader opens to find out "
 						+ "what this instance runs");
 	}
 

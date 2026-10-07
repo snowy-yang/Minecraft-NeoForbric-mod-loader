@@ -55,7 +55,6 @@ import org.objectweb.asm.tree.VarInsnNode;
 public final class ItemUseOnInjector implements ClassTransformer {
 	public static final String PROPERTY = "forbric.itemUseOn";
 	static final String STACK = "net.minecraft.world.item.ItemStack";
-	static final String FORGE_HOOKS = "net.minecraftforge.common.ForgeHooks";
 	static final String NEO_HOOKS = "net.neoforged.neoforge.common.CommonHooks";
 	static final String STACK_INTERNAL = "net/minecraft/world/item/ItemStack";
 	static final String ITEM = "net/minecraft/world/item/Item";
@@ -81,14 +80,12 @@ public final class ItemUseOnInjector implements ClassTransformer {
 		return AnchorSet.of(
 				new AnchorSet.Anchor(STACK, AnchorSet.Severity.REQUIRED, "NeoForge's UseItemOnBlockEvent ITEM_AFTER_BLOCK phase "
 						+ "and fabric-api's ItemEvents.USE_ON never fire"),
-				new AnchorSet.Anchor(NEO_HOOKS, AnchorSet.Severity.REQUIRED, "fabric-api's ItemEvents.USE_ON never fires on a server"),
-				new AnchorSet.Anchor(FORGE_HOOKS, AnchorSet.Severity.REQUIRED, "fabric-api's ItemEvents.USE_ON never fires when a mod "
-						+ "calls MinecraftForge's onPlaceItemIntoWorld itself"));
+				new AnchorSet.Anchor(NEO_HOOKS, AnchorSet.Severity.REQUIRED, "fabric-api's ItemEvents.USE_ON never fires on a server"));
 	}
 
 	@Override public byte[] transform(String className, byte[] bytes, TransformContext context) {
 		if (!enabled() || bytes == null || bytes.length == 0
-				|| !(STACK.equals(className) || FORGE_HOOKS.equals(className) || NEO_HOOKS.equals(className))) return bytes;
+				|| !(STACK.equals(className) || NEO_HOOKS.equals(className))) return bytes;
 		ClassNode node = new ClassNode();
 		new ClassReader(bytes).accept(node, 0);
 		boolean stack = STACK.equals(className);

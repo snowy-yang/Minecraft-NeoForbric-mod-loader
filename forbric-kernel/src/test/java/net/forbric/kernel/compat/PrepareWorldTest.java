@@ -167,7 +167,7 @@ class PrepareWorldTest {
     }
 
     @Test void theCarrierReadsThisFlagAndUsesItToSuppressOnlyTheExperimentalBackupPrompt() throws Exception {
-        Path merged = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+        Path merged = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
         TestFixtures.require(Fixture.STAGED, Files.isRegularFile(merged), "requires current staged merged base");
         try (ZipFile zip = new ZipFile(merged.toFile())) {
             ClassNode data = read(zip, "net/minecraft/world/level/storage/PrimaryLevelData");

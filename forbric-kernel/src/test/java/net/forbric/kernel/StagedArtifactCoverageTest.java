@@ -63,7 +63,7 @@ class StagedArtifactCoverageTest {
 	private static List<Path> artifacts() {
 		Path root = stagedRoot();
 		return List.of(
-				root.resolve("merged-base/patched-mc-merged-26.2.jar"),
+				root.resolve("neoforge-base/patched-mc-neoforge-26.2.jar"),
 				root.resolve("forge-runtime/forge-runtime.jar"),
 				root.resolve("neoforge-runtime/neoforge-runtime.jar"));
 	}

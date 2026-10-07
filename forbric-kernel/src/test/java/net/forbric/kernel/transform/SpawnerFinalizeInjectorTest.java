@@ -36,7 +36,7 @@ class SpawnerFinalizeInjectorTest {
 		String property = "forbric.spawnerFinalize";
 		String previous = System.getProperty(property);
 		try {
-			byte[] raw = staged("merged-base/patched-mc-merged-26.2.jar", "net/minecraft/world/level/BaseSpawner");
+			byte[] raw = staged("neoforge-base/patched-mc-neoforge-26.2.jar", "net/minecraft/world/level/BaseSpawner");
 			byte[] legacy = new ForbricMergedBaseCompatTransformer().transform(SpawnerFinalizeInjector.TARGET, raw, context);
 			System.setProperty(property, "off");
 			assertSame(legacy, injector.transform(SpawnerFinalizeInjector.TARGET, legacy, context));
@@ -52,7 +52,7 @@ class SpawnerFinalizeInjectorTest {
 	}
 
 	@Test void realMergedCallerSuppliesTheSameInputThatLoadedItsMobAfterTheLegacyRepair() throws Exception {
-		byte[] raw = staged("merged-base/patched-mc-merged-26.2.jar", "net/minecraft/world/level/BaseSpawner");
+		byte[] raw = staged("neoforge-base/patched-mc-neoforge-26.2.jar", "net/minecraft/world/level/BaseSpawner");
 		byte[] legacy = new ForbricMergedBaseCompatTransformer().transform(SpawnerFinalizeInjector.TARGET, raw, context);
 		assertEquals(SpawnerFinalizeInjector.RUNTIME, hook(host(parse(legacy))).owner);
 		verifyExchange(legacy);
@@ -85,47 +85,12 @@ class SpawnerFinalizeInjectorTest {
 					conditional.add(new VarInsnNode(Opcodes.ASTORE, slot)); conditional.add(join);
 					m.instructions.insertBefore(hook(m), conditional); m.maxStack++;
 				})) {
-			ClassNode n = parse(staged("merged-base/patched-mc-merged-26.2.jar", "net/minecraft/world/level/BaseSpawner"));
+			ClassNode n = parse(staged("neoforge-base/patched-mc-neoforge-26.2.jar", "net/minecraft/world/level/BaseSpawner"));
 			mutation.accept(n); byte[] bytes = write(n);
 			assertSame(bytes, injector.transform(SpawnerFinalizeInjector.TARGET, bytes, context));
 			assertTrue(CompatibilityFindings.all().stream().anyMatch(f -> f.detail().contains("no unique live ValueInput")));
 			CompatibilityFindings.reset();
 		}
-	}
-
-	@Test void aCallerThatAlreadyCarriesMinecraftForgesFinalizeHookIsNotRedirectedASecondTime() throws Exception {
-		ClassNode restored = parse(staged("merged-base/patched-mc-merged-26.2.jar", "net/minecraft/world/level/BaseSpawner"));
-		MethodNode tick = host(restored);
-		InsnList forge = new InsnList();
-		for (int i = 0; i < 5; i++) forge.add(new InsnNode(Opcodes.ACONST_NULL));
-		forge.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		forge.add(new MethodInsnNode(Opcodes.INVOKESTATIC, SpawnerFinalizeInjector.FORGE, SpawnerFinalizeInjector.FORGE_HOOK,
-				SpawnerFinalizeInjector.FORGE_DESC, false));
-		forge.add(new InsnNode(Opcodes.POP));
-		tick.instructions.insert(nextReal(hook(tick)), forge); tick.maxStack += 6;
-		byte[] bytes = write(restored);
-		new Analyzer<>(new BasicVerifier()).analyze(restored.name, host(parse(bytes)));
-
-		byte[] legacy = new ForbricMergedBaseCompatTransformer().transform(SpawnerFinalizeInjector.TARGET, bytes, context);
-		assertEquals(SpawnerFinalizeInjector.NEO, hook(host(parse(legacy))).owner,
-				"the legacy repair must not route a caller that already posts MinecraftForge's event itself");
-		assertSame(legacy, injector.transform(SpawnerFinalizeInjector.TARGET, legacy, context));
-		MethodNode after = host(parse(legacy));
-		assertEquals(SpawnerFinalizeInjector.OLD_DESC, hook(after).desc);
-		assertEquals(1, calls(after).stream().filter(c -> c.owner.equals(SpawnerFinalizeInjector.FORGE)).count());
-		assertTrue(calls(after).stream().noneMatch(c -> c.owner.equals(SpawnerFinalizeInjector.RUNTIME)));
-		var findings = CompatibilityFindings.all(); assertEquals(1, findings.size());
-		assertEquals("spawner-finalize-direct-composition", findings.getFirst().id());
-		assertEquals(net.forbric.api.CompatibilityFinding.Confidence.SUSPECTED, findings.getFirst().confidence());
-		assertFalse(findings.getFirst().required());
-
-		// Negative control: the same caller without the restored call is still routed through the kernel.
-		CompatibilityFindings.reset();
-		byte[] plain = staged("merged-base/patched-mc-merged-26.2.jar", "net/minecraft/world/level/BaseSpawner");
-		byte[] routed = injector.transform(SpawnerFinalizeInjector.TARGET,
-				new ForbricMergedBaseCompatTransformer().transform(SpawnerFinalizeInjector.TARGET, plain, context), context);
-		assertEquals(SpawnerFinalizeInjector.RUNTIME, hook(host(parse(routed))).owner);
-		assertTrue(CompatibilityFindings.all().isEmpty());
 	}
 
 	@Test void unknownSignaturesOrPartiallyChangedCallersAreNotGuessed() throws Exception {
@@ -135,7 +100,7 @@ class SpawnerFinalizeInjectorTest {
 				n -> host(n).access |= Opcodes.ACC_STATIC,
 				n -> host(n).instructions.insert(hook(host(n)), new InsnNode(Opcodes.NOP)),
 				n -> host(n).instructions.insert(hook(host(n)).clone(null)))) {
-			ClassNode n = parse(staged("merged-base/patched-mc-merged-26.2.jar", "net/minecraft/world/level/BaseSpawner"));
+			ClassNode n = parse(staged("neoforge-base/patched-mc-neoforge-26.2.jar", "net/minecraft/world/level/BaseSpawner"));
 			mutation.accept(n); byte[] bytes = write(n); assertSame(bytes, injector.transform(SpawnerFinalizeInjector.TARGET, bytes, context));
 		}
 	}

@@ -33,7 +33,7 @@ package net.forbric.kernel.classloading;
  *       exact name), and the kernel's BOOT packages (everything under {@code net.forbric.kernel} EXCEPT
  *       {@code net.forbric.kernel.runtime}, which is game-side).</li>
  *   <li><b>ALWAYS_GAME</b> — always define here (with transforms), because these are the game + ecosystems and
- *       the kernel's game-side runtime: {@code net.minecraft}, {@code com.mojang.blaze3d}, {@code net.minecraftforge},
+ *       the kernel's game-side runtime: {@code net.minecraft}, {@code com.mojang.blaze3d},
  *       {@code net.neoforged}, {@code net.fabricmc.fabric}, {@code net.forbric.kernel.runtime}, and MixinExtras'
  *       generated-class package.</li>
  *   <li><b>otherwise</b> — child-first: define here iff the class is present in one of this loader's own jars,
@@ -50,17 +50,17 @@ public final class DelegationPolicy {
 			"org.objectweb.asm.",
 			"org.spongepowered.asm.", "org.spongepowered.include.",
 			"org.apache.logging.log4j.", "org.slf4j.",
-			// NightConfig, and the reason it is pinned. The MinecraftForge runtime carrier bundles a copy at the
-			// UNSHADED package name, and in that copy StampedConfig.valueMap() is the 3.7.4 stub that throws
-			// "StampedConfig does not support valueMap() yet." Because the carrier is one of this loader's own
-			// jars, child-first handed every NightConfig class to that copy — shadowing the working 3.8.x on the
-			// parent classpath — while the merged base's NeoForge half was compiled against 3.8.x, where
-			// valueMap() returns a real view. Any config read that descends a dotted path into a sub-config then
-			// died: a mod's config file is stored as nested tables, so `get("mixin.perf.surface")` has to descend.
-			// zfastnoise is where this surfaced (its mixin plugin reads config in its constructor, so the plugin
-			// could not even be built), but nothing about it is zfastnoise-specific — it was one throw away from
-			// any mod that keeps nested config. Pin the package so exactly one NightConfig exists and it is the
-			// one we chose, not whichever carrier happens to shade it.
+			// NightConfig, and the reason it is pinned. A carrier can bundle a copy at the UNSHADED package name,
+			// and in that copy StampedConfig.valueMap() can be the 3.7.4 stub that throws "StampedConfig does not
+			// support valueMap() yet." Because a carrier is one of this loader's own jars, child-first hands every
+			// NightConfig class to that copy — shadowing the working 3.8.x on the parent classpath — while the
+			// game side was compiled against 3.8.x, where valueMap() returns a real view. Any config read that
+			// descends a dotted path into a sub-config then died: a mod's config file is stored as nested tables,
+			// so `get("mixin.perf.surface")` has to descend. zfastnoise is where this surfaced (its mixinplugin
+			// reads config in its constructor, so the plugin could not even be built), but nothing about it is
+			// zfastnoise-specific — it was one throw away from any mod that keeps nested config. Pin the package
+			// so exactly one NightConfig exists and it is the one we chose, not whichever carrier happens to
+			// shade it.
 			"com.electronwill.nightconfig.",
 			"net.fabricmc.api.",
 			"net.fabricmc.loader.api.",
@@ -93,7 +93,6 @@ public final class DelegationPolicy {
 	private static final String[] ALWAYS_GAME = {
 			"net.minecraft.",
 			"com.mojang.blaze3d.",
-			"net.minecraftforge.",
 			"net.neoforged.",
 			"net.fabricmc.fabric.",
 			"net.forbric.kernel.runtime.",

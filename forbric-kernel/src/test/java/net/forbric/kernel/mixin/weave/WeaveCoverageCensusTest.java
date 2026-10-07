@@ -83,7 +83,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("MixinTwinRebind", Switch.own("forbric.mixinTwinRebind")), // MixinTwinRebindWeaveTest
 			Map.entry("ThinnedCallOrdinals", Switch.own("forbric.thinnedCallOrdinals")), // ThinnedCallOrdinalsWeaveTest
 			Map.entry("GuiItemCaptureMixinAdapter", Switch.own("forbric.guiItemCaptureAnchor")),
-			Map.entry("KernelClientHookMixinAnchors", Switch.own("forbric.clientHookMixinAnchors")),
 			Map.entry("MixinShearsRelay", Switch.own("forbric.shearsRelay")),
 			Map.entry("InsertedLambdaArgumentShim", Switch.own("forbric.insertedLambdaArguments")),
 			Map.entry("CarpetMixinAdapter", Switch.own("forbric.carpetMixins")),
@@ -91,8 +90,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("CarpetFluidMixinAdapter", new Switch(List.of("forbric.carpetMixins"), "net.forbric.kernel.mixin.CarpetMixinAdapter")),
 			Map.entry("NativeCoremodParity", Switch.own("forbric.flowerPotRepair")), // NativeCoremodParityWeaveTest
 			Map.entry("PostMixinFixups", Switch.own("forbric.postMixinFixups")), // PostMixinFixupsWeaveTest
-			// An audit with no switch: ForgeTransferShapeAuditWeaveTest's control is an unreviewed twin in the same run.
-			Map.entry("ForgeTransferShapeAudit", Switch.own()),
 			Map.entry("FabricRegistryInitializationMixinAdapter", Switch.own("forbric.fabricRegistryInitialization")),
 			// FabricFreezeHookMixinAdapter stands down with FabricFreezePointInjector, whose hooks its test puts on the pre-Mixin chain.
 			Map.entry("FabricFreezeHookMixinAdapter", new Switch(List.of("forbric.fabricFreezePoint"), "net.forbric.kernel.transform.FabricFreezePointInjector")),
@@ -131,8 +128,8 @@ class WeaveCoverageCensusTest {
 		Set<String> postMixin = postMixinStages();
 		assertEquals(Set.of("KernelGuestMixinAdapter"), configTime, "the config-time stages changed; place the new one in a list");
 		assertTrue(preMixin.size() >= 40, "the census could not read getClassNode's adapters: " + preMixin);
-		assertEquals(Set.of("NativeCoremodParity", "PostMixinFixups", "InterfaceDefaultConflictRepair",
-				"ForgeTransferShapeAudit"), postMixin, "the post-Mixin stages changed; place the new one in a list");
+		assertEquals(Set.of("NativeCoremodParity", "PostMixinFixups", "InterfaceDefaultConflictRepair"),
+				postMixin, "the post-Mixin stages changed; place the new one in a list");
 
 		Set<String> stages = new TreeSet<>(configTime);
 		stages.addAll(preMixin);

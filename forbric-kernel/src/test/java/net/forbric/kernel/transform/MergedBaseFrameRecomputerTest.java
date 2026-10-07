@@ -55,8 +55,7 @@ import org.objectweb.asm.tree.MethodNode;
  */
 class MergedBaseFrameRecomputerTest {
 	private static final Path RUN = TestFixtures.stagedRoot();
-	private static final Path MERGED = RUN.resolve("merged-base/patched-mc-merged-26.2.jar");
-	private static final Path FORGE_RT = RUN.resolve("forge-runtime/forge-runtime.jar");
+	private static final Path MERGED = RUN.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final Path NEO_RT = RUN.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path IPN = RUN.resolve("mods/InventoryProfilesNext-forge-26.2-2.3.7.jar");
 	private static final String VICTIM = "org/anti_ad/mc/ipnext/item/ItemTypeExtensionsKt";
@@ -193,10 +192,10 @@ class MergedBaseFrameRecomputerTest {
 
 	/** Reads class bytes out of the staged jars, exactly as the loader's resource lookup would. */
 	private Function<String, byte[]> resolver() throws IOException {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED) && Files.isRegularFile(FORGE_RT) && Files.isRegularFile(NEO_RT),
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED) && Files.isRegularFile(NEO_RT),
 				"staged merged base and carriers absent — skipping the real-hierarchy check");
 		List<ZipFile> jars = new ArrayList<>();
-		for (Path p : List.of(MERGED, FORGE_RT, NEO_RT)) {
+		for (Path p : List.of(MERGED, NEO_RT)) {
 			ZipFile jar = new ZipFile(p.toFile());
 			jars.add(jar);
 			open.add(jar);
@@ -245,9 +244,9 @@ class MergedBaseFrameRecomputerTest {
 	 * tree the build resolves brigadier from.
 	 */
 	private GameLoader gameLoader() throws IOException {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED) && Files.isRegularFile(FORGE_RT) && Files.isRegularFile(NEO_RT),
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED) && Files.isRegularFile(NEO_RT),
 				"staged jars absent");
-		List<Path> paths = new ArrayList<>(List.of(MERGED, FORGE_RT, NEO_RT));
+		List<Path> paths = new ArrayList<>(List.of(MERGED, NEO_RT));
 		// The mod's own jar and its library: linkage reads the signatures of all 66 methods, most of which name
 		// the mod's own types. The victim class itself is defined from bytes, so it wins over the jar's copy.
 		paths.add(IPN);

@@ -29,7 +29,6 @@ import net.forbric.kernel.transform.ClassTransformer;
  * the lines happen to sit. Moving one breaks it silently: the transformer still runs, still reports applied, and
  * edits a class the other one has already rewritten (or has not yet).
  *
- * <p>The multipart-entity repairs are pinned here too, though not their order: for them what matters is that each
  * one is registered at all.
  *
  * <p>Read from the compiled bytecode rather than the source. {@code KernelBoot.java} contains NUL bytes that make
@@ -77,38 +76,5 @@ class TransformerRegistrationOrderTest {
 		assertEquals("net/forbric/kernel/transform/LoaderProbeRewriter", order.get(0),
 				"the loader probe is no longer first; a transformer ahead of it may edit a Class.forName site "
 						+ "before the probe rewrites it. Full order: " + order);
-	}
-
-	@Test
-	void capabilityCompositionStillComesBeforeTheCompatTransformer() throws Exception {
-		List<String> order = transformerConstructionOrder();
-		int composition = order.indexOf("net/forbric/kernel/transform/ForgeCapabilityCompositionTransformer");
-		int compat = order.indexOf("net/forbric/kernel/transform/ForbricMergedBaseCompatTransformer");
-		// Both are src/main and constructed by every launch() today; retiring one retires this test with it.
-		assertTrue(composition >= 0 && compat >= 0,
-				"one of the two is no longer constructed in launch(). Full order: " + order);
-		// The compat transformer's addTheMissingCapabilityLifecycleStubs stands down when composition has
-		// already run. Reversed, it adds bare-return stubs the composition then has to work around, and its own
-		// claim ledger records a repair that did nothing useful.
-		assertTrue(composition < compat,
-				"capability composition must be registered before the compat transformer, so the latter's "
-						+ "lifecycle stubs stand down on their own. Full order: " + order);
-	}
-
-	@Test
-	void eachMultipartRepairIsConstructedExactlyOnce() throws Exception {
-		List<String> order = transformerConstructionOrder();
-		assertTrue(!order.isEmpty(), "no transformers found — launch() did not compile the way this expects");
-		// These registrations are the whole fix: without the client part tracking a NeoForge mod's multipart entity
-		// disconnects the client on sight, and without the Forge part tracking a MinecraftForge one throws in the
-		// server's tracking callbacks and the server cannot stop. Each repair's own test constructs it directly, so a
-		// merge of these lines that dropped one left every test green; one that kept both sides' copies is caught too.
-		// The order is free: all six give the same classes on the merged base.
-		for (String repair : List.of("net/forbric/kernel/transform/DragonPartsInjector",
-				"net/forbric/kernel/transform/ClientPartTrackingInjector",
-				"net/forbric/kernel/transform/ForgePartTrackingInjector")) {
-			assertEquals(1, Collections.frequency(order, repair),
-					repair + " must be constructed exactly once in launch(). Full order: " + order);
-		}
 	}
 }

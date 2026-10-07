@@ -54,7 +54,7 @@ import org.objectweb.asm.tree.MethodNode;
  */
 class PayloadInteropPlayChannelsTest {
 	private static final Path MODS = Path.of("run/client-popular/mods");
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 
 	@Test
 	void everyNameTheRecordingSpellsExistsWhereItIsSpelled() throws Exception {

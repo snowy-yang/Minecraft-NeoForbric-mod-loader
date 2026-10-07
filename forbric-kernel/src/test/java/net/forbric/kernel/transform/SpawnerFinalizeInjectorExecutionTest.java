@@ -17,14 +17,9 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import net.fabricmc.api.EnvType;
 
 /**
- * {@link SpawnerFinalizeInjector}'s output, run: a mob a spawner spawns is offered to MinecraftForge's
- * {@code MobSpawnEvent.FinalizeSpawn} with the spawner's own {@code ValueInput}, after NeoForge's event, and is finalized
- * once with what both families decided — where as merged MinecraftForge's listeners were never asked.
- *
- * <p>The hook is the kernel's real {@code KernelSpawnerFinalize}, compiled from {@code src/runtime/java} against stand-ins
- * for both families' finalize events and hooks, the mob and the spawn types, and a {@code BaseSpawner.serverTick} in the
- * shape the data-flow proof needs: the input from {@code TagValueInput.create} in a local, the entity from
- * {@code EntityType.loadEntityRecursive(input, …)}, cast to a mob and handed to NeoForge's hook, whose result is popped.
+ * {@link SpawnerFinalizeInjector}'s output, run against the kernel's real game-side
+ * {@code KernelSpawnerFinalize}: the redirected call carries the caller's proven {@code ValueInput} and the mob is
+ * finalized exactly once, through NeoForge's own hook.
  */
 @ExecutesInjector(SpawnerFinalizeInjector.class)
 @ResourceLock("system-properties")
@@ -179,57 +174,6 @@ class SpawnerFinalizeInjectorExecutionTest {
 					}
 				}
 				""");
-		STAND_INS.put("net.minecraftforge.event.entity.living.MobSpawnEvent", """
-				package net.minecraftforge.event.entity.living;
-
-				import net.minecraft.world.DifficultyInstance;
-				import net.minecraft.world.entity.SpawnGroupData;
-				import net.minecraft.world.level.storage.ValueInput;
-
-				public class MobSpawnEvent {
-					public static class FinalizeSpawn {
-						private DifficultyInstance difficulty;
-						private SpawnGroupData data;
-						private final ValueInput tag;
-
-						public FinalizeSpawn(DifficultyInstance difficulty, SpawnGroupData data, ValueInput tag) {
-							this.difficulty = difficulty;
-							this.data = data;
-							this.tag = tag;
-						}
-
-						public DifficultyInstance getDifficulty() { return difficulty; }
-						public SpawnGroupData getSpawnData() { return data; }
-						public void setSpawnData(SpawnGroupData data) { this.data = data; }
-						public ValueInput getSpawnTag() { return tag; }
-					}
-				}
-				""");
-		STAND_INS.put("net.minecraftforge.event.ForgeEventFactory", """
-				package net.minecraftforge.event;
-
-				import java.util.ArrayList;
-				import java.util.List;
-				import java.util.function.Consumer;
-				import net.minecraft.world.DifficultyInstance;
-				import net.minecraft.world.entity.Mob;
-				import net.minecraft.world.entity.SpawnGroupData;
-				import net.minecraft.world.level.BaseSpawner;
-				import net.minecraft.world.level.ServerLevelAccessor;
-				import net.minecraft.world.level.storage.ValueInput;
-				import net.minecraftforge.event.entity.living.MobSpawnEvent;
-
-				public class ForgeEventFactory {
-					public static final List<Consumer<MobSpawnEvent.FinalizeSpawn>> listeners = new ArrayList<>();
-
-					public static MobSpawnEvent.FinalizeSpawn onFinalizeSpawnSpawner(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
-							SpawnGroupData data, ValueInput input, BaseSpawner spawner) {
-						MobSpawnEvent.FinalizeSpawn event = new MobSpawnEvent.FinalizeSpawn(difficulty, data, input);
-						listeners.forEach(listener -> listener.accept(event));
-						return event;
-					}
-				}
-				""");
 		STAND_INS.put(SPAWNER, """
 				package net.minecraft.world.level;
 
@@ -249,7 +193,7 @@ class SpawnerFinalizeInjectorExecutionTest {
 				public class BaseSpawner implements IOwnedSpawner {
 					public Mob spawned;
 
-					/** The merged body: the entity loaded from the spawner's input, finalized through NeoForge's hook only. */
+					/** The carrier body: the entity loaded from the spawner's input, finalized through NeoForge's hook. */
 					public void serverTick(ServerLevel level, BlockPos pos) {
 						ValueInput input = TagValueInput.create(null, level.registryAccess(), new CompoundTag());
 						Entity entity = EntityType.loadEntityRecursive(input, level, EntitySpawnReason.SPAWNER, loaded -> loaded);
@@ -265,20 +209,14 @@ class SpawnerFinalizeInjectorExecutionTest {
 
 				import java.util.ArrayList;
 				import java.util.List;
-				import net.minecraft.world.entity.SpawnGroupData;
-				import net.minecraftforge.event.ForgeEventFactory;
 				import net.neoforged.neoforge.event.EventHooks;
 
-				/** A NeoForge mod watching finalization, and a MinecraftForge mod that reads the spawner tag and gears the mob. */
+				/** A NeoForge mod watching finalization. */
 				public class Listeners {
 					public static final List<Object> heard = new ArrayList<>();
 
 					public static void register() {
 						EventHooks.listeners.add(event -> heard.add("neoforge"));
-						ForgeEventFactory.listeners.add(event -> {
-							heard.add(event.getSpawnTag());
-							event.setSpawnData(new SpawnGroupData("forge armour"));
-						});
 					}
 				}
 				""");
@@ -295,7 +233,7 @@ class SpawnerFinalizeInjectorExecutionTest {
 		return InjectorExecution.compile(work, sources);
 	}
 
-	/** One spawn: who heard the finalization (the MinecraftForge listener records the tag it got), then how the mob was finalized. */
+	/** One spawn: who heard the finalization, then how the mob was finalized. */
 	private static List<Object> spawn(ClassLoader loader) throws Throwable {
 		InjectorExecution.invokeStatic(loader.loadClass("fixture.Listeners"), "register");
 		Object spawner = InjectorExecution.construct(loader.loadClass(SPAWNER));
@@ -306,7 +244,7 @@ class SpawnerFinalizeInjectorExecutionTest {
 				mob.getClass().getField("finalized").get(mob));
 	}
 
-	@Test void minecraftForgeFinalizesASpawnerMobWithTheSpawnersInput(@TempDir Path work) throws Throwable {
+	@Test void theKernelHookFinalizesTheMobOnceThroughNeoForgesEvent(@TempDir Path work) throws Throwable {
 		Map<String, byte[]> original = compile(work);
 		String internal = SPAWNER.replace('.', '/');
 		byte[] repaired = InjectorExecution.transform(new SpawnerFinalizeInjector(), SPAWNER, original.get(internal), EnvType.SERVER);
@@ -317,18 +255,14 @@ class SpawnerFinalizeInjectorExecutionTest {
 		assertEquals("", InjectorExecution.verify(repaired, loader));
 
 		List<Object> spawned = spawn(loader);
-		Object input = InjectorExecution.getStatic(loader.loadClass("net.minecraft.world.level.storage.TagValueInput"), "lastCreated");
-		assertEquals(List.of("neoforge", input), spawned.get(0), "NeoForge's event, then MinecraftForge's with the spawner's own input");
-		assertSame(input, ((List<?>) spawned.get(0)).get(1));
-		assertEquals(List.of("SPAWNER SpawnGroupData[gear=forge armour]"), spawned.get(1), "finalized once, with MinecraftForge's decision");
+		assertEquals(List.of("neoforge"), spawned.get(0), "NeoForge's event heard once");
+		assertEquals(List.of("SPAWNER null"), spawned.get(1), "the mob finalized exactly once, through NeoForge's own hook");
 
-		assertEquals(List.of(List.of("neoforge"), List.of("SPAWNER null")), spawn(InjectorExecution.load(original)),
-				"premise: as merged, MinecraftForge's listener is never asked");
 		assertSame(repaired, InjectorExecution.transform(new SpawnerFinalizeInjector(), SPAWNER, repaired, EnvType.SERVER),
 				"a caller already on the kernel's hook is left alone");
 	}
 
-	@Test void switchedOffTheSpawnerIsLeftAsMerged(@TempDir Path work) throws Exception {
+	@Test void switchedOffTheSpawnerIsLeftAsTheCarrierShippedIt(@TempDir Path work) throws Exception {
 		byte[] bytes = compile(work).get(SPAWNER.replace('.', '/'));
 		System.setProperty(SpawnerFinalizeInjector.PROPERTY, "off");
 		assertSame(bytes, InjectorExecution.transform(new SpawnerFinalizeInjector(), SPAWNER, bytes, EnvType.SERVER));

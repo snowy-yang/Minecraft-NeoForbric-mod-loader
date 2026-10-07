@@ -59,7 +59,7 @@ class CapabilityUseAuditTest {
 	}
 
 	@Test
-	void withTheShimOffEveryUsingModIsDegradedByIdAndTheWarnNamesIt() {
+	void everyUsingModIsDegradedByIdAndTheWarnNamesIt() {
 		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
 		try {
 			net.forbric.api.ModCatalog.publish(java.util.List.of(
@@ -70,37 +70,7 @@ class CapabilityUseAuditTest {
 			var failures = net.forbric.api.ModCatalog.failures();
 			assertTrue(failures.size() == 1 && failures.getFirst().modId().equals("pipez"), failures.toString());
 			assertTrue(failures.getFirst().status() == net.forbric.api.ModCatalog.Status.DEGRADED);
-			assertTrue(failures.getFirst().statusDetail().contains("forgeCapabilities=off"), failures.getFirst().statusDetail());
-		} finally {
-			net.forbric.api.ModCatalog.publish(previous);
-		}
-	}
-
-	@Test
-	void withTheShimOnAndEveryRootComposedNothingIsMarked() {
-		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
-		try {
-			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.NEOFORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", "")));
-			CapabilityUseAudit.note("pipez.jar", classNaming("net/minecraftforge/common/capabilities/Capability"));
-			CapabilityUseAudit.report();
-			assertTrue(net.forbric.api.ModCatalog.failures().isEmpty(), "composed everywhere: the feature exists, nothing to name");
-		} finally {
-			net.forbric.api.ModCatalog.publish(previous);
-		}
-	}
-
-	@Test
-	void withTheShimOnButARootMissedTheModIsDegradedNamingTheRoot() {
-		java.util.List<net.forbric.api.ModCatalog.Entry> previous = net.forbric.api.ModCatalog.everything();
-		try {
-			net.forbric.api.ModCatalog.publish(java.util.List.of(
-					new net.forbric.api.ModCatalog.Entry(net.forbric.api.Ecosystem.NEOFORGE, "pipez", "Pipez", "1", "", java.util.List.of(), "pipez.jar", "", "")));
-			CapabilityUseAudit.note("pipez.jar", classNaming("net/minecraftforge/common/capabilities/Capability"));
-			CapabilityUseAudit.report();
-			var failures = net.forbric.api.ModCatalog.failures();
-			assertTrue(failures.size() == 1 && failures.getFirst().statusDetail().contains("Entity"), failures.toString());
-			assertFalse(failures.getFirst().statusDetail().contains("BlockEntity]"), "only the missed root is named");
+			assertTrue(failures.getFirst().statusDetail().contains("uses MinecraftForge capabilities"), failures.getFirst().statusDetail());
 		} finally {
 			net.forbric.api.ModCatalog.publish(previous);
 		}

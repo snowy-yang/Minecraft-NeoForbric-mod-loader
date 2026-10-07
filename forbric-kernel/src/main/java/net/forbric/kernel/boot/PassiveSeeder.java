@@ -555,7 +555,7 @@ public final class PassiveSeeder {
 		Map<String, Object> fileById = new LinkedHashMap<>();
 
 		for (Map.Entry<String, List<DiscoveredMod>> jar : byJar.entrySet()) {
-			Object fileInfo = allocate(gameLoader, fileInfoCls);
+			Object fileInfo = allocate(fileInfoCls);
 			List<Object> ownMods = new ArrayList<>();
 			for (DiscoveredMod mod : jar.getValue()) {
 				Object modInfo = buildModInfo(gameLoader, modInfoCls, fileInfo, mod);
@@ -876,7 +876,7 @@ public final class PassiveSeeder {
 			Class<?> contentsCls = Class.forName("net.neoforged.fml.jarcontents.JarContents", false, gameLoader);
 			Class<?> typeCls = Class.forName(ForeignType.MOD_FILE_TYPE.binary(Ecosystem.NEOFORGE), false, gameLoader);
 
-			Object modFile = allocate(gameLoader, modFileCls);
+			Object modFile = allocate(modFileCls);
 			setInstanceField(modFileCls, "contents", modFile, lazyContents(gameLoader, contentsCls, jar));
 			setInstanceField(modFileCls, "id", modFile, id);
 			setInstanceField(modFileCls, "jarVersion", modFile, version);
@@ -1022,7 +1022,7 @@ public final class PassiveSeeder {
 	 */
 	private static Object buildModInfo(ClassLoader gameLoader, Class<?> modInfoCls, Object owningFile,
 			DiscoveredMod mod) throws Exception {
-		Object modInfo = allocate(gameLoader, modInfoCls);
+		Object modInfo = allocate(modInfoCls);
 		String id = mod.getId();
 
 		setInstanceField(modInfoCls, "owningFile", modInfo, owningFile);
@@ -1064,25 +1064,18 @@ public final class PassiveSeeder {
 	/**
 	 * Allocates {@code type} WITHOUT running any constructor.
 	 *
-	 * <p>Forge's {@code UnsafeHacks} first — that is already the kernel's technique on the Forge side
-	 * ({@code KernelModContainerFactory}) and it lives on the game loader, so it is the right tool when the game
-	 * runtime is present. {@code sun.misc.Unsafe} is the JDK-only fallback, which is what makes this reachable when
-	 * only the NeoForge jar is on the classloader (unit tests, tooling) — never a reason to skip seeding.
+	 * <p>{@code sun.misc.Unsafe.allocateInstance} directly — it is JDK-only, so this works identically whether
+	 * the game runtime is present (a real boot) or not (unit tests, tooling) — never a reason to skip seeding.
 	 */
-	private static Object allocate(ClassLoader gameLoader, Class<?> type) throws Exception {
-		try {
-			Class<?> unsafeHacks = Class.forName("net.minecraftforge.unsafe.UnsafeHacks", false, gameLoader);
-			return unsafeHacks.getMethod("newInstance", Class.class).invoke(null, type);
-		} catch (Throwable noForgeUnsafe) {
-			Object unsafe = jdkUnsafe;
-			if (unsafe == null) {
-				Class<?> unsafeCls = Class.forName("sun.misc.Unsafe");
-				Field theUnsafe = unsafeCls.getDeclaredField("theUnsafe");
-				theUnsafe.setAccessible(true);
-				jdkUnsafe = unsafe = theUnsafe.get(null);
-			}
-			return unsafe.getClass().getMethod("allocateInstance", Class.class).invoke(unsafe, type);
+	private static Object allocate(Class<?> type) throws Exception {
+		Object unsafe = jdkUnsafe;
+		if (unsafe == null) {
+			Class<?> unsafeCls = Class.forName("sun.misc.Unsafe");
+			Field theUnsafe = unsafeCls.getDeclaredField("theUnsafe");
+			theUnsafe.setAccessible(true);
+			jdkUnsafe = unsafe = theUnsafe.get(null);
 		}
+		return unsafe.getClass().getMethod("allocateInstance", Class.class).invoke(unsafe, type);
 	}
 
 	/**

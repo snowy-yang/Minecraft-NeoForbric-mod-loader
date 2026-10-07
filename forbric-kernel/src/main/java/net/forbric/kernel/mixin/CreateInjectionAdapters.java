@@ -77,7 +77,7 @@ public final class CreateInjectionAdapters {
 	}
 	private static int gui(ClassNode mixin,Function<String,ClassNode> targets) {
 		MethodNode handler=named(mixin,"addRenderer");ClassNode target=targets.apply("net/minecraft/client/gui/render/GuiRenderer");if(handler==null||target==null||!handler.desc.equals("(L"+OP+";)Lcom/google/common/collect/ImmutableMap$Builder;"))return 0;
-		String owner="net/forbric/kernel/runtime/KernelForgePipRenderers";
+		String owner="net/forbric/kernel/runtime/KernelPipRenderers";
 		int calls=0;for(MethodNode method:target.methods)if(method.name.equals("<init>"))calls+=CarpetMixinAdapter.count(method,"L"+owner+";build(Ljava/util/List;)Ljava/util/Map;");
 		if(calls!=1)return 0;AnnotationNode annotation=MixinFit.injectorOf(handler);if(annotation==null)return 0;
 		CarpetMixinAdapter.set(MixinFit.atNodes(annotation).getFirst(),"target","L"+owner+";build(Ljava/util/List;)Ljava/util/Map;");

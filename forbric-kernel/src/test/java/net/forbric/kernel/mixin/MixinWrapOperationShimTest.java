@@ -128,7 +128,7 @@ class MixinWrapOperationShimTest {
 	}
 
 	private static Path merged() {
-		return TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+		return TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	}
 
 	private static ClassNode fabric() throws Exception {

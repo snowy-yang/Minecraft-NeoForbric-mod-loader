@@ -18,7 +18,7 @@ class FabricSectionCompilerMixinAdapterTest {
 	}
 
 	private ClassNode target(boolean vanilla) throws Exception {
-		var path = vanilla ? TestFixtures.vanillaJar() : TestFixtures.stagedRoot().resolve("merged-base/patched-mc-merged-26.2.jar");
+		var path = vanilla ? TestFixtures.vanillaJar() : TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 		TestFixtures.require(vanilla ? Fixture.MC_LIBRARIES : Fixture.STAGED, java.nio.file.Files.isRegularFile(path), path + " absent");
 		try (var zip = new java.util.zip.ZipFile(path.toFile())) {
 			ClassNode node = new ClassNode();

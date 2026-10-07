@@ -27,7 +27,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class HopperFabricStorageInjectorTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED = STAGED.resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final Path NEO = STAGED.resolve("neoforge-patched/patched-mc-neoforge-26.2.jar");
 	private static final Path FORGE = STAGED.resolve("forge-patched/patched-mc-forge-26.2.jar");
 	private static final Path FABRIC_API = TestFixtures.fabricApi().toAbsolutePath();

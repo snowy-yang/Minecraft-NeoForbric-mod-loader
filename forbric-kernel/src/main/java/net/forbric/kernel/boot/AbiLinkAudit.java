@@ -55,11 +55,11 @@ public final class AbiLinkAudit {
 	static final String SWITCH = "forbric.abiAudit";
 
 	/** What is judged: everything under either family's root… */
-	static final String[] FAMILIES = { "net/neoforged/", "net/minecraftforge/" };
+	static final String[] FAMILIES = { "net/neoforged/" };
 	/** …except the loading layer the kernel replaces. */
-	static final String[] OUT_OF_SCOPE = { "net/neoforged/fml/loading/", "net/minecraftforge/fml/loading/",
-			"net/minecraftforge/fml/relauncher/", "net/neoforged/neoforgespi/locating/", "net/minecraftforge/forgespi/locating/" };
-	private static final byte[][] NEEDLES = { ByteScan.needle("net/neoforged/"), ByteScan.needle("net/minecraftforge/") };
+	static final String[] OUT_OF_SCOPE = { "net/neoforged/fml/loading/",
+			"net/neoforged/neoforgespi/locating/" };
+	private static final byte[][] NEEDLES = { ByteScan.needle("net/neoforged/") };
 
 	/** One jar with dangling references: which family, and the classes (internal names) that resolve nowhere. */
 	public record Finding(String jar, String family, List<String> missing) {

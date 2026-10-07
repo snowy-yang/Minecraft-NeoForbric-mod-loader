@@ -25,7 +25,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class NativeCoremodParityTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED = STAGED.resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final Path FORGE = STAGED.resolve("merged-base/forge-runtime-interop.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	/** tools/dev.py prepare downloads NeoForge's universal jar here; its coremods jar is nested inside. */

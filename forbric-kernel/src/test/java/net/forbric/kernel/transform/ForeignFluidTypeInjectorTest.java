@@ -19,7 +19,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class ForeignFluidTypeInjectorTest {
 	private static final Path STAGED = Path.of(System.getProperty("forbric.stagedRoot", "../forbric-loader/run"));
-	private static final Path MERGED = STAGED.resolve("merged-base/patched-mc-merged-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
 	private static final String FLUID = "net/minecraft/world/level/material/Fluid";
 
 	@AfterEach void reset() { System.clearProperty(ForeignFluidTypeInjector.PROPERTY); }

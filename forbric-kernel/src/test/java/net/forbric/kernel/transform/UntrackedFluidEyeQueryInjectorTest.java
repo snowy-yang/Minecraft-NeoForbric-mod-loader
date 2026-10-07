@@ -10,7 +10,7 @@ import org.objectweb.asm.tree.analysis.*;
 
 @ResourceLock("system-properties")
 class UntrackedFluidEyeQueryInjectorTest {
-    private static final Path MERGED = Path.of(System.getProperty("forbric.stagedRoot", "../forbric-loader/run"), "merged-base/patched-mc-merged-26.2.jar");
+    private static final Path MERGED = Path.of(System.getProperty("forbric.stagedRoot", "../forbric-loader/run"), "neoforge-base/patched-mc-neoforge-26.2.jar");
     @AfterEach void reset() { System.clearProperty(UntrackedFluidEyeQueryInjector.PROPERTY); }
     @Test void eyeQueriesUseTheInteractionAndKeepNativeQueriesBehindTheUntrackedGuard() throws Exception {
         var repair = new UntrackedFluidEyeQueryInjector();

@@ -17,18 +17,16 @@
 package net.forbric.kernel.access;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import net.forbric.api.ModCatalog;
 import net.forbric.kernel.util.ForbricLog;
 
 /**
- * The access directives — MinecraftForge/NeoForge {@code accesstransformer.cfg} lines and Fabric access-widener
- * entries — that named a member their target class does not have.
+ * The access directives — NeoForge {@code accesstransformer.cfg} lines and Fabric access-widener entries — that
+ * named a member their target class does not have.
  *
  * <p>Both transformers apply by visiting a class and widening what they meet; a directive for a member the merge
  * renamed or dropped meets nothing and says nothing, and the mod that needed the access dies later on an
@@ -59,8 +57,8 @@ public final class AccessCensus {
 		}
 	}
 
-	/** The two ecosystems' own packages: a descriptor naming one is a type this Minecraft does not ship. */
-	private static final List<String> CARRIER_TYPES = List.of("Lnet/minecraftforge/", "Lnet/neoforged/");
+	/** The carrier ecosystem's own package: a descriptor naming it is a type stock Minecraft does not ship. */
+	private static final List<String> CARRIER_TYPES = List.of("Lnet/neoforged/");
 
 	/**
 	 * Whether a field the widener missed is one an ECOSYSTEM re-typed, judged from what it is now.
@@ -71,10 +69,10 @@ public final class AccessCensus {
 	 * native loader ignores in exactly the same way — and it was being reported as a merge re-typing that marked
 	 * the mod.
 	 *
-	 * <p>What distinguishes the real case is that the descriptor now names a CARRIER type: NeoForge's or
-	 * MinecraftForge's own class, which stock Minecraft does not ship, so no version of the game ever declared it
-	 * that way. That is a cost this instance introduced for the mod. {@code ChunkGenerator.featuresPerStep},
-	 * MinecraftForge's {@code ClearableLazy} over vanilla's {@code Supplier}, is that case.
+	 * <p>What distinguishes the real case is that the descriptor now names a CARRIER type: NeoForge's own class,
+	 * which stock Minecraft does not ship, so no version of the game ever declared it that way. That is a cost
+	 * this instance introduced for the mod. {@code ChunkGenerator.featuresPerStep}, the carrier's
+	 * {@code ClearableLazy} over vanilla's {@code Supplier}, is that case.
 	 */
 	public static boolean retypedByAnEcosystem(List<String> presentDescriptors) {
 		for (String descriptor : presentDescriptors) {
@@ -85,41 +83,6 @@ public final class AccessCensus {
 		return false;
 	}
 
-
-	/**
-	 * Directives an ecosystem re-typed and a named kernel repair already satisfies, so the miss costs nothing.
-	 *
-	 * <p>The access transformers run in the ACCESS phase, before the COREMOD one — so a repair that gives a field
-	 * vanilla's descriptor back has not happened yet when the widener looks, and the widener reports a miss for
-	 * access the repair is about to grant anyway. Marking the mod then reports a loss that did not happen, and a
-	 * report that cries wolf is worse than no report.
-	 *
-	 * <p>The bar is the same as {@code SupersededMixins}': the repair must do the directive's WHOLE job — the
-	 * descriptor AND the access flags — because a repair that restores only the descriptor turns a
-	 * {@code NoSuchFieldError} into an {@code IllegalAccessError}, which is not an improvement.
-	 */
-	private static final Map<String, String> SATISFIED_ELSEWHERE = satisfiedElsewhere();
-
-	private static Map<String, String> satisfiedElsewhere() {
-		Map<String, String> map = new LinkedHashMap<>();
-		// MinecraftForge re-typed this to its own ClearableLazy so refreshFeaturesPerStep() has something to
-		// invalidate, and the merge kept only that declaration. giveChunkGeneratorItsVanillaFeatureField puts
-		// vanilla's Supplier descriptor back AND makes the field public non-final — which is the whole of what
-		// this widener asks for — but it runs in the COREMOD phase, after this one.
-		map.put("field net/minecraft/world/level/chunk/ChunkGenerator featuresPerStep Ljava/util/function/Supplier;",
-				"the kernel gives that field vanilla's descriptor back and makes it public non-final in the "
-						+ "COREMOD phase, which is this directive's whole job, only later");
-		return Map.copyOf(map);
-	}
-
-	static String satisfiedBy(String directive) {
-		return SATISFIED_ELSEWHERE.get(directive);
-	}
-
-	/** The rows, for the tests that keep each claim honest. */
-	static Map<String, String> allSatisfiedElsewhere() {
-		return SATISFIED_ELSEWHERE;
-	}
 
 	private static final Set<Unmatched> UNMATCHED = new LinkedHashSet<>();
 	private static int transformedClasses;
@@ -155,7 +118,7 @@ public final class AccessCensus {
 	 *					are never overloaded, so that is a merge re-typing and nothing else
 	 * @param namePresent the name is there under another descriptor but the case is NOT judged: a method (an
 	 *					overload this Minecraft lacks is at least as likely — bagus_lib's Model.animate, YACL's
-	 *					Tooltip constructor — and a Forge AT is carried across versions unchanged)
+	 *					Tooltip constructor — and an accesstransformer.cfg line is carried across versions unchanged)
 	 */
 	public static void unmatched(String kind, String source, String directive, boolean retyped, boolean namePresent) {
 		unmatched(kind, source, directive, retyped, namePresent, null);
@@ -207,13 +170,7 @@ public final class AccessCensus {
 						u.presentAs() == null ? "" : " (it is " + u.presentAs() + " here)");
 				continue;
 			}
-			String satisfied = satisfiedBy(u.directive());
 			String now = u.presentAs() == null ? "" : " (it is " + u.presentAs() + " here)";
-			if (satisfied != null) {
-				ForbricLog.info("[Forbric/Access] %s directive from %s names a member an ecosystem re-typed%s, but "
-						+ "%s, so its mod is not marked: %s", u.kind(), u.source(), now, satisfied, u.directive());
-				continue;
-			}
 			ForbricLog.warn("[Forbric/Access] %s directive from %s names a member an ecosystem re-typed%s, so it was "
 					+ "not widened: %s%s", u.kind(), u.source(), now, u.directive(),
 					carrier ? "" : " — the mod is marked on the Mods screen");

@@ -82,10 +82,9 @@ class KernelModLoaderClasslessTest {
 		declared.put("translate", declared("translate", Ecosystem.NEOFORGE, "b.jar"));
 		declared.put("lowcode", declared("lowcode", Ecosystem.NEOFORGE, "c.jar"));
 		declared.put("kotlin", declared("kotlin", Ecosystem.NEOFORGE, "d.jar"));
-		declared.put("forge_only", declared("forge_only", Ecosystem.NEOFORGE, "e.jar"));
 		declared.put("aliased", declared("aliased", Ecosystem.NEOFORGE, "f.jar"));
 		Map<String, String> languages = Map.of("a.jar", "javafml", "b.jar", "javafml", "c.jar", "lowcodefml",
-				"d.jar", "kotlinforforge", "e.jar", "lowcodefml", "f.jar", "javafml");
+				"d.jar", "kotlinforforge", "f.jar", "javafml");
 
 		List<KernelModLoader.Declared> classless = KernelModLoader.declaredWithoutClass(declared,
 				Set.of("with_class", "aliased"), Ecosystem.NEOFORGE,
@@ -93,7 +92,7 @@ class KernelModLoaderClasslessTest {
 
 		assertEquals(List.of("translate", "lowcode"), ids(classless),
 				"javafml and lowcodefml get one; an @Mod or an alias already answers for its id; a language the "
-						+ "kernel has no provider for gets none; a MinecraftForge mod is not NeoForge's to give one");
+						+ "kernel has no provider for gets none");
 	}
 
 	@Test
@@ -128,7 +127,9 @@ class KernelModLoaderClasslessTest {
 	void theLanguageIsReadFromTheFamilysOwnManifest() throws Exception {
 		Path lowcode = KernelModLoaderDeclaredTest.neoJar(tmp.resolve("lowcode.jar"), "lowcodefml", "x", "1", "");
 		assertEquals("lowcodefml", KernelModLoader.languageOf(lowcode, Ecosystem.NEOFORGE));
-		assertNull(KernelModLoader.languageOf(lowcode, Ecosystem.NEOFORGE), "it has no mods.toml at all");
+		Path empty = tmp.resolve("empty.jar");
+		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(empty))) { }
+		assertNull(KernelModLoader.languageOf(empty, Ecosystem.NEOFORGE), "it has no manifest at all");
 
 		Path unnamed = tmp.resolve("unnamed.jar");
 		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(unnamed))) {

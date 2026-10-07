@@ -101,59 +101,6 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 
 	private static final String CLIENT_CONFIG_LISTENER = "net.minecraft.client.multiplayer.ClientConfigurationPacketListenerImpl";
 	/**
-	 * Where MinecraftForge's own dispatch used to sit. Forge patches {@code handleCustomPayload} on both common
-	 * listeners to ask {@code ForgeHooks.onCustomPayload} first; NeoForge patched the same methods and won the
-	 * byte-merge, so the only surviving Forge call is the one in {@code ServerGamePacketListenerImpl}'s override.
-	 * A Forge mod's packet reaching the client, or the server in the configuration phase, therefore had no
-	 * dispatcher at all. These two get a prologue that hands a ForgePayload to Forge's hook and returns when it
-	 * took it.
-	 */
-	private static final String CLIENT_COMMON_LISTENER = "net.minecraft.client.multiplayer.ClientCommonPacketListenerImpl";
-	private static final String SERVER_COMMON_LISTENER = "net.minecraft.server.network.ServerCommonPacketListenerImpl";
-	/**
-	 * The PLAY-phase server listener, whose {@code handleCustomPayload} is MinecraftForge's override — and the
-	 * override does not call {@code super}. See {@link #letNeoForgePayloadsThrough}.
-	 */
-	private static final String SERVER_GAME_LISTENER = "net.minecraft.server.network.ServerGamePacketListenerImpl";
-	/** The hook that override consults, and whose answer it throws away. */
-	private static final String FORGE_HOOKS = "net/minecraftforge/common/ForgeHooks";
-	private static final String ON_CUSTOM_PAYLOAD = "onCustomPayload";
-	/**
-	 * The play-phase fall-through to NeoForge's dispatcher. ON by default; {@code -Dforbric.playPayloadFallThrough=off}
-	 * restores the merged method as it is, which drops every NeoForge mod's play-phase packet to the server.
-	 *
-	 * <p>The defect is real and measured: the merged {@code ServerGamePacketListenerImpl.handleCustomPayload} is
-	 * MinecraftForge's override, its whole body asks {@code ForgeHooks.onCustomPayload}, POPs the answer and
-	 * returns, and it never calls {@code super} — where NeoForge's dispatcher lives. So a NeoForge mod's play-phase
-	 * packet to the server reached nobody, in singleplayer too. Carry On is the case a player reported: its client
-	 * tells the server the carry key is held with exactly such a packet, so the server never believed the key was
-	 * down and nothing could ever be picked up — no crash, no log, a mod that "does not work".
-	 *
-	 * <p>This was off by default for a while, and for a measured reason that no longer applies. The first version
-	 * fell through to {@code super}, and fabric-api mixes into that super: its
-	 * {@code ServerCommonPacketListenerImplMixin} expects only the CONFIGURATION listener there and throws
-	 * {@code IllegalStateException: Unknown addon} for the play listener, because on vanilla — whose play override is
-	 * empty — no play payload ever reaches it. Fabric's own play receive is a separate HEAD injection into THIS
-	 * method, and works. So the fall-through no longer goes through {@code super} at all: it makes the one call
-	 * NeoForge's {@code super} body makes for a mod payload, {@code NetworkRegistry.handleModdedPayload}, directly.
-	 */
-	static boolean playFallThroughEnabled() {
-		return !"off".equalsIgnoreCase(System.getProperty("forbric.playPayloadFallThrough", "on"));
-	}
-
-	/** Asks whether NeoForge registered this payload, so the fall-through only reaches payloads it owns. */
-	private static final String NEO_OWNS_HOOK = "neoForgeWillHandle";
-	private static final String NEO_OWNS_HOOK_DESC = "(Ljava/lang/Object;)Z";
-	/**
-	 * NeoForge's own dispatcher for a mod payload — what {@code ServerCommonPacketListenerImpl.handleCustomPayload}
-	 * calls for one — reached without going through that method and the fabric-api injection that throws in it.
-	 */
-	private static final String NEO_DISPATCH = "handleModdedPayload";
-	private static final String NEO_DISPATCH_DESC = "(Lnet/minecraft/network/protocol/common/ServerCommonPacketListener;"
-			+ "Lnet/minecraft/network/protocol/common/ServerboundCustomPayloadPacket;)V";
-	private static final String CLIENT_HANDLE_PAYLOAD_DESC = "(Lnet/minecraft/network/protocol/common/ClientboundCustomPayloadPacket;)V";
-	private static final String SERVER_HANDLE_PAYLOAD_DESC = "(Lnet/minecraft/network/protocol/common/ServerboundCustomPayloadPacket;)V";
-	/**
 	 * NeoForge's channel police. {@code checkPacket} (client and server overloads) refuses any payload whose
 	 * channel NeoForge did not negotiate — which is every channel another ecosystem negotiated, so a Fabric mod's
 	 * client could not send on its own channel. Foreign payloads are exempted.
@@ -217,16 +164,10 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 	/** Claim ids, one per branch of {@link #transform}; each is reported beside its {@code changed = true}. */
 	static final String CLAIM_FABRIC_ADDON = "forbric-common-network-interop#fabricAddonHandle";
 	static final String CLAIM_FINISH_TASK = "forbric-common-network-interop#finishCurrentTask";
-	static final String CLAIM_CLIENT_COMMON_PAYLOAD = "forbric-common-network-interop#clientCommonHandlePayload";
-	static final String CLAIM_SERVER_COMMON_PAYLOAD = "forbric-common-network-interop#serverCommonHandlePayload";
 	static final String CLAIM_CHECK_PACKET = "forbric-common-network-interop#neoCheckPacket";
 	static final String CLAIM_GUARD_INITIALISATION = "forbric-common-network-interop#guardOtherConnectionInitialisation";
 
-	/**
-	 * One claim per branch. The server-game fall-through is REQUIRED while it is switched on: the merged play
-	 * listener on the current carrier is still MinecraftForge's override that never reaches NeoForge, so a miss is a
-	 * NeoForge mod whose packets to the server go nowhere (see {@link #letNeoForgePayloadsThrough}).
-	 */
+	/** One claim per branch of {@link #transform}. */
 	@Override
 	public List<Claim> claims() {
 		List<AnchorSet.Anchor> addons = new ArrayList<>();
@@ -260,12 +201,8 @@ public final class CommonNetworkInteropInjector implements ClassTransformer {
 		boolean fabricAddon = FABRIC_ADDONS.contains(className);
 		boolean serverConfig = SERVER_CONFIG.equals(className);
 		boolean clientConfig = CLIENT_CONFIG_LISTENER.equals(className);
-		boolean clientCommon = CLIENT_COMMON_LISTENER.equals(className);
-		boolean serverCommon = SERVER_COMMON_LISTENER.equals(className);
-		boolean serverGame = SERVER_GAME_LISTENER.equals(className);
 		boolean neoRegistry = NEO_NETWORK_REGISTRY.equals(className);
-		if (!fabricAddon && !serverConfig && !clientConfig && !clientCommon && !serverGame
-				&& !neoRegistry) return classBytes;
+		if (!fabricAddon && !serverConfig && !clientConfig && !neoRegistry) return classBytes;
 
 		ClassNode node = new ClassNode();
 		// EXPAND_FRAMES so every original frame is an absolute F_NEW node; the explicit frames we author at our own

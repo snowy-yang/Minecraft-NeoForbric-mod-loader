@@ -2492,7 +2492,6 @@ public final class KernelClientSmoke {
 					.append(" (search tab: ").append(neoTags.containsKey(tags)).append(')');
 			Object session = accessible(connection.getClass(), "searchTrees").invoke(connection);
 			Object forge = fieldValue(session, "creativeSearch");
-			if (forge instanceof java.util.Map<?, ?> map) out.append("; minecraftforge map=").append(map.size());
 		} catch (Throwable t) {
 			out.append("<census unreadable: ").append(t).append('>');
 		}
