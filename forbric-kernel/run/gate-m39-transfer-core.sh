@@ -5,9 +5,8 @@
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 MERGED="${MERGED:-$RUN_OLD/merged-base/patched-mc-merged-26.2.jar}"
-FORGE_RT="${FORGE_RT:-$RUN_OLD/merged-base/forge-runtime-interop.jar}"
 NEO_RT="${NEO_RT:-$RUN_OLD/neoforge-runtime/neoforge-runtime.jar}"
-export MERGED FORGE_RT NEO_RT
+export MERGED NEO_RT
 if [ "${1:-}" = --execute ]; then
   RUNDIR="$2"
   (sleep 35; echo stop) | RUNDIR="$RUNDIR" FORBRIC_COMPAT_POLICY=strict "$KERNEL/run/launch-kernel-server.sh"
@@ -65,7 +64,7 @@ LOG="$RUNDIR/inputs.log"
 # set -e ends the gate on this line when the server run fails -- and a server that lost its port fails it, because
 # the feeder's "stop" then lands on a closed pipe -- so name a lost port here, before anything else is read.
 python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
-  --artifact "merged=$MERGED" --artifact "forge-interop=$FORGE_RT" --artifact "neo-runtime=$NEO_RT" \
+  --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
   --artifact "kernel=$BUILD/libs/forbric-kernel-0.1.0-SNAPSHOT.jar" \
   --artifact "kernel-runtime=$BUILD/libs/forbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
   --mods "$RUNDIR/mods" --output "$RUNDIR/inputs.json" \

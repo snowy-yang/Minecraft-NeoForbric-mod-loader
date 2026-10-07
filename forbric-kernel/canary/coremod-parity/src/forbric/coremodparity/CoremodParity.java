@@ -2,7 +2,6 @@ package forbric.coremodparity;
 
 import java.nio.file.*;
 import java.util.*;
-import java.util.function.Predicate;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.mojang.authlib.GameProfile;
@@ -61,16 +60,10 @@ public final class CoremodParity {
  private static final DeferredRegister<EntityType<?>> TYPES=DeferredRegister.create(Registries.ENTITY_TYPE,ID);
  private static final DeferredHolder<EntityType<?>,EntityType<SpawnProbe>> PROBE=TYPES.register("spawn_probe",()->
   EntityType.Builder.of(SpawnProbe::new,MobCategory.CREATURE).sized(0.4F,0.6F).noLootTable().build(ResourceKey.create(Registries.ENTITY_TYPE,Identifier.fromNamespaceAndPath(ID,"spawn_probe"))));
- /** What a MinecraftForge listener hands the finalization, so the one finalization is seen to receive it. */
- static final SpawnGroupData FORGE_DATA=new SpawnGroupData(){};
  private static final DeferredHolder<Block,Block> MARKER=BLOCKS.register("marker",()->new Block(props("marker")));
- private static final DeferredHolder<Block,Block> SECOND=BLOCKS.register("second",()->new Block(props("second")));
  // NeoForge's constructor: the empty pot and the plant as suppliers, the way a NeoForge mod declares a pot.
  private static final DeferredHolder<Block,FlowerPotBlock> POTTED_MARKER=BLOCKS.register("potted_marker",()->new FlowerPotBlock(()->(FlowerPotBlock)Blocks.FLOWER_POT,MARKER,props("potted_marker")));
- // Declared only through addPlant (MinecraftForge's API): its own plant supplier names a different block.
- private static final DeferredHolder<Block,FlowerPotBlock> POTTED_SECOND=BLOCKS.register("potted_second",()->new FlowerPotBlock(()->(FlowerPotBlock)Blocks.FLOWER_POT,()->Blocks.BEDROCK,props("potted_second")));
  private static final DeferredHolder<Item,BlockItem> MARKER_ITEM=ITEMS.register("marker",()->new BlockItem(MARKER.get(),new Item.Properties().setId(ResourceKey.create(Registries.ITEM,Identifier.fromNamespaceAndPath(ID,"marker")))));
- private static final DeferredHolder<Item,BlockItem> SECOND_ITEM=ITEMS.register("second",()->new BlockItem(SECOND.get(),new Item.Properties().setId(ResourceKey.create(Registries.ITEM,Identifier.fromNamespaceAndPath(ID,"second")))));
  static{
   BIOME_MODIFIERS.register("warm_plains",()->MapCodec.unit(WarmPlains.INSTANCE));
   STRUCTURE_MODIFIERS.register("buried_outpost",()->MapCodec.unit(BuriedOutpost.INSTANCE));
@@ -91,7 +84,7 @@ public final class CoremodParity {
 
  private static final Map<String,Object> OUT=new LinkedHashMap<>();
  private static final List<Map<String,Object>> CASES=new ArrayList<>();
- private static int neo,forge; private static String mode="";
+ private static int neo; private static String mode="";
  private static MinecraftServer server; private static int ticks;
  public CoremodParity(IEventBus bus){
   BLOCKS.register(bus);ITEMS.register(bus);BIOME_MODIFIERS.register(bus);STRUCTURE_MODIFIERS.register(bus);TYPES.register(bus);
@@ -102,11 +95,6 @@ public final class CoremodParity {
   // Only the probe mob counts: anything a spawn brings along (a jockey, a passenger) is its own finalization.
   NeoForge.EVENT_BUS.addListener(FinalizeSpawnEvent.class,e->{if(!(e.getEntity() instanceof SpawnProbe))return;neo++;
    if(mode.equals("neo-cancel"))e.setCanceled(true);if(mode.equals("neo-veto"))e.setSpawnCancelled(true);});
-  net.minecraftforge.event.entity.living.MobSpawnEvent.FinalizeSpawn.BUS.addListener(
-   (Predicate<net.minecraftforge.event.entity.living.MobSpawnEvent.FinalizeSpawn>)e->{if(!(e.getEntity() instanceof SpawnProbe))return false;forge++;
-    e.setSpawnData(FORGE_DATA);
-    if(mode.equals("neo-veto"))e.getEntity().setSpawnCancelled(false);   // a later family clearing the shared flag
-    return mode.equals("forge-cancel");});
 
   NeoForge.EVENT_BUS.addListener(ServerStartedEvent.class,e->{server=e.getServer();lateWrite(server);});
   NeoForge.EVENT_BUS.addListener(ServerTickEvent.Post.class,e->{if(e.getServer()!=server||++ticks!=20)return;try{run();}finally{finish();}});
@@ -127,7 +115,6 @@ public final class CoremodParity {
   FakePlayer player=new FakePlayer(level,new GameProfile(UUID.fromString("7f1d3bb9-0c19-4a7c-9d3f-0b8f3e5e1c42"),"CoremodProbe"));
   player.setGameMode(GameType.SURVIVAL);player.snapTo(0.5,101,1.5);
   BlockHitResult hit=new BlockHitResult(Vec3.atCenterOf(pot),Direction.UP,pot,false);
-  ((FlowerPotBlock)Blocks.FLOWER_POT).addPlant(BuiltInRegistries.BLOCK.getKey(SECOND.get()),POTTED_SECOND::get);
   record Use(Object result,String block,ItemStack held){}
   java.util.function.BiFunction<Block,ItemStack,Use> use=(start,stack)->{
    level.setBlock(pot,start.defaultBlockState(),3);player.getInventory().clearContent();player.setItemInHand(InteractionHand.MAIN_HAND,stack);
@@ -143,22 +130,19 @@ public final class CoremodParity {
   test("pot.neoforge.plant",()->{Use u=use.apply(Blocks.FLOWER_POT,new ItemStack(MARKER_ITEM.get()));return expect(u.block().equals(ID+":potted_marker"),"planting a NeoForge-declared plant gave "+u);});
   test("pot.neoforge.take",()->{Use u=use.apply(POTTED_MARKER.get(),ItemStack.EMPTY);return expect(u.block().equals("minecraft:flower_pot")&&player.getInventory().countItem(MARKER_ITEM.get())==1,"taking a NeoForge-declared plant out gave "+u);});
   test("pot.neoforge.pick",()->{ItemStack s=pick.apply(POTTED_MARKER.get());return expect(s.is(MARKER_ITEM.get()),"pick-block on a NeoForge-declared pot gave "+s);});
-  test("pot.forge.addPlant",()->{Use u=use.apply(Blocks.FLOWER_POT,new ItemStack(SECOND_ITEM.get()));return expect(u.block().equals(ID+":potted_second"),"planting an addPlant-declared plant gave "+u);});
   test("pot.neoforge.api",()->{Block full=((FlowerPotBlock)Blocks.FLOWER_POT).getFullPot(Blocks.POPPY);return expect(full==Blocks.POTTED_POPPY,"NeoForge's getFullPot(poppy) answered "+id(full));});
-  // MinecraftForge's API, as a MinecraftForge mod compiled against it calls it (this probe compiles against NeoForge's).
-  test("fluid.water",()->{Object f;try{f=LiquidBlock.class.getMethod("getFluid").invoke(Blocks.WATER);}catch(java.lang.reflect.InvocationTargetException t){throw t.getCause();}
+   test("fluid.water",()->{Object f;try{f=LiquidBlock.class.getMethod("getFluid").invoke(Blocks.WATER);}catch(java.lang.reflect.InvocationTargetException t){throw t.getCause();}
    return expect(f==Fluids.WATER,"water's getFluid answered "+f);});
 
-  record Spawned(SpawnProbe mob,int neo,int forge){public String toString(){return "entity "+(mob==null?"none":mob.finalizations+" finalization(s) with "+(mob.finalizedWith==FORGE_DATA?"MinecraftForge's data":mob.finalizedWith))+", NeoForge events "+neo+", MinecraftForge events "+forge;}}
-  java.util.function.Function<String,Spawned> spawn=m->{mode=m;neo=forge=0;SpawnProbe p=PROBE.get().spawn(level,new BlockPos(4,101,4),EntitySpawnReason.COMMAND);mode="";
-   Spawned s=new Spawned(p,neo,forge);if(p!=null)p.discard();return s;};
-  test("spawn.command",()->{Spawned s=spawn.apply("");return expect(s.mob()!=null&&s.neo()==1&&s.forge()==1&&s.mob().finalizations==1&&s.mob().finalizedWith==FORGE_DATA,"EntityType.spawn: "+s);});
-  test("spawn.summon",()->{neo=forge=0;server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(),"summon "+ID+":spawn_probe 6 101 6");
-   List<SpawnProbe> found=level.getEntitiesOfClass(SpawnProbe.class,new AABB(new BlockPos(6,101,6)).inflate(2));Spawned s=new Spawned(found.isEmpty()?null:found.getFirst(),neo,forge);found.forEach(Entity::discard);
-   return expect(s.mob()!=null&&s.neo()==1&&s.forge()==1&&s.mob().finalizations==1,"/summon: "+s);});
-  test("spawn.neoCancel",()->{Spawned s=spawn.apply("neo-cancel");return expect(s.mob()!=null&&s.neo()==1&&s.forge()==0&&s.mob().finalizations==0,"a NeoForge cancel (skips finalization, not the spawn): "+s);});
-  test("spawn.forgeCancel",()->{Spawned s=spawn.apply("forge-cancel");return expect(s.mob()!=null&&s.neo()==1&&s.forge()==1&&s.mob().finalizations==0,"a MinecraftForge cancel (skips finalization, not the spawn): "+s);});
-  test("spawn.neoVeto",()->{Spawned s=spawn.apply("neo-veto");return expect(s.mob()==null&&s.neo()==1&&s.forge()==1,"a NeoForge veto a MinecraftForge listener cleared: "+s);});
+  record Spawned(SpawnProbe mob,int neo){public String toString(){return "entity "+(mob==null?"none":mob.finalizations+" finalization(s)")+", NeoForge events "+neo;}}
+  java.util.function.Function<String,Spawned> spawn=m->{mode=m;neo=0;SpawnProbe p=PROBE.get().spawn(level,new BlockPos(4,101,4),EntitySpawnReason.COMMAND);mode="";
+   Spawned s=new Spawned(p,neo);if(p!=null)p.discard();return s;};
+  test("spawn.command",()->{Spawned s=spawn.apply("");return expect(s.mob()!=null&&s.neo()==1&&s.mob().finalizations==1,"EntityType.spawn: "+s);});
+  test("spawn.summon",()->{neo=0;server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(),"summon "+ID+":spawn_probe 6 101 6");
+   List<SpawnProbe> found=level.getEntitiesOfClass(SpawnProbe.class,new AABB(new BlockPos(6,101,6)).inflate(2));Spawned s=new Spawned(found.isEmpty()?null:found.getFirst(),neo);found.forEach(Entity::discard);
+   return expect(s.mob()!=null&&s.neo()==1&&s.mob().finalizations==1,"/summon: "+s);});
+  test("spawn.neoCancel",()->{Spawned s=spawn.apply("neo-cancel");return expect(s.mob()!=null&&s.neo()==1&&s.mob().finalizations==0,"a NeoForge cancel (skips finalization, not the spawn): "+s);});
+  test("spawn.neoVeto",()->{Spawned s=spawn.apply("neo-veto");return expect(s.mob()==null&&s.neo()==1,"a NeoForge world-insertion veto: "+s);});
 
   Registry<Biome> biomes=level.registryAccess().lookupOrThrow(Registries.BIOME);
   Biome plains=biomes.getValueOrThrow(Biomes.PLAINS),desert=biomes.getValueOrThrow(Biomes.DESERT);

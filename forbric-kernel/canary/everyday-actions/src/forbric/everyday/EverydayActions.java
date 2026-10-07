@@ -105,13 +105,6 @@ public final class EverydayActions {
   // stands in each; NeoForge's entity code asks the fluid's NeoForge type, which a Fabric fluid does not declare. Last,
   // in the tick that reports: without the repair the fluid's own scheduled ticks throw on the next world tick.
   // MinecraftForge's getFluidType() (another return type) had the same throwing default for a non-Forge mod fluid.
-  test("fluid.minecraftForgeType",()->{
-   Object water=Class.forName("net.minecraftforge.common.ForgeMod").getField("WATER_TYPE").get(null);water=water.getClass().getMethod("get").invoke(water);
-   Object empty=Class.forName("net.minecraftforge.common.ForgeMod").getField("EMPTY_TYPE").get(null);empty=empty.getClass().getMethod("get").invoke(empty);
-   Method forge=null;for(Method m:net.minecraft.world.level.material.Fluid.class.getMethods())if(m.getName().equals("getFluidType")&&m.getReturnType().getName().equals("net.minecraftforge.fluids.FluidType"))forge=m;
-   Object goo=forge.invoke(BuiltInRegistries.FLUID.getValue(net.minecraft.resources.Identifier.fromNamespaceAndPath("forbricgoo","goo")));
-   Object brine=forge.invoke(BuiltInRegistries.FLUID.getValue(net.minecraft.resources.Identifier.fromNamespaceAndPath("forbricgoo","brine")));
-   return expect(goo==empty&&brine==water,"MinecraftForge types: goo="+goo+" brine="+brine);});
   for(String name:new String[]{"goo","brine"})test(name.equals("goo")?"fluid.untagged":"fluid.water",()->{
    var fluid=BuiltInRegistries.FLUID.getValue(net.minecraft.resources.Identifier.fromNamespaceAndPath("forbricgoo",name));
    if(fluid==null||fluid==net.minecraft.world.level.material.Fluids.EMPTY)return "the Fabric fluid mod is not loaded";

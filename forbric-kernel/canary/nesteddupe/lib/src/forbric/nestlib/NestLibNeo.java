@@ -16,12 +16,12 @@
 
 package forbric.nestlib;
 
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.fml.common.Mod;
 
-/** The MinecraftForge half's bootstrap — the {@code @Mod} of the nested Forge build of this library. */
+/** The NeoForge half's bootstrap — the {@code @Mod} of the nested NeoForge build of this library. */
 @Mod("forbricnestlib")
-public final class NestLibForge {
-	public NestLibForge() {
-		NestLibRegistry.register("forge");
+public final class NestLibNeo {
+	public NestLibNeo() {
+		NestLibRegistry.register("neoforge");
 	}
 }

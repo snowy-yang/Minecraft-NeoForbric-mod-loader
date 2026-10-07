@@ -5,15 +5,11 @@
 #     MinecraftForge's IForgeItem; both default getCraftingRemainder(ItemStack), so with fabric-api installed every
 #     crafting-table result, brew and bucket fuel threw IncompatibleClassChangeError (InterfaceDefaultConflictRepair now
 #     judges a conflict against the jar's own interfaces and settles this one through NeoForge's overload).
-#   smelting — NeoForge's furnace tick calls MinecraftForge's instance canBurn/consumeFuel/burn as static: every furnace
-#     threw on its first smelt (FurnaceTickCallsInjector calls them on the ticked furnace).
-#   the Ender Dragon — its parts were MinecraftForge PartEntitys while every consumer is NeoForge-typed; NeoForge's
-#     getParts() answered null, so adding a dragon threw and a server holding one could not stop (DragonPartsInjector).
 # A dedicated server with a probe mod (canary/everyday-actions) and the unmodified fabric-item-api-v1:
 #   remainders through ItemStack, Item(ItemStack) and NeoForge's Item(ItemInstance) (control); a cake crafted from its
-#   recipe leaves three buckets; an idle furnace ticks (control) and a lit one smelts raw iron; a brewing stand makes
+#   recipe leaves three buckets; an idle furnace ticks and a lit one smelts raw iron (controls); a brewing stand makes
 #   awkward potions; a pig stands in a Fabric mod's untagged fluid (no interaction) and in its water-tagged fluid (it
-#   swims), and MinecraftForge's fluid type of each is its water or empty type; a dragon is added and found by its part, hurt through it, and removed; the server stops cleanly.
+#   swims); a dragon is added and found by its part, hurt through it, and removed (controls); the server stops cleanly.
 #   Fabric fuels — fabric-content-registries fires its fuel events from vanilla's vanillaBurnTimes, which the merged
 #     game never calls (it builds fuels from NeoForge's data map), so a Fabric mod's fuel could not go in a furnace
 #     (FabricFuelValuesInjector runs them on NeoForge's builder): coal (control), the probe mod's dirt fuel, and the
@@ -23,9 +19,8 @@
 #     (ForeignFluidTypeInjector gives it the type its fluid tags imply).
 #
 #   1. positive — STRICT, every case passes, zero confirmed required findings, no exception on stop.
-#   2. off — -Dforbric.defaultConflictRepair=off -Dforbric.furnaceTickCalls=off -Dforbric.dragonParts=off
-#      -Dforbric.foreignFluidTypes=off -Dforbric.fabricFuel=off -Dforbric.forgePartTracking=off: exactly the
-#      repaired cases fail and the controls hold.
+#   2. off — -Dforbric.defaultConflictRepair=off -Dforbric.foreignFluidTypes=off -Dforbric.fabricFuel=off: exactly
+#      the repaired cases fail and the controls hold.
 #      forgePartTracking is in that list because since 86c93b6c the dragon's null NeoForge getParts() is guarded twice:
 #      ForgePartTrackingInjector reads it as no parts in the server's tracking callbacks. With only dragonParts off the
 #      dragon is then added without its parts (dragon.add still fails: part lookup=null), and hurting it through a part
@@ -39,7 +34,7 @@ set -uo pipefail
 SERVER_DIR="$KERNEL/run/server-everyday-m45"
 RESULTS="$BUILD/verification/m45-everyday-actions"
 FAIL=0
-REPAIRED="{'remainder.stack', 'remainder.item', 'craft.cake', 'furnace.smelt', 'brewing.awkward', 'fuel.fabric', 'fuel.exclusion', 'fluid.minecraftForgeType', 'fluid.untagged', 'fluid.water', 'dragon.add', 'dragon.hurt', 'dragon.remove'}"
+REPAIRED="{'remainder.stack', 'remainder.item', 'craft.cake', 'fuel.fabric', 'fuel.exclusion', 'fluid.untagged', 'fluid.water'}"
 rm -rf "$RESULTS"; mkdir -p "$RESULTS"
 
 kernel_jar
@@ -74,7 +69,7 @@ import json, sys
 report, phase, rule = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
 assert report['phase'] == phase, report['phase']
 cases = {c['name']: c for c in report['cases']}
-assert len(cases) == 16, sorted(cases)
+assert len(cases) == 15, sorted(cases)
 failed = {name for name, c in cases.items() if not c['pass']}
 for name in sorted(failed): print(f"[kernel]   {phase}: {name} failed — {cases[name]['detail'][:240]}")
 assert eval(rule, {'failed': failed, 'cases': cases}), (phase, sorted(failed))
@@ -85,19 +80,17 @@ PY
 
 step "1. positive: crafting, smelting, brewing and the dragon work"
 run_server positive strict ""
-judge positive "not failed" "all 16 cases pass"
+judge positive "not failed" "all 15 cases pass"
 check_absent "positive: the server stopped without an exception" 'Exception stopping the server|still alive .* after announcing its stop' "$RESULTS/positive.log"
 if python3 -c "import json,sys; r=json.load(open(sys.argv[1])); sys.exit(0 if r['confirmedRequired']==0 else 1)" "$RESULTS/positive-compatibility.json" 2>/dev/null
 then echo "[kernel] PASS positive: zero confirmed required findings under STRICT"
 else echo "[kernel] FAIL positive: STRICT report missing or has confirmed required findings"; FAIL=1; fi
 check "positive: Item's remainder conflict was settled" 'Item inherits getCraftingRemainder.*gave it one that asks getCraftingRemainder\(Lnet/minecraft/world/item/ItemInstance' "$RESULTS/positive.log"
-check "positive: the furnace tick was bridged" 'tick calls canBurn, consumeFuel, burn on the furnace it ticks' "$RESULTS/positive.log"
-check "positive: the dragon's parts are NeoForge's" 'EnderDragonPart is a NeoForge PartEntity' "$RESULTS/positive.log"
 check "positive: foreign fluids get a NeoForge type" 'gets the one its fluid tags imply' "$RESULTS/positive.log"
 check "positive: Fabric's fuel events run on NeoForge's fuel builder" 'Forbric/Fuel\] DataMapHooks.populateFuelValues runs fabric-content-registries' "$RESULTS/positive.log"
 
 step "2. off: the same server with the repairs switched off"
-run_server off continue "-Dforbric.defaultConflictRepair=off -Dforbric.furnaceTickCalls=off -Dforbric.dragonParts=off -Dforbric.foreignFluidTypes=off -Dforbric.fabricFuel=off -Dforbric.forgePartTracking=off"
+run_server off continue "-Dforbric.defaultConflictRepair=off -Dforbric.foreignFluidTypes=off -Dforbric.fabricFuel=off"
 judge off "failed == $REPAIRED" "exactly the repaired cases fail; the controls hold"
 
 if [ "$FAIL" -eq 0 ]; then

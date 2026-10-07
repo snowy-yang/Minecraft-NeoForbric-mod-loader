@@ -3,15 +3,12 @@ package forbric.breakandloot;
 import java.nio.file.*;
 import java.util.*;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
 import com.mojang.authlib.GameProfile;
-import com.mojang.serialization.JsonOps;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootPool;
@@ -85,27 +82,8 @@ public final class BreakAndLoot {
   Set<String> rolled=new TreeSet<>();
   for(ItemStack stack:table.getRandomItems(new LootParams.Builder(level).create(LootContextParamSets.EMPTY)))rolled.add(String.valueOf(BuiltInRegistries.ITEM.getKey(stack.getItem())));
   test("loot.json.plain",()->expect(rolled.contains("minecraft:stone"),"a plain pool: "+rolled));
-  test("loot.json.forgeFalse",()->expect(!rolled.contains("minecraft:dirt"),"a pool whose forge:condition is false: "+rolled));
-  test("loot.json.forgeTrue",()->expect(rolled.contains("minecraft:diamond"),"a pool whose forge:condition is true (mod_loaded): "+rolled));
   test("loot.json.neoFalse",()->expect(!rolled.contains("minecraft:emerald"),"a pool whose neoforge:conditions are false: "+rolled));
-  test("loot.json.bothTrue",()->expect(rolled.contains("minecraft:gold_ingot"),"a pool with both families' conditions true: "+rolled));
 
-  // A pool a MinecraftForge mod builds in code with when(ICondition).
-  RegistryOps<JsonElement> ops=RegistryOps.create(JsonOps.INSTANCE,level.registryAccess());
-  LootPool built;
-  try{LootPool.Builder builder=LootPool.lootPool().add(LootItem.lootTableItem(Items.APPLE));
-   Object condition=Class.forName("net.minecraftforge.common.crafting.conditions.FalseCondition").getField("INSTANCE").get(null);
-   for(var m:LootPool.Builder.class.getMethods())if(m.getName().equals("when")&&m.getParameterCount()==1&&m.getParameterTypes()[0].getName().endsWith("ICondition"))m.invoke(builder,condition);
-   built=builder.build();}catch(ReflectiveOperationException failure){throw new IllegalStateException(failure);}
-  test("loot.code.condition",()->{java.lang.reflect.Field f=null;for(var field:LootPool.class.getDeclaredFields())if(field.getName().equals("forge_condition")&&field.getType()==Optional.class)f=field;
-   f.setAccessible(true);Object kept=f.get(built);return expect(kept instanceof Optional<?> o&&o.isPresent(),"the built pool's forge_condition is "+kept);});
-  JsonElement[] encoded=new JsonElement[1];
-  test("loot.code.encode",()->{encoded[0]=LootPool.CODEC.encodeStart(ops,built).getOrThrow();
-   return expect(encoded[0].toString().contains("\"forge:condition\":{\"type\":\"forge:false\"}"),"the built pool encodes as "+encoded[0]);});
-  test("loot.code.roundtrip",()->{if(encoded[0]==null)return "not encoded";@SuppressWarnings("unchecked") com.mojang.serialization.Codec<LootPool> forgeCodec=(com.mojang.serialization.Codec<LootPool>)LootPool.class.getField("CONDITIONAL_CODEC").get(null);
-   LootPool decoded=forgeCodec.parse(ops,encoded[0]).getOrThrow();
-   List<ItemStack> out=new ArrayList<>();decoded.addRandomItems(out::add,new net.minecraft.world.level.storage.loot.LootContext.Builder(new LootParams.Builder(level).create(LootContextParamSets.EMPTY)).create(Optional.empty()));
-   return expect(out.isEmpty(),"MinecraftForge's own codec read the encoded pool back as one that still gives "+out);});
  }
  private static void finish(){
   Map<String,Object> out=new LinkedHashMap<>();out.put("phase",System.getProperty("forbric.breakPhase"));out.put("cases",CASES);

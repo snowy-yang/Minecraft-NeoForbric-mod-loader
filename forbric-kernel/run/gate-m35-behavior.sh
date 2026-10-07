@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M35: actual game callers in a fresh world, with three independently red repair-off controls.
+# M35: actual game callers in a fresh world, natural NeoForge event flows only.
 # GATE-PARALLEL: rundirs=server-behavior-m35 mem=2000
 set -uo pipefail
 GATE_PORT="${GATE_PORT:-25595}"
@@ -10,17 +10,14 @@ mkdir -p "$RESULTS"
 
 if [ "${1:-}" = "--execute-phase" ]; then
   phase="$2"; token="$3"; result="$RESULTS/$phase-probe.json"
-  portal=on; spawner=on; events=on; policy=strict
+  policy=strict
   case "$phase" in
     positive) ;;
-    portal-off) portal=off ;;
-    spawner-off) spawner=off; policy=continue ;; # Known required finding is retained; this is an explicit fault experiment.
-    item-off) events=off ;;
     *) exit 2 ;;
   esac
   rm -f "$result" "$RESULTS/$phase-compatibility.json"
   RUNDIR="$RUNDIR" FORBRIC_COMPAT_POLICY="$policy" \
-    FORBRIC_JVM="${FORBRIC_JVM:-} -Dforbric.portalSpawn=$portal -Dforbric.spawnerFinalize=$spawner -Dforbric.unifiedEvents=$events -Dforbric.relaxGuestMixins=off -Dforbric.behaviorPhase=$phase -Dforbric.behaviorToken=$token -Dforbric.behaviorRoot=$RUNDIR -Dforbric.behaviorOutput=$result" \
+    FORBRIC_JVM="${FORBRIC_JVM:-} -Dforbric.relaxGuestMixins=off -Dforbric.behaviorPhase=$phase -Dforbric.behaviorToken=$token -Dforbric.behaviorRoot=$RUNDIR -Dforbric.behaviorOutput=$result" \
     "$KERNEL/run/launch-kernel-server.sh" </dev/null
   code=$?
   if [ -f "$RUNDIR/.forbric-kernel/compatibility-report.json" ]; then
@@ -31,7 +28,7 @@ if [ "${1:-}" = "--execute-phase" ]; then
 import json, sys
 proof = json.load(open(sys.argv[1]))
 assert proof['phase'] == sys.argv[2] and proof['token'] == sys.argv[3], proof
-assert len(proof['cases']) == proof['expectedCases'] == 11, proof
+assert len(proof['cases']) == proof['expectedCases'] == 6, proof
 assert proof['pass'] is True, proof
 PY
   exit "$?"
@@ -42,10 +39,9 @@ kernel_jar
 bash "$KERNEL/run/build-behavior-canary.sh" > "$RESULTS/build.log" 2>&1 || { cat "$RESULTS/build.log"; exit 1; }
 INPUTS="$KERNEL/run/canary/m35-build-inputs.json"
 MERGED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["merged"]["path"])' "$INPUTS")"
-FORGE_RT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["forge"]["path"])' "$INPUTS")"
 NEO_RT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["neo"]["path"])' "$INPUTS")"
 COMPILE_GAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["compileGame"]["path"])' "$INPUTS")"
-export MERGED FORGE_RT NEO_RT
+export MERGED NEO_RT
 
 kill_owned_descendants() {
   local parent="$1" child
@@ -82,7 +78,7 @@ run_phase() {
   fresh_world; token="$(cat "$RUNDIR/.m35-owned")"
   rm -f "$RESULTS/$phase-inputs.log"   # port_was_free below must not read an earlier run's log
   python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
-    --artifact "merged=$MERGED" --artifact "forge-interop=$FORGE_RT" --artifact "neo-runtime=$NEO_RT" \
+    --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
     --artifact "kernel=$BUILD/libs/forbric-kernel-0.1.0-SNAPSHOT.jar" \
     --artifact "kernel-runtime=$BUILD/libs/forbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
     --artifact "compile-game=$COMPILE_GAME" --mods "$RUNDIR/mods" --output "$RESULTS/$phase-inputs.json" \
@@ -104,26 +100,17 @@ proof_path = root / (phase + '-probe.json')
 proof = json.loads(proof_path.read_text())
 outcome = json.loads((root / (phase + '-inputs.result.json')).read_text())
 assert proof['phase'] == phase and proof['token'] == token, 'stale or foreign proof'
-assert len(proof['cases']) == proof['expectedCases'] == 11, proof
+assert len(proof['cases']) == proof['expectedCases'] == 6, proof
 names = [row['name'] for row in proof['cases']]
-assert len(set(names)) == 11, names
+assert len(set(names)) == 6, names
 failures = {row['name'] for row in proof['cases'] if row['pass'] is not True}
-expected = {
-    'positive': set(), 'portal-off': {'portal-replacement'}, 'item-off': {'item-result'},
-    'spawner-off': {'spawner-data', 'spawner-forge-cancel-finalize', 'spawner-neo-veto-spawn',
-                    'spawner-forge-veto-spawn', 'spawner-nonempty-input'},
-}[phase]
-assert failures == expected, (phase, failures, expected, proof)
-assert proof['pass'] is (phase == 'positive'), proof
+assert failures == set(), (phase, failures, proof)
+assert proof['pass'] is True, proof
 assert outcome['inputsUnchanged'] is True, outcome
-assert outcome['commandPassed'] is (phase == 'positive'), outcome
-assert outcome['exitCode'] == (0 if phase == 'positive' else 1), outcome
+assert outcome['commandPassed'] is True, outcome
+assert outcome['exitCode'] == 0, outcome
 log = (root / (phase + '-inputs.log')).read_text(errors='replace')
 assert 'Done (' in log and '[M35Behavior] ARMED natural item consumption' in log, 'world/action startup absent'
-if phase == 'spawner-off':
-    compatibility = json.loads((root / (phase + '-compatibility.json')).read_text())
-    assert any(row['id'] == 'spawner-finalize-input' and row['required'] is True and row['confidence'] == 'CONFIRMED'
-               for row in compatibility['findings']), 'negative lost its required finding evidence'
 (root / (phase + '-probe.sha256')).write_text(hashlib.sha256(proof_path.read_bytes()).hexdigest() + '\n')
 print('[kernel] PASS M35', phase, 'expected behavioral failures:', sorted(failures))
 PY
@@ -132,12 +119,12 @@ PY
   fi
 }
 
-for phase in positive portal-off spawner-off item-off; do
+for phase in positive; do
   step "M35 actual world behavior: $phase"
   run_phase "$phase"
 done
 if [ "$FAIL" -eq 0 ]; then
-  echo "[kernel] ✅ M35 WORLD BEHAVIOR GATE GREEN — 11 positive cases and exact repair-off counterexamples"
+  echo "[kernel] ✅ M35 WORLD BEHAVIOR GATE GREEN — 6 positive natural-behavior cases"
 else
   echo "[kernel] ❌ M35 GATE RED — inspect $RESULTS"
 fi

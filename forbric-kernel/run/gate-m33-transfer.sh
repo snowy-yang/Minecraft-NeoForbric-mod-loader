@@ -37,10 +37,9 @@ bash "$KERNEL/run/build-transfer-world-canaries.sh" > "$RESULTS/build.log" 2>&1 
 INPUTS="$KERNEL/run/canary/m33-build-inputs.json"
 FAPI="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["fabricApi"]["path"])' "$INPUTS")"
 MERGED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["merged"]["path"])' "$INPUTS")"
-FORGE_RT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["forge"]["path"])' "$INPUTS")"
 NEO_RT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["neo"]["path"])' "$INPUTS")"
 COMPILE_GAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["compileGame"]["path"])' "$INPUTS")"
-export MERGED FORGE_RT NEO_RT
+export MERGED NEO_RT
 
 fresh_world() {
   if [ -d "$RUNDIR/world" ] && [ ! -f "$RUNDIR/.m33-owned" ]; then
@@ -83,7 +82,7 @@ run_phase() {
   token="$(cat "$RUNDIR/.m33-owned")"
   rm -f "$RESULTS/$phase-inputs.log"   # port_was_free below must not read an earlier run's log
   python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
-    --artifact "merged=$MERGED" --artifact "forge-interop=$FORGE_RT" --artifact "neo-runtime=$NEO_RT" \
+    --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
     --artifact "kernel=$BUILD/libs/forbric-kernel-0.1.0-SNAPSHOT.jar" \
     --artifact "kernel-runtime=$BUILD/libs/forbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
     --artifact "compile-game=$COMPILE_GAME" \
@@ -133,13 +132,10 @@ step "positive: six directed routes through real public block queries"
 run_phase prepare on
 assert_phase prepare pass
 check_absent "positive probe emitted no failure marker" "M33Transfer\] FAIL" "$RESULTS/prepare-inputs.log"
-for family in fabric forge neo; do check "the independent $family canary initialized" "M33Transfer\] REGISTERED $family " "$RESULTS/prepare-inputs.log"; done
+for family in fabric neo; do check "the independent $family canary initialized" "M33Transfer\] REGISTERED $family " "$RESULTS/prepare-inputs.log"; done
 check "public API face/null coverage ran" "PASS all three public APIs preserve NORTH/null" "$RESULTS/prepare-inputs.log"
 check "native priority ran" "PASS native providers take priority" "$RESULTS/prepare-inputs.log"
 check "owner providers precede generic Container wrappers" "PASS owner providers precede Fabric's generic Container view" "$RESULTS/prepare-inputs.log"
-check "Forge's own InvWrapper answers only as its owner's whole Container" "PASS Forge's generic InvWrapper: NeoForge's own Container view" "$RESULTS/prepare-inputs.log"
-check "a Container with its own writes was kept from NeoForge's wrapper" "CONTAINER_WRITES_NOT_VANILLA: forbric\.transferworld\.Machines.Kiln" "$RESULTS/prepare-inputs.log"
-check_absent "Forge's own InvWrapper was never refused as an unaudited handler" "FORGE_HANDLER_NOT_ROLLBACK_SAFE: net\.minecraftforge\.items\.wrapper\.InvWrapper" "$RESULTS/prepare-inputs.log"
 check "actual fractional return was rolled back and retried" "PASS world fluid quantization retains 17 units" "$RESULTS/prepare-inputs.log"
 check "world replacement invalidation ran" "PASS cached foreign views" "$RESULTS/prepare-inputs.log"
 check "a real chunk unload and reload ran" "PASS chunk unload: cached views refuse" "$RESULTS/prepare-inputs.log"

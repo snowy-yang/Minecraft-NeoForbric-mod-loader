@@ -41,15 +41,12 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 /** Live ServerLevel callers only: no manual event post, kernel helper invocation, or substituted game class. */
 public final class WorldProbe {
     public static final Identifier MOB_ID = Identifier.fromNamespaceAndPath("forbricbehaviorprobe", "probe_mob");
-    public static final SpawnGroupData NEO_DATA = new SpawnGroupData() { }, FORGE_DATA = new SpawnGroupData() { }, RETURNED_DATA = new SpawnGroupData() { };
+    public static final SpawnGroupData NEO_DATA = new SpawnGroupData() { };
     public static final List<ProbeMob> created = new ArrayList<>();
     public static String activeSpawner;
-    public static PortalShape replacementShape;
-    public static int portalReplacementCalls;
     private static String activePortal, phase, token;
     private static BlockPos activeFire;
-    private static int portalNeo, portalForge, spawnerNeo, spawnerForge, inputKeys, markerValue;
-    private static int itemNeo, itemForge, elapsed;
+    private static int portalNeo, spawnerNeo, itemNeo, elapsed;
     private static FinalizeSpawnEvent neoFinalize;
     private static ProbeMob itemUser;
     private static FakePlayer player;
@@ -65,49 +62,23 @@ public final class WorldProbe {
             portalNeo++;
             if (activePortal.equals("neo-veto")) event.setCanceled(true);
         });
-        net.minecraftforge.event.level.BlockEvent.PortalSpawnEvent.BUS.addListener((java.util.function.Predicate<net.minecraftforge.event.level.BlockEvent.PortalSpawnEvent>) event -> {
-            if (activePortal == null || !event.getPos().equals(activeFire)) return false;
-            portalForge++; return activePortal.equals("forge-veto");
-        });
         NeoForge.EVENT_BUS.addListener(FinalizeSpawnEvent.class, event -> {
             if (activeSpawner == null || !(event.getEntity() instanceof ProbeMob)) return;
             spawnerNeo++; neoFinalize = event; event.setSpawnData(NEO_DATA);
             if (activeSpawner.equals("neo-cancel-finalize")) event.setCanceled(true);
             if (activeSpawner.equals("neo-veto-spawn")) event.setSpawnCancelled(true);
         });
-        net.minecraftforge.event.entity.living.MobSpawnEvent.FinalizeSpawn.BUS.addListener((java.util.function.Predicate<net.minecraftforge.event.entity.living.MobSpawnEvent.FinalizeSpawn>) event -> {
-            if (activeSpawner == null || !(event.getEntity() instanceof ProbeMob)) return false;
-            spawnerForge++;
-            require(event.getSpawnData() == NEO_DATA, "Forge did not see Neo's data");
-            require(event.getSpawnTag() != null, "Forge spawner ValueInput is null");
-            require(event.getSpawnTag() == ((ProbeMob) event.getEntity()).loadedInput, "Forge did not receive the same ValueInput used by Entity.load");
-            require(event.getSpawnTag().getStringOr("id", "").equals(MOB_ID.toString()), "Forge received the wrong entity ValueInput");
-            inputKeys = event.getSpawnTag().keySet().size(); markerValue = event.getSpawnTag().getIntOr("m35_marker", -1);
-            event.setSpawnData(FORGE_DATA);
-            // A later family may not revive the Neo world-insertion veto.
-            if (activeSpawner.equals("neo-veto-spawn")) event.setSpawnCancelled(false);
-            if (activeSpawner.equals("forge-veto-spawn")) event.setSpawnCancelled(true);
-            return activeSpawner.equals("forge-cancel-finalize");
-        });
         NeoForge.EVENT_BUS.addListener(LivingEntityUseItemEvent.Finish.class, event -> {
             if (event.getEntity() != itemUser) return;
             itemNeo++; event.setResultStack(tagged(new ItemStack(Items.GOLD_INGOT, 1)));
         });
-        net.minecraftforge.event.entity.living.LivingEntityUseItemEvent.Finish.BUS.addListener(event -> {
-            if (event.getEntity() != itemUser) return;
-            itemForge++;
-            require(event.getResultStack().is(Items.GOLD_INGOT), "Forge item finish did not see Neo's result");
-            event.setResultStack(tagged(new ItemStack(Items.DIAMOND, 2)));
-        });
     }
-
-    public static boolean replacePortalAt(BlockPos pos) { return "replacement".equals(activePortal) && pos.equals(activeFire); }
 
     public static void arm(MinecraftServer server) {
         try {
             root = Path.of(System.getProperty("forbric.behaviorRoot", ".")).toAbsolutePath().normalize();
             token = System.getProperty("forbric.behaviorToken", ""); phase = System.getProperty("forbric.behaviorPhase", "");
-            if (token.isBlank() || !List.of("positive", "portal-off", "spawner-off", "item-off").contains(phase)
+            if (token.isBlank() || !List.of("positive").contains(phase)
                     || !Files.readString(root.resolve(".m35-owned")).trim().equals(token)
                     || !server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().equals(root.resolve("world"))) {
                 System.out.println("[M35Behavior] DISARMED: gate ownership absent"); return;
@@ -127,21 +98,21 @@ public final class WorldProbe {
         elapsed++;
         if (itemUser == null || itemNeo > 0 || elapsed >= 160) {
             Map<String, Object> evidence = new LinkedHashMap<>();
-            evidence.put("neoEvents", itemNeo); evidence.put("forgeEvents", itemForge); evidence.put("serverTicks", elapsed);
+            evidence.put("neoEvents", itemNeo); evidence.put("serverTicks", elapsed);
             evidence.put("entityWorldTicks", itemUser == null ? -1 : itemUser.worldTicks);
             evidence.put("held", itemUser == null ? "missing" : itemUser.getMainHandItem().toString());
-            boolean good = itemUser != null && itemUser.worldTicks >= 1 && itemNeo == 1 && itemForge == 1
-                    && itemUser.getMainHandItem().getCount() == 2 && ItemStack.isSameItemSameComponents(tagged(new ItemStack(Items.DIAMOND)), itemUser.getMainHandItem());
+            boolean good = itemUser != null && itemUser.worldTicks >= 1 && itemNeo == 1
+                    && itemUser.getMainHandItem().getCount() == 1 && ItemStack.isSameItemSameComponents(tagged(new ItemStack(Items.GOLD_INGOT)), itemUser.getMainHandItem());
             result("item-result", good, evidence); finish(server);
         }
     }
 
     private static void initializeWorld(MinecraftServer server) {
         ServerLevel level = server.overworld(); require(server.isSameThread(), "not server thread");
-        for (int i = 0; i < 4; i++) portal(level, List.of("allow", "neo-veto", "forge-veto", "replacement").get(i), new BlockPos(i * 32 + 1, 80, 32));
+        for (int i = 0; i < 2; i++) portal(level, List.of("allow", "neo-veto").get(i), new BlockPos(i * 32 + 1, 80, 32));
         player = new FakePlayer(level, new GameProfile(UUID.fromString("3b38bc55-d92e-4b10-9510-33b132f70235"), "M35Probe"));
         player.snapTo(68, 80, 68); level.addNewPlayer(player);
-        List<String> cases = List.of("data", "neo-cancel-finalize", "forge-cancel-finalize", "neo-veto-spawn", "forge-veto-spawn", "nonempty-input");
+        List<String> cases = List.of("data", "neo-cancel-finalize", "neo-veto-spawn");
         for (int i = 0; i < cases.size(); i++) spawner(level, cases.get(i), new BlockPos(64 + i * 16, 80, 64));
         BlockPos itemPos = new BlockPos(176, 80, 64); level.getChunk(itemPos.getX() >> 4, itemPos.getZ() >> 4);
         level.setChunkForced(itemPos.getX() >> 4, itemPos.getZ() >> 4, true); player.snapTo(180, 80, 68);
@@ -157,23 +128,19 @@ public final class WorldProbe {
 
     private static void portal(ServerLevel level, String mode, BlockPos fire) {
         Map<String, Object> evidence = new LinkedHashMap<>(); boolean pass = false;
-        activePortal = mode; activeFire = fire; portalNeo = portalForge = portalReplacementCalls = 0;
-        BlockPos replacement = fire.offset(12, 0, 0);
+        activePortal = mode; activeFire = fire; portalNeo = 0;
         try {
-            frame(level, fire); frame(level, replacement);
-            require(PortalShape.findEmptyPortalShape(level, fire, Direction.Axis.X).isPresent(), "first frame is invalid");
-            replacementShape = PortalShape.findEmptyPortalShape(level, replacement, Direction.Axis.X).orElseThrow();
+            frame(level, fire);
+            require(PortalShape.findEmptyPortalShape(level, fire, Direction.Axis.X).isPresent(), "frame is invalid");
             level.setBlockAndUpdate(fire, Blocks.FIRE.defaultBlockState());
-            int first = portalBlocks(level, fire), second = portalBlocks(level, replacement);
-            evidence.put("originalPortalBlocks", first); evidence.put("replacementPortalBlocks", second);
-            evidence.put("neoEvents", portalNeo); evidence.put("forgeEvents", portalForge); evidence.put("replacementReturns", portalReplacementCalls);
-            require(portalNeo == 1 && portalForge == (mode.equals("neo-veto") ? 0 : 1), "portal callback count differs");
-            require(first == (mode.equals("allow") ? 6 : 0), "original frame result differs");
-            require(second == (mode.equals("replacement") ? 6 : 0), "replacement frame result differs");
-            if (mode.equals("replacement")) require(portalReplacementCalls == 1, "real Forge hook-return mixin did not run exactly once");
+            int blocks = portalBlocks(level, fire);
+            evidence.put("portalBlocks", blocks);
+            evidence.put("neoEvents", portalNeo);
+            require(portalNeo == 1, "portal callback count differs");
+            require(blocks == (mode.equals("allow") ? 6 : 0), "frame result differs");
             pass = true;
         } catch (Throwable failure) { evidence.put("detail", failure.toString()); failure.printStackTrace(); }
-        finally { result("portal-" + mode, pass, evidence); activePortal = null; replacementShape = null; }
+        finally { result("portal-" + mode, pass, evidence); activePortal = null; }
     }
 
     private static void frame(ServerLevel level, BlockPos inside) {
@@ -190,14 +157,13 @@ public final class WorldProbe {
 
     private static void spawner(ServerLevel level, String mode, BlockPos pos) {
         Map<String, Object> evidence = new LinkedHashMap<>(); boolean pass = false;
-        activeSpawner = mode; created.clear(); spawnerNeo = spawnerForge = inputKeys = 0; markerValue = -1; neoFinalize = null;
+        activeSpawner = mode; created.clear(); spawnerNeo = 0; neoFinalize = null;
         try {
             level.getChunk(pos.getX() >> 4, pos.getZ() >> 4); player.snapTo(pos.getX() + 6, 80, 68);
             for (int x = -5; x <= 5; x++) for (int z = -5; z <= 5; z++) level.setBlockAndUpdate(pos.offset(x, -1, z), Blocks.STONE.defaultBlockState());
             level.setBlockAndUpdate(pos, Blocks.SPAWNER.defaultBlockState());
             SpawnerBlockEntity be = (SpawnerBlockEntity) level.getBlockEntity(pos); require(be != null, "real spawner entity absent");
             CompoundTag entity = new CompoundTag(); entity.putString("id", MOB_ID.toString());
-            if (mode.equals("nonempty-input")) entity.putInt("m35_marker", 35);
             var data = new SpawnData(entity, Optional.empty(), Optional.empty());
             var fields = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, level.registryAccess());
             fields.putShort("Delay", (short) 0); fields.putInt("SpawnCount", 1); fields.putInt("SpawnRange", 4);
@@ -210,26 +176,16 @@ public final class WorldProbe {
             }
             require(created.size() == 1, "expected exactly one real candidate mob, got " + created.size());
             ProbeMob mob = created.getFirst();
-            // The public entity lookup only exposes entities in currently accessible sections. All these
-            // cases run in one post-tick, before moving the fake player updates section visibility. Native
-            // ServerLevel.addEntity calls onAddedToLevel only after the real section manager accepts it.
             boolean added = mob.isAddedToLevel();
-            evidence.put("attempts", attempts); evidence.put("neoEvents", spawnerNeo); evidence.put("forgeEvents", spawnerForge);
+            evidence.put("attempts", attempts); evidence.put("neoEvents", spawnerNeo);
             evidence.put("finalizations", mob.finalizations); evidence.put("worldInsertion", added); evidence.put("spawnVeto", mob.isSpawnCancelled());
             evidence.put("publicLookupVisible", level.getEntity(mob.getUUID()) == mob);
-            evidence.put("valueInputKeys", inputKeys); evidence.put("valueInputMarker", markerValue); evidence.put("forgeDataUsed", mob.finalizedWith == FORGE_DATA);
-            int expectedForge = mode.equals("neo-cancel-finalize") ? 0 : 1;
-            int expectedFinal = mode.contains("cancel-finalize") || mode.equals("nonempty-input") ? 0 : 1;
-            require(spawnerNeo == 1 && spawnerForge == expectedForge, "spawner callback count differs");
+            evidence.put("neoDataUsed", mob.finalizedWith == NEO_DATA);
+            int expectedFinal = mode.equals("neo-cancel-finalize") ? 0 : 1;
+            require(spawnerNeo == 1, "spawner callback count differs");
             require(mob.finalizations == expectedFinal, "finalization count differs");
-            require(added == !mode.contains("veto-spawn"), "event cancellation and world-insertion veto were conflated");
-            if (expectedFinal == 1) require(mob.finalizedWith == FORGE_DATA, "Forge replacement SpawnGroupData did not reach finalizer");
-            if (expectedForge == 1) {
-                require(inputKeys >= 1, "actual nonempty entity ValueInput was not observed");
-                require(neoFinalize.getSpawnData() == (mode.equals("forge-cancel-finalize") ? NEO_DATA : FORGE_DATA),
-                        "native discarded finalizer return was written back, or cancelled event data was incorrectly copied");
-            }
-            if (mode.equals("nonempty-input")) require(markerValue == 35, "custom ValueInput field did not survive");
+            require(added == !mode.equals("neo-veto-spawn"), "event cancellation and world-insertion veto were conflated");
+            if (expectedFinal == 1) require(mob.finalizedWith == NEO_DATA, "listener SpawnGroupData did not reach finalizer");
             pass = true;
         } catch (Throwable failure) { evidence.put("detail", failure.toString()); failure.printStackTrace(); }
         finally {
@@ -244,11 +200,11 @@ public final class WorldProbe {
             if (itemUser != null) itemUser.discard();
             if (player != null) server.overworld().removePlayerImmediately(player, Entity.RemovalReason.DISCARDED);
             server.overworld().setChunkForced(11, 4, false);
-            boolean pass = results.size() == 11 && results.stream().allMatch(row -> Boolean.TRUE.equals(row.get("pass")));
+            boolean pass = results.size() == 6 && results.stream().allMatch(row -> Boolean.TRUE.equals(row.get("pass")));
             Map<String, Object> report = new LinkedHashMap<>(); report.put("schemaVersion", 1); report.put("phase", phase); report.put("token", token);
-            report.put("pass", pass); report.put("expectedCases", 11); report.put("cases", results);
+            report.put("pass", pass); report.put("expectedCases", 6); report.put("cases", results);
             Files.createDirectories(output.toAbsolutePath().getParent()); Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(report) + "\n");
-            System.out.println("[M35Behavior] " + (pass ? "PASS" : "FAIL") + " phase=" + phase + " cases=" + results.size() + "/11");
+            System.out.println("[M35Behavior] " + (pass ? "PASS" : "FAIL") + " phase=" + phase + " cases=" + results.size() + "/6");
         } catch (Throwable failure) { System.out.println("[M35Behavior] FAIL result-write " + failure); failure.printStackTrace(); }
         finally { server.halt(false); }
     }

@@ -53,9 +53,9 @@ TRANSFER_CANARY_ENERGY=1 TRANSFER_CANARY_OUT="$CANARIES" M40_REBORN_ENERGY="$REB
   bash "$KERNEL/run/build-transfer-world-canaries.sh" > "$RESULTS/build.log" 2>&1 || { cat "$RESULTS/build.log"; exit 1; }
 INPUTS="$CANARIES/m33-build-inputs.json"
 field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]["path"])' "$INPUTS" "$1"; }
-FAPI="$(field fabricApi)"; MERGED="$(field merged)"; FORGE_RT="$(field forge)"; NEO_RT="$(field neo)"
+FAPI="$(field fabricApi)"; MERGED="$(field merged)"; NEO_RT="$(field neo)"
 COMPILE_GAME="$(field compileGame)"; REBORN="$(field rebornEnergy)"
-export MERGED FORGE_RT NEO_RT
+export MERGED NEO_RT
 
 # Evidence owns an inner shell and the JVM below it; a timeout terminates only this run's descendants.
 kill_owned_descendants() {
@@ -98,7 +98,7 @@ run_phase() {
   [ -f "$RUNDIR/mods/$(basename "$REBORN")" ] && reborn=(--artifact "reborn-energy=$REBORN")
   rm -f "$RESULTS/$phase-inputs.log"   # port_was_free below must not read an earlier run's log
   python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
-    --artifact "merged=$MERGED" --artifact "forge-interop=$FORGE_RT" --artifact "neo-runtime=$NEO_RT" \
+    --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
     --artifact "kernel=$BUILD/libs/forbric-kernel-0.1.0-SNAPSHOT.jar" \
     --artifact "kernel-runtime=$BUILD/libs/forbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
     --artifact "compile-game=$COMPILE_GAME" --artifact "fabric-api=$FAPI" ${reborn[@]+"${reborn[@]}"} \
@@ -164,9 +164,6 @@ check "the kernel connected Team Reborn Energy" "Forbric/Transfer\] connected Te
 check "public lookups preserve NORTH/null and refuse SOUTH" "PASS all public energy lookups preserve NORTH/null and refuse SOUTH" "$LOG"
 check "native providers take priority and the owner answers first" "PASS native energy providers take priority" "$LOG"
 check "a custom Forge store was refused, a standard-shaped subclass bridged" "PASS a custom Forge energy store gets no write bridge" "$LOG"
-count_exactly "the custom Forge store was reported once for its class" "FORGE_HANDLER_NOT_ROLLBACK_SAFE: forbric\.transferworld\.energy\.ForbricEnergyForge\\\$Rogue" "$LOG" 1
-check_absent "Forge's standard EnergyStorage and its subclass were never refused" "FORGE_HANDLER_NOT_ROLLBACK_SAFE: (net\.minecraftforge\.energy\.EnergyStorage|forbric\.transferworld\.EnergyMachines)" "$LOG"
-check_absent "the final Forge EnergyStorage carried its transfer-shape certificate" "TRANSFER_HELPER_UNVERIFIED: net\.minecraftforge\.energy\.EnergyStorage" "$LOG"
 check "store limits are the stores' own" "PASS capacity, maxInsert and maxExtract are each store's own" "$LOG"
 check "all twelve routes ran" "M40Energy\] PASS route " "$LOG" 12
 check "nested rollback on both engines" "PASS nested commit then root abort restored every cell" "$LOG"

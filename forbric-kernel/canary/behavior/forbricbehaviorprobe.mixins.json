@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "forbric.behavior.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["ForgePortalResultMixin"],
+  "mixins": [],
   "injectors": {"defaultRequire": 1}
 }

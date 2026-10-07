@@ -29,7 +29,7 @@ public final class ProbeMob extends Mob {
                                                   EntitySpawnReason reason, SpawnGroupData data) {
         finalizations++; finalizedWith = data;
         super.finalizeSpawn(level, difficulty, reason, data);
-        return WorldProbe.RETURNED_DATA; // Both native BaseSpawner callers discard this result.
+        return data; // Native BaseSpawner callers discard this result.
     }
     @Override public void tick() { worldTicks++; super.tick(); }
 }

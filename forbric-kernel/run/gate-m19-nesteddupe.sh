@@ -4,11 +4,11 @@
 # WHY THIS EXISTS. Each loader deduplicates only within its own family: KernelFabricLoader.register keeps the
 # first Fabric mod id, KernelModLoader the first @Mod. Nobody was checking across, and DuplicateModArbiter — which
 # is that judge — only walked mods/. A JarJar/JiJ child is not in mods/; it is extracted into .forbric-kernel/
-# afterwards. So a library nested by a Fabric mod AND by a MinecraftForge mod loaded twice and was constructed
+# afterwards. So a library nested by a Fabric mod AND by a NeoForge mod loaded twice and was constructed
 # twice.
 #
-# On a real 26.2 pack that was Xaero's: xaerominimap-fabric nests xaerolib-fabric, xaeroworldmap-forge nests
-# xaerolib-forge, both claiming "xaerolib". The second construction threw "Attempted to register a duplicate
+# On a real 26.2 pack that was Xaero's: xaerominimap-fabric nests xaerolib-fabric while the NeoForge half nests
+# xaerolib's own build, both claiming "xaerolib". The second construction threw "Attempted to register a duplicate
 # config channel: xaerolib:main" — but only AFTER XaeroLib.<init> had already done INSTANCE = this, so a live
 # mixin then called into a half-built object and took the client down on a render frame.
 #
@@ -26,12 +26,12 @@ LOG="$BUILD/gate-m19-nesteddupe.log"
 CONTROL="$BUILD/gate-m19-control.log"
 RUNDIR="$KERNEL/run/server-nesteddupe"
 FAB="$KERNEL/run/canary/forbricnestfab.jar"
-FORGE="$KERNEL/run/canary/forbricnestforge.jar"
+NEO="$KERNEL/run/canary/forbricnestneo.jar"
 mkdir -p "$BUILD"
 
 step "build and stage the two parents"
 "$KERNEL/run/build-nested-dupe-canary.sh" >"$BUILD/gate-m19-canary.log" 2>&1
-for jar in "$FAB" "$FORGE"; do
+for jar in "$FAB" "$NEO"; do
   [ -f "$jar" ] || { echo "[kernel] FAIL canary build (see $BUILD/gate-m19-canary.log): $jar"; exit 1; }
 done
 
@@ -39,7 +39,7 @@ reap_stale_server "$RUNDIR"
 rm -rf "$RUNDIR/world" "$RUNDIR/mods" "$RUNDIR/.forbric-kernel" 2>/dev/null
 rm -f "$RUNDIR/forbric-mods.txt"
 mkdir -p "$RUNDIR/mods"
-cp "$FAB" "$FORGE" "$RUNDIR/mods/"
+cp "$FAB" "$NEO" "$RUNDIR/mods/"
 seed_server_properties "$RUNDIR"
 echo "[kernel] staged: $(ls -1 "$RUNDIR/mods" | tr '\n' ' ')"
 
@@ -74,14 +74,14 @@ step "both parents still ran (must PASS)"
 # The point of arbitrating rather than deleting: the side that lost its nested build still has a working library,
 # because the winner's copy carries the same shared classes.
 check "the Fabric parent came up"  "ForbricNestParent\] fabric parent up" "$LOG"
-check "the MinecraftForge parent came up" "ForbricNestParent\] forge parent up" "$LOG"
-# Asked from inside the mods, not read off the arbiter's own sentence. "aliased into [FORGE]" would match a line
+check "the NeoForge parent came up" "ForbricNestParent\] neo parent up" "$LOG"
+# Asked from inside the mods, not read off the arbiter's own sentence. "aliased into [NEOFORGE]" would match a line
 # this kernel writes about itself and prove only that it wrote it — and it would be wrong to trust here, because
-# Decision.aliasesFor(Ecosystem.FORGE) has NO consumer: the identity has to come back to the Forge side through
+# Decision.aliasesFor(Ecosystem.NEOFORGE) has NO consumer: the identity has to come back to the NeoForge side through
 # ModPresence instead. So the canaries call isLoaded/isModLoaded and the gate reads their answer.
-check "the Forge side can still see the library it lost"  "ForbricNestParent\] forge sees forbricnestlib=true"  "$LOG"
+check "the NeoForge side can still see the library it lost" "ForbricNestParent\] neo sees forbricnestlib=true"   "$LOG"
 check "the Fabric side can see it too"                    "ForbricNestParent\] fabric sees forbricnestlib=true" "$LOG"
-check_absent "neither side was told it is absent" "ForbricNestParent\] (forge|fabric) sees forbricnestlib=false" "$LOG"
+check_absent "neither side was told it is absent" "ForbricNestParent\] (neo|fabric) sees forbricnestlib=false" "$LOG"
 
 step "nothing else broke (must be ABSENT)"
 check_absent "no crash report" "Preparing crash report" "$LOG"
@@ -97,37 +97,37 @@ check "and the library was then claimed twice, or tried to be" \
   "ForbricNestLib\] DUPLICATE registration|ForbricNestLib\] claimed by" "$CONTROL" 2
 
 step "the OTHER direction is enforced too (must PASS)"
-# With the default preference the Fabric build wins, so only the Forge-side withdrawal is ever exercised — the
+# With the default preference the Fabric build wins, so only the NeoForge-side withdrawal is ever exercised — the
 # suppression of a losing FABRIC nested jar runs through a different seam (KernelFabricEcosystem.build's register
 # loop and its classpath filter) and would stay dead code the gate never touches. -Dforbric.modOwner flips it.
 FLIP="$BUILD/gate-m19-flipped.log"
-boot "$FLIP" "-Dforbric.modOwner=forbricnestlib=forge"
+boot "$FLIP" "-Dforbric.modOwner=forbricnestlib=neoforge"
 check "the override reached a nested jar" \
-  "mod id 'forbricnestlib' claimed by 2 jars.*loading forbricnestlib-forge.jar \(FORGE\)" "$FLIP"
+  "mod id 'forbricnestlib' claimed by 2 jars.*loading forbricnestlib-neo.jar \(NEOFORGE\)" "$FLIP"
 assert_eq "still claimed exactly once" "1" "$(grep -acE '\[ForbricNestLib\] claimed by' "$FLIP")"
-check "and by the side the override named" "ForbricNestLib\] claimed by forge" "$FLIP"
+check "and by the side the override named" "ForbricNestLib\] claimed by neoforge" "$FLIP"
 check_absent "no duplicate registration either way" "ForbricNestLib\] DUPLICATE registration" "$FLIP"
 check_absent "no entrypoint failure either way" "entrypoint of .* failed" "$FLIP"
 
 step "negative control 2: the losing side's visibility really does come from ModPresence"
-# Pins the MECHANISM the identity assertion depends on. Decision.aliasesFor(Ecosystem.FORGE) has no consumer, so
-# what makes the Forge side still see a library whose jar it lost is the cross-ecosystem presence rewrite — not
-# the arbiter's alias. Turn that off and exactly the Forge side must go dark, while Fabric (which owns the
+# Pins the MECHANISM the identity assertion depends on. Decision.aliasesFor(Ecosystem.NEOFORGE) has no consumer,
+# so what makes the NeoForge side still see a library whose jar it lost is the cross-ecosystem presence rewrite — not
+# the arbiter's alias. Turn that off and exactly the NeoForge side must go dark, while Fabric (which owns the
 # container) stays true. If both stayed true, the assertion above would be passing for a reason nobody chose.
 PRESENCE="$BUILD/gate-m19-nopresence.log"
 boot "$PRESENCE" "-Dforbric.crossEcosystemPresence=off"
-check "the Forge side loses sight of it without ModPresence" \
-  "ForbricNestParent\] forge sees forbricnestlib=false" "$PRESENCE"
+check "the NeoForge side loses sight of it without ModPresence" \
+  "ForbricNestParent\] neo sees forbricnestlib=false" "$PRESENCE"
 check "while the side that owns the container still sees it" \
   "ForbricNestParent\] fabric sees forbricnestlib=true" "$PRESENCE"
 
 step "a JarJar range decides the build; an override that breaks it is refused, not obeyed (must PASS)"
-# The fixture is the real shape: the Fabric parent JiJ-nests with no JarJar metadata, the MinecraftForge parent
-# names its own platform artifact (forbricnestlib-forge). Any in-range build of the mod id meets that coordinate,
-# so above the preference picked Fabric. Raise the Forge parent's range past the Fabric build's 1.0.0 in the
+# The fixture is the real shape: the Fabric parent JiJ-nests with no JarJar metadata, the NeoForge parent
+# names its own platform artifact (forbricnestlib-neo). Any in-range build of the mod id meets that coordinate,
+# so above the preference picked Fabric. Raise the NeoForge parent's range past the Fabric build's 1.0.0 in the
 # gate-owned copy only: now the constraint, not the preference, must choose -- and a pin to the build the range
 # excludes is an unsatisfiable combination that strict policy must refuse rather than silently load.
-python3 - "$RUNDIR/mods/forbricnestforge.jar" <<'PY_RANGE'
+python3 - "$RUNDIR/mods/forbricnestneo.jar" <<'PY_RANGE'
 import json,pathlib,sys,zipfile
 path=pathlib.Path(sys.argv[1]);temporary=path.with_suffix('.tmp')
 with zipfile.ZipFile(path) as source,zipfile.ZipFile(temporary,'w') as output:
@@ -145,9 +145,9 @@ boot "$RANGED" "-Dforbric.compatibilityPolicy=strict"
 check "the range-constrained combination is solved" \
   "Forbric/Arbitration\] status=SOLVED;.*confirmed violations=0; unproved contracts=0" "$RANGED"
 check "the range, not the Fabric-first nested preference, chose the build" \
-  "mod id 'forbricnestlib' claimed by 2 jars.*loading forbricnestlib-forge.jar \(FORGE\)" "$RANGED"
+  "mod id 'forbricnestlib' claimed by 2 jars.*loading forbricnestlib-neo.jar \(NEOFORGE\)" "$RANGED"
 assert_eq "still claimed exactly once" "1" "$(grep -acE '\[ForbricNestLib\] claimed by' "$RANGED")"
-check "by the build the range allows" "ForbricNestLib\] claimed by forge" "$RANGED"
+check "by the build the range allows" "ForbricNestLib\] claimed by neoforge" "$RANGED"
 check "and the server came up under strict policy" 'Done \(' "$RANGED"
 CONFLICT="$BUILD/gate-m19-unsatisfiable.log"
 boot "$CONFLICT" "-Dforbric.modOwner=forbricnestlib=fabric -Dforbric.compatibilityPolicy=strict"
@@ -157,7 +157,7 @@ check_absent "a manual preference did not turn the invalid combination into a wo
 
 step "M19 result"
 if [ "${FAIL:-0}" -eq 0 ]; then
-  echo "[kernel] ✅ M19 GATE GREEN — a library nested by a Fabric mod and a MinecraftForge mod is constructed once"
+  echo "[kernel] ✅ M19 GATE GREEN — a library nested by a Fabric mod and a NeoForge mod is constructed once"
 else
   echo "[kernel] ❌ M19 GATE RED — see $LOG / $CONTROL / $BUILD/gate-m19-flipped.log / $BUILD/gate-m19-nopresence.log / $BUILD/gate-m19-ranged.log / $BUILD/gate-m19-unsatisfiable.log"
   exit 1
