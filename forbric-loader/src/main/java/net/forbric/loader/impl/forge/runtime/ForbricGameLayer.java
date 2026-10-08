@@ -200,7 +200,7 @@ public final class ForbricGameLayer {
 		// (Knot's) — NOT the system loader's, where the vanilla -cp libraries (log4j, guava, …) are defined.
 		// Once class-load ordering lets the SYSTEM loader define such a library first (order-dependent, surfaced
 		// the moment content mods shift resolution), a runtime-module <clinit> touching it IllegalAccessErrors:
-		// e.g. ForgeRegistry.<clinit> -> MarkerManager "module net.minecraftforge.forge does not read unnamed
+		// e.g. a carrier <clinit> -> MarkerManager "module does not read unnamed
 		// module" during Bootstrap. Belt-and-braces: also (re)add Knot's own unnamed module.
 		Module systemUnnamed = ClassLoader.getSystemClassLoader().getUnnamedModule();
 		Module knotUnnamed = knotCl.getUnnamedModule();

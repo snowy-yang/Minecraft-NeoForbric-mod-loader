@@ -57,13 +57,10 @@ public final class ModAnnotationScanner {
 		}
 	}
 
-	/** Traditional MinecraftForge {@code @Mod} descriptor (the primary target). */
-	public static final String MOD_DESC_MINECRAFTFORGE = "Lnet/minecraftforge/fml/common/Mod;";
-	/** NeoForge {@code @Mod} descriptor (the parked NeoForge path). */
+	/** NeoForge {@code @Mod} descriptor (the Forge-family {@code @Mod} shape: {@code String value()}). */
 	public static final String MOD_DESC_NEOFORGE = "Lnet/neoforged/fml/common/Mod;";
-	/** Both Forge-family {@code @Mod} annotations share the same shape ({@code String value()}); recognise either. */
 	private static final java.util.Set<String> MOD_DESCRIPTORS =
-			java.util.Set.of(MOD_DESC_MINECRAFTFORGE, MOD_DESC_NEOFORGE);
+			java.util.Set.of(MOD_DESC_NEOFORGE);
 
 	private ModAnnotationScanner() {
 	}

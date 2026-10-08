@@ -20,7 +20,6 @@ Run in this order. Each writes into `run/` and is idempotent.
 | Script | Produces |
 |---|---|
 | `build-patched-forge.sh` | the traditional-MinecraftForge-patched, Mojmap-named MC 26.2 jar. Forge patches the game with BinaryPatcher + MCPConfig, not NeoForm, so this is the Forge analogue of NFRT. |
-| `assemble-minecraftforge-runtime.sh` | `forge-runtime.jar` — the Knot-loaded traditional-Forge runtime, merged from Forge's `-universal` jar and its declared libraries. |
 | `assemble-neoforge-runtime.sh` | `neoforge-runtime.jar` — the same for NeoForge. |
 | `build-merged-base.sh` | `patched-mc-merged-26.2.jar` — vanilla 26.2 carrying **both** the MinecraftForge and the NeoForge injections in one jar, which is what lets all three ecosystems load in one instance. Compiles and runs `src/tools/MergedBaseBuilder`. |
 | `dedupe-runtime-overlap.sh` | resolves split packages between the two runtime carriers. Both bundle their own copies of third-party classes (maven-artifact, terminalconsoleappender, annotation jars); in one shared JPMS layer that is a split package, and `Configuration.resolve()` rejects it outright. |
@@ -36,7 +35,6 @@ because which way each conflict resolved is a design decision worth reviewing ra
 |---|---|
 | `launch-server-merged.sh` | dedicated server on the merged base, both runtimes staged — Fabric + MinecraftForge + NeoForge in one process. |
 | `launch-client-merged.sh` | the client equivalent, with both bridge mods staged. |
-| `launch-server-minecraftforge.sh` / `launch-client-forge-26.2.sh` | MC 26.2 on the MinecraftForge-patched base only. |
 | `launch-server-26.2.sh` | MC 26.2 on the NeoForge-patched base only. |
 | `launch-1.21.11.sh` | the older 1.21.11 path, which runs on the Fabric intermediary namespace rather than Mojmap. |
 
@@ -75,7 +73,6 @@ cd ..                    # the repository root
 cd forbric-loader
 ./gradlew jar runtimeJar # the two loader jars
 run/build-patched-forge.sh
-run/assemble-minecraftforge-runtime.sh
 # ... then a launcher
 ```
 

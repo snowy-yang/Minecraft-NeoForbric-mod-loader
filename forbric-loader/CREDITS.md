@@ -49,14 +49,14 @@ support targets **modern** Forge (`mods.toml` + ModLauncher) and NeoForge
 > live in a separately-licensed sibling module with its own `LICENSE-lgpl.txt` and
 > a source-availability offer.
 
-## MinecraftForge and NeoForge runtimes — supplied at run time, not redistributed
+## NeoForge runtime — supplied at run time, not redistributed
 
-Forbric loads the genuine MinecraftForge and NeoForge runtimes rather than
+Forbric loads the genuine NeoForge runtime rather than
 reimplementing them. Those jars are not in this repository and are not
 distributed with it: the scripts under `run/` fetch them from their upstream
-Maven repositories (`maven.minecraftforge.net`, `maven.neoforged.net`) and build
+Maven repositories (`maven.neoforged.net`) and build
 the patched Minecraft base they need on the machine that runs them. Forbric's own
-drivers (`ForbricMinecraftForgeRuntime`, `ForbricNeoForgeRuntime`) reach them
+driver (`ForbricNeoForgeRuntime`) reaches it
 reflection-only, so the loader carries no compile-time dependency on either.
 
 ## Mappings

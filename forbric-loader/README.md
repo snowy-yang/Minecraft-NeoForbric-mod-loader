@@ -76,7 +76,7 @@ distinct from the parent-loaded loader core. This is required: a class that reso
 loaded by Knot's transforming class loader, where the patched game classes and the Knot-loaded
 Forge-family runtime live — a class in the loader's own code source is parent-loaded and cannot see them.
 `build.gradle` produces the split from one compilation: `jar` excludes
-`impl/forge/{minecraftforge,neoforge,mixin,runtime}` and the mixin configs, and `runtimeJar` packages
+`impl/forge/{neoforge,mixin,runtime}` and the mixin configs, and `runtimeJar` packages
 exactly those, plus `src/runtime-meta/fabric.mod.json`, which declares the two `preLaunch` drivers and
 the mixin configs. Each driver no-ops if its Forge family is not present at runtime, so one build covers
 both. `ModAnnotationScanner` deliberately stays in the core jar: it ASM-scans `@Mod` classes at prep
@@ -95,7 +95,7 @@ time, before Knot exists.
 
 ## Scope notes
 
-- The MinecraftForge and NeoForge runtimes, and the patched or merged Minecraft bases Forbric loads, are
+- The NeoForge runtimes, and the patched or merged Minecraft bases Forbric loads, are
   **supplied at runtime and never committed here**. The scripts under `run/` fetch them from upstream
   Maven and assemble them locally; the repository ignores `*.jar`. Only Forbric's own clean-room bytecode
   is distributed.

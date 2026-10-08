@@ -61,7 +61,6 @@ import net.forbric.loader.impl.util.ForbricLog;
  */
 public final class ForbricClientShutdown {
 	private static final String NIGHTCONFIG_WATCHER = "com.electronwill.nightconfig.core.file.FileWatcher";
-	private static final String FORGE_FILE_TYPE_HANDLER = "net.minecraftforge.fml.config.ConfigFileTypeHandler";
 	private static final long GUARD_DEADLINE_MS = Long.getLong("forbric.exitGuardMillis", 8_000L);
 	private static final long GUARD_PERIOD_MS = 200L;
 	private static final long STOP_WAIT_MS = Long.getLong("forbric.watcherStopMillis", 1_500L);
@@ -127,39 +126,6 @@ public final class ForbricClientShutdown {
 		}
 	}
 
-	/** MinecraftForge's side: the private watcher of each of ConfigFileTypeHandler's static handlers. */
-	private static void stopForgeHandlerWatchers(ClassLoader cl, List<String> stopped) {
-		Class<?> handlerClass = load(cl, FORGE_FILE_TYPE_HANDLER);
-		if (handlerClass == null) return;
-		Class<?> fileWatcher = load(cl, NIGHTCONFIG_WATCHER);
-		if (fileWatcher == null) return;
-		try {
-			Field watcherField = null;
-			for (Field f : handlerClass.getDeclaredFields()) {
-				if (!Modifier.isStatic(f.getModifiers()) && f.getType() == fileWatcher) {
-					watcherField = f;
-					break;
-				}
-			}
-			if (watcherField == null) return;
-			watcherField.setAccessible(true);
-			for (Field f : handlerClass.getDeclaredFields()) {
-				if (!Modifier.isStatic(f.getModifiers()) || f.getType() != handlerClass) continue;
-				f.setAccessible(true);
-				Object handler = f.get(null);
-				if (handler == null) continue;
-				Object watcher = watcherField.get(handler);
-				if (watcher == null) continue;
-				// Forge's own stopWatcher(): stop + null the field, so a later getWatcher() builds afresh instead of
-				// using a stopped one (which would throw on addWatch).
-				if (stopWatcher(fileWatcher, watcher, "MinecraftForge " + f.getName() + " config handler", stopped)) {
-					watcherField.set(handler, null);
-				}
-			}
-		} catch (Throwable t) {
-			ForbricLog.warn("[Forbric/Shutdown] could not inspect MinecraftForge's config file-watchers", t);
-		}
-	}
 
 	/**
 	 * Stops one watcher unless this class already did; true when it stopped it now. Prefers {@code stopFuture()}

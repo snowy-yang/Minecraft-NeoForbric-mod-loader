@@ -66,15 +66,12 @@ public class NetworkRegistry {
 		return codec;
 	}
 
-	// On the live class this call is injected at the head of both methods; the stub carries it so the test
-	// exercises the same path.
+	// The stub carries the live bookkeeping so tests see the same state the mirrored calls keep.
 	public static void onMinecraftRegister(Connection connection, Set<Identifier> channels) {
-		net.forbric.loader.impl.compat.ForbricCustomPayloadInterop.onNeoChannelRegistration(connection, channels, true);
 		connection.channels.addAll(channels);
 	}
 
 	public static void onMinecraftUnregister(Connection connection, Set<Identifier> channels) {
-		net.forbric.loader.impl.compat.ForbricCustomPayloadInterop.onNeoChannelRegistration(connection, channels, false);
 		connection.channels.removeAll(channels);
 	}
 

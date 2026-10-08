@@ -27,8 +27,7 @@ import net.forbric.loader.impl.util.ForbricLog;
  * first {@code RegisterEvent} sees every registry writable — plain {@code Registry.register} (what Fabric mods
  * call) succeeds, and NeoForge's own trailing {@code freezeData} freezes the Fabric-registered content too.
  *
- * <p>Materially simpler than the traditional-Forge twin: NeoForge registries are vanilla {@code MappedRegistry}
- * (no {@code NamespacedWrapper.locked} to toggle). A defensive {@code GameData.unfreezeData()} is issued in case
+ * <p>NeoForge registries are vanilla {@code MappedRegistry}. A defensive {@code GameData.unfreezeData()} is issued in case
  * the window is reached outside NeoForge's ambient unfreeze; NeoForge's trailing {@code freezeData} handles the
  * re-freeze, so this window never freezes (freezing mid-dispatch would strand later {@code RegisterEvent}s).
  *
@@ -48,33 +47,15 @@ public final class ForbricNeoFabricWindow {
 		if (ForbricFabricMains.alreadyRan()) return;
 
 		ClassLoader cl = ForbricNeoFabricWindow.class.getClassLoader();
-		boolean unfroze = false;
-		// Tri-in-one MERGED base: the vanilla registries are wrapped Forge's way (NamespacedWrapper), which adds a
-		// `locked` gate on TOP of the vanilla `frozen` gate — and NeoForge's own unfreeze (which clears `frozen`)
-		// does NOT open `locked`. THIS NeoForge window runs FIRST (during NeoForge's lifecycle, before the
-		// traditional-Forge lifecycle/window exists — that runs later via ForbricDualLifecycle), so it must open
-		// Forge's `locked` gate itself to run the mains here rather than wait for the Forge window. `frozen` is
-		// already clear (we run inside NeoForge's ambient registration unfreeze), so both gates end up open; the
-		// shared ForbricFabricMains guard means the later Forge window won't re-run them. Off the merged base
-		// (no Forge runtime) this is an empty no-op.
-		java.util.List<Object> forgeUnlocked = java.util.List.of();
 		try {
-			unfroze = unfreezeDefensively(cl);
-			if (forgeRuntimePresent(cl)) {
-				forgeUnlocked = net.forbric.loader.impl.forge.minecraftforge.ForbricFabricWindow.unlockForgeRegistries(cl);
-			}
+			boolean unfroze = unfreezeDefensively(cl);
 			ForbricLog.info("[Forbric/NeoBridge] registration window open"
 					+ (unfroze ? " (defensively unfroze registries)" : " (registries already unfrozen by NeoForge)")
-					+ (forgeUnlocked.isEmpty() ? "" : " + unlocked " + forgeUnlocked.size() + " Forge wrapper(s)")
 					+ " - running Fabric main entrypoints");
 
 			ForbricFabricMains.runOnce();
 		} catch (Throwable t) {
 			ForbricLog.error("[Forbric/NeoBridge] Fabric window failed", t);
-		} finally {
-			// Relock the Forge wrappers we opened (NeoForge's own freeze handles `frozen`); leaving `locked` open
-			// would let later stray Registry.register calls slip through.
-			net.forbric.loader.impl.forge.minecraftforge.ForbricFabricWindow.relockForgeRegistries(forgeUnlocked);
 		}
 		// Intentionally NO freezeData: NeoForge's postRegisterEvents freezes after its RegisterEvent loop, which
 		// includes the content Fabric just registered. Freezing here would strand NeoForge's remaining events.
@@ -150,16 +131,6 @@ public final class ForbricNeoFabricWindow {
 			ForbricLog.warn("[Forbric/NeoBridge] defensive unfreeze probe failed (continuing)", t);
 		}
 		return false;
-	}
-
-	/** Whether the traditional-MinecraftForge runtime is on the classpath — i.e. this is the tri-in-one merged base. */
-	private static boolean forgeRuntimePresent(ClassLoader cl) {
-		try {
-			Class.forName("net.minecraftforge.server.loading.ServerModLoader", false, cl);
-			return true;
-		} catch (Throwable notMerged) {
-			return false;
-		}
 	}
 
 	private static java.lang.reflect.Field findField(Class<?> c, String name) {

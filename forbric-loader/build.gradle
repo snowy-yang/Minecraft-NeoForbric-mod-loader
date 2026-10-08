@@ -204,15 +204,14 @@ test {
 	useJUnitPlatform()
 }
 
-// The game-touching half of Forbric — the Forge-family runtime drivers (impl/forge/minecraftforge for the
-// traditional-Forge path, impl/forge/neoforge for the parked NeoForge path) — must be loaded by Knot's
+// The game-touching half of Forbric — the NeoForge runtime driver (impl/forge/neoforge) — must be loaded by Knot's
 // transforming classloader, where the Mojmap-native game classes and the Knot-loaded real Forge runtime live,
 // so their reflective Class.forName / context classloader resolve them. They ship as a SEPARATE Knot-loaded mod
 // ("forbricruntime"); the loader-core jar excludes them. Which driver actually runs is decided by the preLaunch
 // entrypoints declared in src/runtime-meta/fabric.mod.json (each no-ops if its Forge family is absent at runtime).
 // NOTE: impl/forge/ModAnnotationScanner stays in the core jar — it runs at prep time (parent-loaded), before
 // Knot, to ASM-scan @Mod classes; only the driver packages go to the runtime module.
-def runtimeModPackages = ['net/forbric/loader/impl/forge/minecraftforge/**', 'net/forbric/loader/impl/forge/neoforge/**', 'net/forbric/loader/impl/forge/mixin/**', 'net/forbric/loader/impl/forge/runtime/**']
+def runtimeModPackages = ['net/forbric/loader/impl/forge/neoforge/**', 'net/forbric/loader/impl/forge/mixin/**', 'net/forbric/loader/impl/forge/runtime/**']
 
 // Apache-2.0 section 4(a) and 4(d): a binary redistribution must carry a copy of the License and the
 // NOTICE. Both jars contain compiled Apache-2.0 code that is not Forbric's -- fabric-loader in the core jar,
@@ -341,14 +340,14 @@ tasks.register('generateInstallerManifest') {
 			// forge-bridge: the prebuilt clean-room Forge @Mod (Forbric's own bytecode — no Mojang classes, so it is
 			// licensing-safe to bundle) that opens the Fabric-content registration window inside Forge's genuine
 			// span. Bundled like forbricruntime; the installer stages it into the full-forge profile's mods/. It is
-			// produced by run/assemble-minecraftforge-runtime.sh, so it exists only after that has run — the
+			// produced by run/assemble-neoforge-runtime.sh, so it exists only after that has run — the
 			// full-forge install path errors clearly if it is absent from the manifest.
 			def bridgeJar = file('run/forge-runtime/forbric-bridge.jar')
 			if (bridgeJar.isFile()) {
 				entries << entry('net.forbric:forbric-bridge:26.2-65.0.1', 'forge-bridge', bridgeJar)
 			} else {
 				println "generateInstallerManifest: NOTE ${bridgeJar} absent — full-forge installs will fail until " +
-						"run/assemble-minecraftforge-runtime.sh has produced the bridge jar"
+						"run/assemble-neoforge-runtime.sh has produced the bridge jar"
 			}
 
 		def manifest = [forbricVersion: ver, libraries: entries]

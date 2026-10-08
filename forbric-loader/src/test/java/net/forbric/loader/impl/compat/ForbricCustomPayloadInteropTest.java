@@ -40,7 +40,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
-import net.minecraftforge.network.ChannelListManager;
 import net.neoforged.neoforge.network.payload.MinecraftRegisterPayload;
 import net.neoforged.neoforge.network.payload.MinecraftUnregisterPayload;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
@@ -122,14 +121,12 @@ class ForbricCustomPayloadInteropTest {
 	}
 
 	/**
-	 * Wire order, pinned on both edges. NeoForge's bookkeeping must be told BEFORE Fabric's receiveRegistration
-	 * (on a server that call runs startConfiguration, whose registry-sync send NeoForge's checkPacket vetoes for a
-	 * channel it has not yet learned), and MinecraftForge's declaration — one more minecraft:register — must go out
-	 * AFTER Fabric's, because a Fabric server judges the client by the first register it receives.
+	 * Wire order: NeoForge's bookkeeping must be told BEFORE Fabric's receiveRegistration runs (on a server that
+	 * call runs startConfiguration, whose registry-sync send NeoForge's checkPacket vetoes for a channel it has
+	 * not yet learned).
 	 */
 	@Test
-	void tellsNeoForgeFirstAndDeclaresForgeLast() {
-		ChannelListManager.declared.clear();
+	void tellsNeoForgeBeforeFabricsReceiveRegistration() {
 		Connection connection = new Connection();
 		OrderRecordingAddon addon = new OrderRecordingAddon(connection);
 		Identifier channel = new Identifier("fabric", "ordered");
@@ -139,43 +136,24 @@ class ForbricCustomPayloadInteropTest {
 		assertEquals(Boolean.TRUE, handled);
 		assertEquals(Set.of(channel), addon.neoChannelsWhenFabricWasTold,
 				"NeoForge's half must already know the channel when Fabric's receiveRegistration runs");
-		assertEquals(0, addon.forgeDeclarationsWhenFabricWasTold,
-				"Forge's declaration must not have gone out before Fabric's own register");
-		assertEquals(List.of(connection), ChannelListManager.declared, "…but it does go out, once, afterwards");
 	}
 
 	@Test
 	void mirrorsFabricsOwnPayloadItselfSoTheOrderStillHolds() {
-		ChannelListManager.declared.clear();
 		Connection connection = new Connection();
 		OrderRecordingAddon addon = new OrderRecordingAddon(connection);
 		Identifier channel = new Identifier("fabric", "native");
 		RegistrationPayload fabricPayload = new RegistrationPayload(RegistrationPayload.REGISTER, List.of(channel));
 
 		Boolean handled = ForbricCustomPayloadInterop.handleFabricChannelRegistrationAddon(addon, fabricPayload);
-		assertEquals(Boolean.TRUE, handled, "Fabric's body would only repeat the call, after Forge's declaration");
+		assertEquals(Boolean.TRUE, handled, "Fabric's body would only repeat the call");
 		assertSame(fabricPayload, addon.lastPayload);
 		assertTrue(addon.lastRegister);
 		assertEquals(Set.of(channel), addon.neoChannelsWhenFabricWasTold);
-		assertEquals(0, addon.forgeDeclarationsWhenFabricWasTold);
-		assertEquals(List.of(connection), ChannelListManager.declared);
-	}
-
-	@Test
-	void declaresForgeAtOnceWhenNoFabricAddonArbitrates() {
-		// Without fabric-api the NeoForge head hook is the only place: declare right there, and only once.
-		ChannelListManager.declared.clear();
-		Connection connection = new Connection();
-		Identifier channel = new Identifier("neoforge", "adhoc");
-
-		NetworkRegistry.onMinecraftRegister(connection, Set.of(channel));
-		NetworkRegistry.onMinecraftRegister(connection, Set.of(new Identifier("neoforge", "later")));
-		assertEquals(List.of(connection), ChannelListManager.declared, "declared once per connection");
 	}
 
 	private static final class OrderRecordingAddon extends AbstractChanneledNetworkAddon<Object> {
 		private Set<Identifier> neoChannelsWhenFabricWasTold;
-		private int forgeDeclarationsWhenFabricWasTold;
 
 		private OrderRecordingAddon(Connection connection) {
 			super(connection);
@@ -184,7 +162,6 @@ class ForbricCustomPayloadInteropTest {
 		@Override
 		protected void receiveRegistration(boolean register, RegistrationPayload payload) {
 			neoChannelsWhenFabricWasTold = Set.copyOf(connection.channels);
-			forgeDeclarationsWhenFabricWasTold = ChannelListManager.declared.size();
 			super.receiveRegistration(register, payload);
 		}
 	}

@@ -86,8 +86,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("MixinShearsRelay", Switch.own("forbric.shearsRelay")),
 			Map.entry("InsertedLambdaArgumentShim", Switch.own("forbric.insertedLambdaArguments")),
 			Map.entry("CarpetMixinAdapter", Switch.own("forbric.carpetMixins")),
-			// CarpetFluidMixinAdapter stands down with CarpetMixinAdapter's switch, which both read through its enabled().
-			Map.entry("CarpetFluidMixinAdapter", new Switch(List.of("forbric.carpetMixins"), "net.forbric.kernel.mixin.CarpetMixinAdapter")),
 			Map.entry("NativeCoremodParity", Switch.own("forbric.flowerPotRepair")), // NativeCoremodParityWeaveTest
 			Map.entry("PostMixinFixups", Switch.own("forbric.postMixinFixups")), // PostMixinFixupsWeaveTest
 			Map.entry("FabricRegistryInitializationMixinAdapter", Switch.own("forbric.fabricRegistryInitialization")),
@@ -98,7 +96,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("FabricSoundMixinAdapter", new Switch(List.of("forbric.fabricSoundContracts"), "net.forbric.kernel.transform.FabricSoundContractTransformer")),
 			Map.entry("FabricEnchantmentMixinAdapter", new Switch(List.of("forbric.fabricItemContracts"), "net.forbric.kernel.transform.FabricItemContractTransformer")),
 			Map.entry("FabricRegistryLoaderMixinAdapter", Switch.own("forbric.fabricRegistryLoader")),
-			Map.entry("FabricFluidFlowMixinAdapter", Switch.own("forbric.fabricFluidFlow")),
 			Map.entry("FabricBlockStateCodecMixinAdapter", Switch.own("forbric.blockStateModelFormats")),
 			Map.entry("FabricEntityMixinAnchors", Switch.own("forbric.fabricEntityAnchors")),
 			Map.entry("FabricClientMixinAnchors", Switch.own("forbric.fabricClientAnchors")),
@@ -107,7 +104,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("CreateStructureMixinAdapter", Switch.own("forbric.createStructureMixin")),
 			Map.entry("CreateKeyboardMixinAdapter", Switch.own("forbric.createKeyboardMixin")),
 			Map.entry("ContinuitySpriteMixinAdapter", Switch.own("forbric.continuitySpriteSources")),
-			Map.entry("CreateFluidMixinAdapter", Switch.own("forbric.createFluidMixins")),
 			Map.entry("CreateInjectionAdapters", Switch.own("forbric.createInjectionAdapters")),
 			Map.entry("CreateInteractionMixinAdapters", Switch.own("forbric.createInteractionMixins")),
 			Map.entry("CreateContextualBlockAdapters", Switch.own("forbric.createContextualBlocks")),

@@ -54,8 +54,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 			new ClassReader(classBytes).accept(node, 0);
 			boolean changed = repairLambdaBootstrapHandles(node);
 			changed |= addBlockStateModelConflictResolvers(node);
-			changed |= addMissingForgeFluidTypeBridge(node);
-			changed |= addMissingForgeKeyMappingLookupInitializer(node);
 			if (!changed) return classBytes;
 
 			ClassWriter writer = new ClassWriter(0);
@@ -154,60 +152,6 @@ public final class ForbricMergedBaseCompatTransformer implements ClassTransforme
 			ForbricLog.warn("[Forbric/MergedBaseCompat] added BlockStateModel default-method conflict resolvers");
 		}
 		return changed;
-	}
-
-	private static boolean addMissingForgeFluidTypeBridge(ClassNode node) {
-		if ((node.access & (Opcodes.ACC_INTERFACE | Opcodes.ACC_ABSTRACT)) != 0) return false;
-		if (!node.name.startsWith("net/minecraft/world/level/material/")) return false;
-		if (!node.interfaces.contains("net/neoforged/neoforge/common/extensions/IFluidExtension")) return false;
-		if (hasMethod(node, "getFluidType", "()Lnet/minecraftforge/fluids/FluidType;")) return false;
-
-		MethodNode bridge = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_SYNTHETIC,
-				"getFluidType", "()Lnet/minecraftforge/fluids/FluidType;", null, null);
-		bridge.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		bridge.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC,
-				"net/forbric/loader/impl/forge/runtime/ForbricForgeRuntimeInterop",
-				"forgeFluidType", "(Ljava/lang/Object;)Ljava/lang/Object;", false));
-		bridge.instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, "net/minecraftforge/fluids/FluidType"));
-		bridge.instructions.add(new InsnNode(Opcodes.ARETURN));
-		bridge.maxStack = 1;
-		bridge.maxLocals = 1;
-		node.methods.add(bridge);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] added Forge FluidType bridge to %s",
-				node.name.replace('/', '.'));
-		return true;
-	}
-
-	private static boolean addMissingForgeKeyMappingLookupInitializer(ClassNode node) {
-		if (!"net/minecraft/client/KeyMapping".equals(node.name)) return false;
-		String forgeLookup = "Lnet/minecraftforge/client/settings/KeyMappingLookup;";
-		if (!hasField(node, "MAP", forgeLookup) || initializesStaticField(node, "MAP", forgeLookup)) return false;
-
-		MethodNode clinit = findMethod(node, "<clinit>", "()V");
-		if (clinit == null) {
-			clinit = new MethodNode(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
-			clinit.instructions.add(new InsnNode(Opcodes.RETURN));
-			clinit.maxLocals = 0;
-			node.methods.add(clinit);
-		}
-
-		boolean inserted = false;
-		for (AbstractInsnNode insn = clinit.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() != Opcodes.RETURN) continue;
-			clinit.instructions.insertBefore(insn, new TypeInsnNode(Opcodes.NEW,
-					"net/minecraftforge/client/settings/KeyMappingLookup"));
-			clinit.instructions.insertBefore(insn, new InsnNode(Opcodes.DUP));
-			clinit.instructions.insertBefore(insn, new MethodInsnNode(Opcodes.INVOKESPECIAL,
-					"net/minecraftforge/client/settings/KeyMappingLookup", "<init>", "()V", false));
-			clinit.instructions.insertBefore(insn, new FieldInsnNode(Opcodes.PUTSTATIC,
-					"net/minecraft/client/KeyMapping", "MAP", forgeLookup));
-			inserted = true;
-		}
-		if (!inserted) return false;
-
-		clinit.maxStack = Math.max(clinit.maxStack, 2);
-		ForbricLog.warn("[Forbric/MergedBaseCompat] initialized Forge KeyMapping lookup on merged client base");
-		return true;
 	}
 
 	private static boolean hasMethod(ClassNode node, String name, String desc) {

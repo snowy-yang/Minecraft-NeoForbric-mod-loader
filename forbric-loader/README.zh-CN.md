@@ -48,7 +48,7 @@ cd forbric-loader && ./gradlew build    # compile + run the unit tests
 
 ## 架构说明（关键）
 
-Forbric 中接触游戏的那一半，作为一个**独立的、由 Knot 加载的模块**（`forbricruntime`）分发，与由父加载器加载的加载器核心分开。这是必须的：解析游戏类型的类必须由 Knot 的转换型类加载器加载，打过补丁的游戏类和由 Knot 加载的 Forge 系运行时都在那里；加载器自己代码源（code source）里的类由父加载器加载，看不到它们。`build.gradle` 从同一次编译中拆出这两部分：`jar` 排除 `impl/forge/{minecraftforge,neoforge,mixin,runtime}` 和 mixin 配置，`runtimeJar` 则恰好打包这些内容，外加 `src/runtime-meta/fabric.mod.json`，后者声明了两个 `preLaunch` 驱动和这些 mixin 配置。运行时如果某个 Forge 系不在，对应的驱动什么也不做，所以一次构建就能覆盖两者。`ModAnnotationScanner` 有意留在核心 jar 里：它在准备阶段、Knot 还不存在时，用 ASM 扫描 `@Mod` 类。
+Forbric 中接触游戏的那一半，作为一个**独立的、由 Knot 加载的模块**（`forbricruntime`）分发，与由父加载器加载的加载器核心分开。这是必须的：解析游戏类型的类必须由 Knot 的转换型类加载器加载，打过补丁的游戏类和由 Knot 加载的 Forge 系运行时都在那里；加载器自己代码源（code source）里的类由父加载器加载，看不到它们。`build.gradle` 从同一次编译中拆出这两部分：`jar` 排除 `impl/forge/{neoforge,mixin,runtime}` 和 mixin 配置，`runtimeJar` 则恰好打包这些内容，外加 `src/runtime-meta/fabric.mod.json`，后者声明了 `preLaunch` 驱动和这些 mixin 配置。`ModAnnotationScanner` 有意留在核心 jar 里：它在准备阶段、Knot 还不存在时，用 ASM 扫描 `@Mod` 类。
 
 ## 目标版本
 
