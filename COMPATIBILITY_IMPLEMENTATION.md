@@ -49,7 +49,7 @@ The original staged base is a reference input, not an output built from this bra
 baseline has 24 references: capability composition handles many at runtime, while other entries remain
 accepted known defects. This list is not a claim that all 24 are harmless or repaired. New raw defects fail.
 
-The new worktree reads reference artifacts from the original checkout via `FORBRIC_OLD`; generated game
+The new worktree reads reference artifacts from the original checkout via `NEOFORBRIC_OLD`; generated game
 instances, output jars and test results must stay in the isolated worktree. Rebuild candidates into separate
 paths. Never replace the original checkout's staged base or modify a player's world to test a candidate.
 
@@ -57,9 +57,9 @@ Pending implementation and acceptance items remain open even when a smaller batc
 
 ### P0 link-gate batch
 
-- `forbric-loader/run/test-link-check.sh`: 26 assertions pass, including new-defect, missing-baseline,
+- `neoforbric-loader/run/test-link-check.sh`: 26 assertions pass, including new-defect, missing-baseline,
   missing-artifact and empty-scan negative controls, and both file/resource baseline paths.
-- `forbric-kernel-installer/run/test-link-gate.py`: the real installer child process accepts a linked fixture,
+- `neoforbric-kernel-installer/run/test-link-gate.py`: the real installer child process accepts a linked fixture,
   rejects a deliberately removed field, and rejects a merged jar with no classes. The bundled baseline is
   byte-identical to the tracked source.
 - Reference staged jars: 15,372 classes scanned, 24 known raw dangling references, zero new references.
@@ -81,7 +81,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
 - The first supported grammar is two stack-neutral static hook prefixes before an exactly identical vanilla
   body; uncertain shapes retain the previous winner and receive an explicit refusal reason.
 - Trial on the actual three game jars: zero accepted, 999 declined. Output is under
-  `/private/tmp/forbric-p1-merge-check/`; no original staged file was replaced. This is infrastructure, not
+  `/private/tmp/neoforbric-p1-merge-check/`; no original staged file was replaced. This is infrastructure, not
   evidence that any current mod's lost game behavior has been restored. The P1 behavior pilots remain open.
 
 ### P2 finding and decision core
@@ -93,7 +93,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
   preserved. Strict decisions cannot be waived by a prior interactive choice. Boot and safe late-UI
   invocation are a separate, still-pending integration batch.
 - 133 tests in 11 suites passed with no failures or skips. XML and command log are archived under
-  `forbric-kernel/build/verification/compatibility-core/` before other Gradle tests overwrite their outputs.
+  `neoforbric-kernel/build/verification/compatibility-core/` before other Gradle tests overwrite their outputs.
 
 ### P0 symmetric raw-hook attribution
 
@@ -103,7 +103,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
 - Reference run: all 1,000 historical conflict rows examined, 705 without a modelled direct hook, 9 candidate
   trades with only a lost event type observed and 14 with both event types observed. These are raw-input
   observations across six facades, not remaining defects after runtime repair or proof of live subscriptions.
-- Log: `forbric-loader/build/verification/hook-attribution/reference.log`.
+- Log: `neoforbric-loader/build/verification/hook-attribution/reference.log`.
 
 ### P2 prompt integration and P1 portal pilot
 
@@ -115,7 +115,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
   independence are covered. Both current native carrier hooks return the original shape or empty; shape
   replacement is a contract probe for a mod-rewritten hook, not an invented native event setter.
 - The integrated batch passed 114 tests in 12 suites, no failures/errors/skips. Evidence is archived under
-  `forbric-kernel/build/verification/p2-integration/`. The portal probe executes actual carrier hook bytecode
+  `neoforbric-kernel/build/verification/p2-integration/`. The portal probe executes actual carrier hook bytecode
   with isolated world/bus boundaries; a full-game portal action and actual GUI acceptance are still pending.
 
 ### P1 spawner and P2 restored-access batch
@@ -135,7 +135,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
   this batch verifies/reconciles that actual result and covers repairs that restore only the descriptor.
 - 42 tests passed with zero failures/errors/skips, including actual merged ChunkGenerator bytes, external JVM
   field writes, repeated transformation, and native spawner differential probes. Evidence:
-  `forbric-kernel/build/verification/spawn-access/`. Full-game action gates remain pending.
+  `neoforbric-kernel/build/verification/spawn-access/`. Full-game action gates remain pending.
 
 ### P0 actual bundled-artifact identity
 
@@ -145,14 +145,14 @@ Pending implementation and acceptance items remain open even when a smaller batc
   fail at extraction. Writes are staged and atomically installed where the filesystem supports it.
 - Six tests pass without skips, including an open old archive, exact-byte reuse, a valid-but-wrong cached jar,
   invalid bytes, and the actual badpackets two-level old MixinExtras fixture. Evidence:
-  `forbric-kernel/build/verification/bundled-provenance/`.
+  `neoforbric-kernel/build/verification/bundled-provenance/`.
 
 ### Early game observations (not final release acceptance)
 
 - The isolated zero-mod M1 server reached Done, ticked, saved all dimensions and exited normally.
 - A fresh merged candidate built from the installed fixed-version inputs has 24 known/zero new raw link
   defects. The installed Neo patched input's SHA-1 matches the reference staged input and its .pins file
-  records NeoForge 26.2.0.88, NFRT 2.0.18, gameJarNoRecomp. Output stays in `forbric-kernel/build/candidate/`.
+  records NeoForge 26.2.0.88, NFRT 2.0.18, gameJarNoRecomp. Output stays in `neoforbric-kernel/build/candidate/`.
 - Transfer core: 23 JVM transaction tests pass; the first real game run passed only 2/11 because final
   ItemStack/CompoundTag shapes were refused. This is unresolved and must not be counted as working Forge
   transaction writes. Final-definition dumps are being compared; no audit bypass was enabled.
@@ -180,7 +180,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
 - Static/instance fields and calls, class/interface owners, inherited members, and potential Mixin/AT/AW
   changes are distinguished. Pre-transform uncertainty is not a confirmed incompatibility.
 - 56 tests passed without skips, including 20 new solver/scanner cases and the actual staged Jade pair.
-  Evidence: `forbric-kernel/build/verification/compat-arbitration/abi-junit/` and `abi-tests.log`.
+  Evidence: `neoforbric-kernel/build/verification/compat-arbitration/abi-junit/` and `abi-tests.log`.
 - This batch covers the top-level decision. Parent-reachable nested candidates and JarJar coordinate/range
   selection still need the next discovery batch; the whole-instance arbitration requirement remains open.
 
@@ -199,12 +199,12 @@ Pending implementation and acceptance items remain open even when a smaller batc
 - 25 boot/transform tests and 23 real-engine transaction tests pass without skips. The exact final game
   definitions then passed all 11 Forge storage scenarios in a real server, which saved and exited 0. This
   resolves the earlier 2/11 shape-audit failure without bypassing the audit. Evidence:
-  `forbric-kernel/build/verification/transfer-core/`. Real public world-query routing, persistence and the
+  `neoforbric-kernel/build/verification/transfer-core/`. Real public world-query routing, persistence and the
   bridge-off negative control are still the next M33 batch; these core results do not substitute for it.
 
 ### P0 final-definition hook evidence
 
-- Opt-in `-Dforbric.definedClassEvidence=<directory>` records only successfully defined final class bytes,
+- Opt-in `-Dneoforbric.definedClassEvidence=<directory>` records only successfully defined final class bytes,
   each with SHA-256 in a unique loader-session manifest. Pre-Mixin previews, failed definitions and duplicate
   reentrant attempts do not overwrite this evidence. The setting is off during normal play.
 - LostHookAttribution accepts the manifest directory as its eighth argument. It separately counts original
@@ -213,8 +213,8 @@ Pending implementation and acceptance items remain open even when a smaller batc
   structural categories do not assert execution, cancellation or return-value fidelity; event-bus bridges,
   reflection and unmodelled paths remain explicitly unassessed.
 - Twelve class-loading/evidence tests and six report tests pass with no skips. Evidence is archived under
-  `forbric-kernel/build/verification/defined-class-evidence/` and
-  `forbric-loader/build/verification/effective-hook-evidence/`. Full-game coverage export remains pending.
+  `neoforbric-kernel/build/verification/defined-class-evidence/` and
+  `neoforbric-loader/build/verification/effective-hook-evidence/`. Full-game coverage export remains pending.
 
 ### P2 whole-instance nested candidate selection
 
@@ -240,9 +240,9 @@ Pending implementation and acceptance items remain open even when a smaller batc
   The bridge-off run failed the actual public lookup assertions as expected. All three phases had unchanged
   source/artifact/mod fingerprints. Evidence: `build/verification/m33-transfer/` and `build/m33-driver.log`.
 - True native Fabric 0.19.5, Forge 26.2-65.0.1 and NeoForge 26.2.0.88 servers passed the same fixed-seed public
-  API scenarios as Forbric using byte-identical canary jars. All three comparisons are MATCHED_PASS, with
+  API scenarios as NeoForbric using byte-identical canary jars. All three comparisons are MATCHED_PASS, with
   initialization/start/command registration exactly once, at least 20 real ticks, three world actions and
-  clean exit. Native controls contain no Forbric dependency. Evidence: `build/native-controls/results/`.
+  clean exit. Native controls contain no NeoForbric dependency. Evidence: `build/native-controls/results/`.
   These scenarios do not replace the broader client, multiplayer and sustained-operation requirements.
 
 ### Persistent checkout recovery and full integration gate
@@ -258,7 +258,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
   status. The oracle rejects missing/empty fixtures; its missing-directory negative control passed. Fixed
   portable native-control cache lookup, documented evidence tests, declared the replay transformer's dynamic
   targets, and updated the boot boundary assertion to the typed continuation check. Evidence:
-  `forbric-kernel/build/m0-candidate-driver.log` and `build/verification/recovery-{test,transferTest}/`.
+  `neoforbric-kernel/build/m0-candidate-driver.log` and `build/verification/recovery-{test,transferTest}/`.
 
 ### P1 actual caller behavior, positive and repair-off controls
 
@@ -433,11 +433,11 @@ Pending implementation and acceptance items remain open even when a smaller batc
 
 ### Native controls and attribution of the observed retained world
 
-- The three pinned native loaders and Forbric each passed the same own-ecosystem initialization and
+- The three pinned native loaders and NeoForbric each passed the same own-ecosystem initialization and
   world-action canaries. Comparisons verified identical mod hashes, seed and actions for all three pairs.
   Durable evidence: `build/verification/native-comparison/` and `build/native-controls/results/`.
 - A separate campfire probe uses the unmodified Unlit Campfire 26.2-4.1.0.0 jar, saves a real campfire,
-  stops normally, then reads the upstream static cache during JVM shutdown. Native NeoForge and Forbric
+  stops normally, then reads the upstream static cache during JVM shutdown. Native NeoForge and NeoForbric
   both retain one campfire whose level references the stopped server; both use identical mod hashes.
   No cache is modified. Evidence: `build/retention-control/comparison.json` and its per-arm manifests.
 - This reproduces the exact shortest root found in the short-run heap. It establishes one native mod
@@ -561,7 +561,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
   Unknown two-call shapes keep their bytes and receive a suspected finding; independent producers still bridge.
 - Twenty-eight tests pass without skips, including real runtime descriptor/access linkage, the original
   double-delivery negative, both cancellations, replacement consumption, nesting, exception cleanup and
-  malformed restoration shapes. Evidence: `forbric-kernel/build/verification/portal-direct-restoration/`.
+  malformed restoration shapes. Evidence: `neoforbric-kernel/build/verification/portal-direct-restoration/`.
   A fresh full-game M35 run on the integrated candidate remains required.
 
 ### P2 bounded entrypoint helper member contracts
@@ -573,7 +573,7 @@ Pending implementation and acceptance items remain open even when a smaller batc
   passed after removing only the branch-presence finding. Actual conditional missing references remain
   uncertain; fully satisfied guarded code is solved. M19's valid-selection assertion was not weakened.
 - All 74 tests across six arbitration/scanner suites pass without failures or skips. Before/after evidence:
-  `forbric-kernel/build/verification/member-reference-closure/guard-after-summary.json` and adjacent archives.
+  `neoforbric-kernel/build/verification/member-reference-closure/guard-after-summary.json` and adjacent archives.
 
 ## Continuation by Claude (2026-09-23)
 
@@ -602,7 +602,7 @@ confirmed, and ran acceptance on one merged candidate.
   field-init-preserving constructor rows that were silently dropped (LivingEntity#<init> lost
   ForgeHooks#onLivingMakeBrain); an unrecognised form stops the run.
 - Evidence manifests read the platform pins from the jars (26.2 / 26.2-65.0.1 / 26.2.0.88), record the jars the
-  build and its bytecode tests actually read (FORBRIC_OLD), and a release capture refuses a mismatch; gate-m0
+  build and its bytecode tests actually read (NEOFORBRIC_OLD), and a release capture refuses a mismatch; gate-m0
   step 0 refuses a split base. build-merged-base.sh writes merge provenance (inputs, tool sources, outputs, link
   mode); a release refuses a missing or dirty one. `gates-all.sh --release` fails on SKIP or EXPECTED_RED, and
   `evidence.py release-check` binds published jars to accepted manifests.
@@ -626,7 +626,7 @@ confirmed, and ran acceptance on one merged candidate.
   any in-range build that claims the child's ids (top-level copy, other platform artifact, Fabric JiJ); newest
   version wins inside one ecosystem; UNSAT relaxes only the conflicting pins/contracts; the search is bounded by
   work, not wall-clock; proved providers beat unproved ones; breaks/conflicts/incompatible are exclusions;
-  findings are filed under the mods involved or "forbric"; only another ecosystem's build of a loaded mod can be
+  findings are filed under the mods involved or "neoforbric"; only another ecosystem's build of a loaded mod can be
   a rescue jar; nested inventories are no longer truncated at 1,024 archives. gate-m19 has main's real nested
   shape again plus ranged and unsatisfiable strict cases.
 
@@ -638,7 +638,7 @@ confirmed, and ran acceptance on one merged candidate.
   discharged by the final verdict. MixinExtras injectors are reconciled; an unaudited MixinExtras miss is
   SUSPECTED, not CONFIRMED. Mixins and injectors the kernel removes by name are in the ledger.
 - The superseded-mixin proof exists twice on the branches; the merge keeps the evidence branch's version
-  (resolved at ForbricClassLoader's definition point, honouring the replacement's own switch).
+  (resolved at NeoForbricClassLoader's definition point, honouring the replacement's own switch).
 
 ### §4 decisions (claude/compat-ui-decisions)
 
@@ -690,7 +690,7 @@ confirmed, and ran acceptance on one merged candidate.
 
 ### Preflight on the merged candidate
 
-- `gates-all.sh -j 2 --mem-budget 6000 --skip gate-m34-soak.sh` with FORBRIC_OLD on the candidate staged root:
+- `gates-all.sh -j 2 --mem-budget 6000 --skip gate-m34-soak.sh` with NEOFORBRIC_OLD on the candidate staged root:
   all 39 other gates GREEN in 23 minutes, including M9 (97-jar strict client, zero required losses), M19
   (restored nested shape), M20 (policy outcomes), M33 (owner-first routing, chunk unload, save/reload, red
   bridge-off control) and M35 (11 cases on the merger-composed portal, exact repair-off counterexamples; the log
@@ -717,16 +717,16 @@ confirmed, and ran acceptance on one merged candidate.
 ### Final acceptance on the merged candidate
 
 - Release attempt 1 (`evidence.py run --release`, all ten roles, `gates-all.sh --release -j 2 --mem-budget 6000`,
-  evidence `forbric-kernel/build/verification/final-release/`): 39 of 40 gates GREEN, inputs unchanged. M34 was
+  evidence `neoforbric-kernel/build/verification/final-release/`): 39 of 40 gates GREEN, inputs unchanged. M34 was
   RED at 96 minutes (session 14 of the 97-jar pack): the new watchdog recorded FAIL with a thread dump after the
   client thread had not returned for 301 seconds. The dump shows a deadlock inside JourneyMap 6.0.1's own
   MapRenderer: sortRegions (a background worker) replaces the `regions` field with a new synchronized map and,
   holding the new map's lock, copies the old one (needs the old lock); loadInMemoryRegions (render thread) holds
   the old map's lock and re-reads the field, then waits for the new map's lock. Both paths are the mod's
-  bytecode (javap of journeymap/client/render/map/MapRenderer); no Forbric frame is between the two locks. It is
-  a timing race in the mod, not a Forbric defect, and it is recorded rather than waived.
+  bytecode (javap of journeymap/client/render/map/MapRenderer); no NeoForbric frame is between the two locks. It is
+  a timing race in the mod, not a NeoForbric defect, and it is recorded rather than waived.
 - Non-gate controls on the same candidate, all passing: native Fabric 0.19.5 / Forge 26.2-65.0.1 / NeoForge
-  26.2.0.88 against Forbric with byte-identical canaries (three MATCHED_PASS), Unlit Campfire retention
+  26.2.0.88 against NeoForbric with byte-identical canaries (three MATCHED_PASS), Unlit Campfire retention
   reproduced on both arms, the late-prompt UI control (explicit Continue, close refuses and saves), and the Corpse
   render control. Log: `build/claude/controls.log` in the original checkout.
 - Release attempt 2 (same command, evidence `final-release-2/`): again 39 of 40 GREEN with inputs unchanged, and
@@ -776,30 +776,30 @@ confirmed, and ran acceptance on one merged candidate.
 - Reborn is optional. Only RebornEnergyBridge/RebornEnergyAdapters name it; the boot seam detects it as a resource and
   requires and installs that half only when it is present (a missing half is a non-necessary finding). Without Reborn,
   Forge <-> NeoForge energy works and no Reborn class is loaded. The Reborn half links Reborn's API before exposing
-  anything, so a failed install leaves Forge/NeoForge energy unchanged. Energy follows `-Dforbric.transferBridge` and,
+  anything, so a failed install leaves Forge/NeoForge energy unchanged. Energy follows `-Dneoforbric.transferBridge` and,
   like the whole transfer component, is active only when Fabric's transfer API and NeoForge's transfer API are present.
-- Build: the game side compiles against `energy-5.0.0.jar` (`-Pforbric.rebornEnergy`, default
-  `forbric-kernel/run/energy-api/energy-5.0.0.jar` beside the staged tree, else in this checkout's own
-  `forbric-kernel/run/energy-api/`). `verifyRebornEnergy` runs before every game-side compile and transfer-test run and
+- Build: the game side compiles against `energy-5.0.0.jar` (`-Pneoforbric.rebornEnergy`, default
+  `neoforbric-kernel/run/energy-api/energy-5.0.0.jar` beside the staged tree, else in this checkout's own
+  `neoforbric-kernel/run/energy-api/`). `verifyRebornEnergy` runs before every game-side compile and transfer-test run and
   fails naming the file when it is absent or its SHA-256 is not `889afc438d3e4add5cfdac76517da7987a2c495e4731690a56f2c5dee775db59`
   (compileRuntimeJava's up-to-date check sees only the API, so it never caught a different same-API file). It is not
   bundled (the runtime jar check refuses `team/reborn/` entries).
 - Tests: kernel `test` 2,018 (was 2,009) and `transferTest` 61 (was 42), zero failures, errors or skips; the 19 energy
   engine tests use the real Fabric/NeoForge engines, Reborn's SimpleEnergyStorage, NeoForge's SimpleEnergyHandler and
   Forge's certified EnergyStorage, including a Reborn-free loader that records any Reborn class request. Mutation
-  proofs, one targeted test at a time: `forbric-kernel/build/verification/energy-mutations/review/RESULTS.txt` (12
+  proofs, one targeted test at a time: `neoforbric-kernel/build/verification/energy-mutations/review/RESULTS.txt` (12
   transfer, 7 unit, 3 whole-gate). The first commit's claim that every new test was red under a mutation was not
   shown for five of them; `energy-mutations/RESULTS.txt` records the correction.
 - Game: `gate-m40-energy.sh` GREEN (prepare, reload, noreborn, red bridge-off), now also covering the cached
   NeoForge/Forge views of a replaced Reborn cell, a Fabric addon's explicit Reborn provider on a NeoForge block, and a
   Forge battery loaded at 1,500/1,000 E before and after a restart and without Reborn. Evidence
-  `forbric-kernel/build/verification/m40-energy/`, driver `forbric-kernel/build/m40-driver.log`; M33 (energy-silent
+  `neoforbric-kernel/build/verification/m40-energy/`, driver `neoforbric-kernel/build/m40-driver.log`; M33 (energy-silent
   item/fluid pack) and M39 (61/61 engine tests, 13 storage scenarios and the native diagnostic proof) GREEN on the same
-  code, drivers `forbric-kernel/build/m33-driver.log` and `forbric-kernel/build/m39-driver.log`.
+  code, drivers `neoforbric-kernel/build/m33-driver.log` and `neoforbric-kernel/build/m39-driver.log`.
 - Limits: the Fabric side is Team Reborn Energy only; other Fabric energy APIs are not bridged. Directional abilities
   (canReceive/supportsInsertion) are passed on where the store has them; NeoForge's EnergyHandler has none, so its
   stores answer NeoForge's own rule (capacity > 0). No mixed real-mod energy pack was run; the gates use fixture mods.
-  The Reborn jar is not fetched by any script (it goes in forbric-kernel/run/energy-api/ or -Pforbric.rebornEnergy).
+  The Reborn jar is not fetched by any script (it goes in neoforbric-kernel/run/energy-api/ or -Pneoforbric.rebornEnergy).
 - The item and fluid Forge facades (`ForgeLegacyFacades`) now treat an endpoint invalidated mid-operation like the
   energy facade does (nothing moved, ENDPOINT_INVALIDATED, rollback required); M39 proves it on a real carrier
   (15/15) and is RED without the change.
@@ -810,7 +810,7 @@ confirmed, and ran acceptance on one merged candidate.
   40 other gates GREEN, including the new M40 energy gate. The soak was not rerun for this change.
 - The generated evidence of the 2026-09-23/24 runs (verification reports, gate logs, soak evidence without heap
   dumps, native/retention/UI/Corpse controls) is archived outside git under `build/claude/evidence-archive/` of the
-  original checkout, keeping the `forbric-kernel/build/...` layout the sections above cite. The candidate staged
+  original checkout, keeping the `neoforbric-kernel/build/...` layout the sections above cite. The candidate staged
   root used for acceptance is `build/claude/staged-root/`. A later release soak in another checkout must re-run
   `run/compat/retention-control.py` so `native-retention.json`'s evidence exists there.
 
@@ -835,7 +835,7 @@ confirmed, and ran acceptance on one merged candidate.
 - `gates-all.sh -j 2 --mem-budget 6000 --skip gate-m34-soak.sh` (candidate staged root) on this change: 39 of 40
   other gates GREEN; M31 RED on "every dungeon spawns vanilla's mob" (2 chunks). Not caused by this change (M31 has
   zero mods, so arbitration never runs) but by the assertion: the two chunks are edge chunks where a mineshaft
-  corridor's cave spider spawner stood at -168,32,-52 in vanilla (three vanilla runs) and at -168,32,-46 in Forbric
+  corridor's cave spider spawner stood at -168,32,-52 in vanilla (three vanilla runs) and at -168,32,-46 in NeoForbric
   (two runs; a third, on the reverted code, matched vanilla). Vanilla's `MineShaftCorridor` keeps a mutable
   `hasPlacedSpider` and places the spawner from whichever chunk first draws a spot inside itself, so the position
   follows the worker pool; the mob does not. `world-parity.py` now compares spawner mobs only where both worlds
@@ -853,28 +853,28 @@ confirmed, and ran acceptance on one merged candidate.
   that name no member and steer nothing. They stay in the arbitration count and are no longer player findings;
   hard ones still are (same commit).
 - Full-game hook census: exported from an M9 client session (97 jars, world entered and left, GREEN) with
-  -Dforbric.definedClassEvidence, 25,566 defined classes. Conflict rows 1,004 (710 without a modelled direct hook);
+  -Dneoforbric.definedClassEvidence, 25,566 defined classes. Conflict rows 1,004 (710 without a modelled direct hook);
   conflict-row hooks VIA_DEFINED_HELPER 8, VIA_KERNEL_BRIDGE 32, OBSERVED_WITHOUT_HOOK 297, UNOBSERVED 6. The
   export found a tool gap: forwards written as method references (ForgeEventFactory::onPreClientTick) were
   counted as residual loss; EffectiveHookEvidence now reads lambda implementation handles (3d167fc, 4 rows moved).
-  Evidence and input hashes: `forbric-kernel/build/verification/full-game-hook-census/SUMMARY.md`.
-- General event-chain validator: `-Dforbric.eventChainAudit` wraps NeoForge's dispatch loop and MinecraftForge's
+  Evidence and input hashes: `neoforbric-kernel/build/verification/full-game-hook-census/SUMMARY.md`.
+- General event-chain validator: `-Dneoforbric.eventChainAudit` wraps NeoForge's dispatch loop and MinecraftForge's
   post/fire and checks every post the kernel makes on one bus inside the other's dispatch: one forward per
   NeoForge listener (a bridge installed twice, or a one-to-one forward that sometimes posts twice, is a
   violation; a listener that always fans out is not), the inner cancel carried back, no failure inside. Posts by
   mod or game code inside a dispatch are incidental and not judged. Gate M41: the 97-mod client forwards 27
   required bridges exactly once with 0 violations; a MinecraftForge veto on a NeoForge entity join is carried back
-  and keeps the entity out; with -Dforbric.unifiedEvents=off there is no forward and no veto. Commit 4a55248.
+  and keeps the entity out; with -Dneoforbric.unifiedEvents=off there is no forward and no veto. Commit 4a55248.
   Not covered: call-site composites (portal, spawner, loot, fuel, tooltips) and result fields other than cancel.
 - JourneyMap on native NeoForge: official NeoForge 26.2.0.88 client (installer SHA-1 3b11639b…, FancyModLoader
   11.0.16), JourneyMap 6.0.1 and a driver mod teleporting every 5 s across the soak's six probes: the JVM reported
   a Java-level deadlock after ~36 minutes (teleport 426) between MapRenderer.sortRegions:235 and
-  loadInMemoryRegions:199 on the two SynchronizedSortedMap instances, the same frames as Forbric's M34 dumps with
+  loadInMemoryRegions:199 on the two SynchronizedSortedMap instances, the same frames as NeoForbric's M34 dumps with
   the threads' roles swapped. The full-pack M34 RED is JourneyMap's own bug. Evidence:
-  `forbric-kernel/build/journeymap-native/evidence/RESULT.md`.
+  `neoforbric-kernel/build/journeymap-native/evidence/RESULT.md`.
 
-- Windows acceptance (the player's Windows 11 machine, push-and-run, 2026-09-24). The machine's only Forbric
-  version holds the player's world, so the run used an isolated copy (`C:\ForbricAccept\mc`: vanilla files copied
+- Windows acceptance (the player's Windows 11 machine, push-and-run, 2026-09-24). The machine's only NeoForbric
+  version holds the player's world, so the run used an isolated copy (`C:\NeoForbricAccept\mc`: vanilla files copied
   read-only from .minecraft, the current installer run ON Windows with the candidate artifacts, removed
   afterwards; the player's version was not touched). A profile generated on the Mac is not valid there: the
   installer writes the host's path separator and native libraries.
@@ -893,7 +893,7 @@ confirmed, and ran acceptance on one merged candidate.
     Mob.checkSpawnRules/checkSpawnObstruction in BaseSpawner (NeoForge replaced both calls with
     EventHooks.checkSpawnPositionSpawner) and apoli-legacy's preventAvianSleep in ServerPlayer. They need the
     vanilla call shape restored inside NeoForge's version and are left open. (Closed in "Popular pack under STRICT".)
-  Evidence: `forbric-kernel/build/compat/win-accept-97c/`, `win-accept-popular/`, `win-accept-97b/` (the crash).
+  Evidence: `neoforbric-kernel/build/compat/win-accept-97c/`, `win-accept-popular/`, `win-accept-97b/` (the crash).
 - Regression sweep on all of the above (HEAD d6806a3, candidate staged root): `gates-all.sh -j 2 --mem-budget 6000
   --skip gate-m34-soak.sh`, all 41 other gates GREEN, including the new M41 and M31 with its spawner comparison.
   Kernel test 2049, zero failures or skips.
@@ -908,7 +908,7 @@ exposed four more walls behind them; all seven are closed and the server now sta
   (MixinRetarget R3) saw two candidates because the name also resolved Player.startSleepInBed, which ServerPlayer
   overrides. Mixin injects into the target's own method, so an own match now wins, and a lambda of the other
   static-ness is never a candidate. The same rule now also moves fabric-api's sleep redirect, so M37's negative
-  control switches both repairs off (-Dforbric.mixinRetarget=off). Commits 696ea11, 88dff5a.
+  control switches both repairs off (-Dneoforbric.mixinRetarget=off). Commits 696ea11, 88dff5a.
 - architectury `MixinBaseSpawner` and `MixinNaturalSpawner` (@Redirect on Mob.checkSpawnRules /
   checkSpawnObstruction): NeoForge replaced that vanilla pair with one EventHooks call in BaseSpawner.serverTick,
   NaturalSpawner (natural and chunk-generation spawns) and SpawnUtil — the only three classes where vanilla's calls
@@ -932,7 +932,7 @@ exposed four more walls behind them; all seven are closed and the server now sta
   itself then threw ClassCastException in BlockEntityTypeAddBlocksEvent for every mod using it (tofucraft), and
   its biome/structure modifier re-sync would have too. The runtime jars' declared configs now join the
   Forge-family list. Commit 6b957ba.
-- Not Forbric: tofucraft's loot tables name `tofucraft:soymilk_cocoa` and similar, but the mod registers
+- Not NeoForbric: tofucraft's loot tables name `tofucraft:soymilk_cocoa` and similar, but the mod registers
   `soymilk_cocoa_bottle`; those two tables fail to parse on any loader.
 - The popular-pack server after all of the above: Done, 120 s of ticking, clean stop, 0 confirmed required losses;
   the ClassCastException lines went from 4 to 0. Kernel test 2066, zero failures or skips.
@@ -988,8 +988,8 @@ nothing read their result. (Buckets were fine: the static reading that predicted
   first, then supplier; a merge repair, not a coremod); BiomeInfoRebaseInjector (NeoForge's pass starts from the
   biome's current climate/effects, so a fabric-biome-api weather change survives the view) and BiomeLateWriteInjector
   (a climate/effects replaced after the pass wins, as on Fabric — lithostitched-fabric's replace_* do that).
-- Switches: `-Dforbric.coremodParity=off` (everything above), and per part `forbric.flowerPotRepair`,
-  `biomeModifiedView`, `structureModifiedView`, `finalizeSpawnRedirect`, `liquidBlockFluid`; `forbric.biomeRebase`
+- Switches: `-Dneoforbric.coremodParity=off` (everything above), and per part `neoforbric.flowerPotRepair`,
+  `biomeModifiedView`, `structureModifiedView`, `finalizeSpawnRedirect`, `liquidBlockFluid`; `neoforbric.biomeRebase`
   is a diagnostic control for M42 only.
 - Gate M42 (canary/coremod-parity, 22 cases): vanilla/NeoForge/addPlant pots and pick-block, NeoForge's getFullPot,
   the liquid getter, a counting probe mob through EntityType.spawn and /summon (one finalization with MinecraftForge's
@@ -1035,7 +1035,7 @@ condition.
   gives NeoForge's `CommonHooks.lootPoolsCodec` MinecraftForge's `LootPool.CONDITIONAL_CODEC` as its element codec,
   inside NeoForge's own conditional wrapper — a false pool becomes an empty pool in place, as natively; neoforge and
   fabric conditions are judged first and unchanged. Like the kernel's other condition keys, `forge:condition` is
-  judged for every mod's data. `-Dforbric.forgePoolConditions=off` is read at launch.
+  judged for every mod's data. `-Dneoforbric.forgePoolConditions=off` is read at launch.
 - Gate M43 (canary/break-and-loot, 15 cases, the unmodified fabric-events-interaction-v0 modules): breaking in
   survival, a chest, creative, inside an AFTER listener, breaking air (no AFTER), a Fabric veto, a NeoForge cancel;
   loot pools with forge:condition false/true, neoforge:conditions never, both true, and a code-built pool kept,
@@ -1135,7 +1135,7 @@ them turned up a loss every player had.
   enchantments, lore, attribute modifiers or durability. The tail now builds them once (`KernelNeoTooltips.init`); the
   registration event goes to each mod on its own instead of through `ModLoader.postEvent` (`NeoTooltipAppendersInjector`).
   `NeoPostRegisterTailCensusTest` pins every step NeoForge takes after its RegisterEvent loop to one the kernel names.
-  M51 renders tooltips on a dedicated server; with `-Dforbric.neoTooltipAppenders=off` exactly the vanilla and NeoForge
+  M51 renders tooltips on a dedicated server; with `-Dneoforbric.neoTooltipAppenders=off` exactly the vanilla and NeoForge
   cases fail. M9 now draws one advanced tooltip in the world on the 97-mod client (lore, attributes, durability).
 - Fabric's component tooltip providers (1936ff3, M51): fabric-item-api's five tooltip injectors thread one `@Share`
   through vanilla's single body; the retarget had put three into a renamed body nothing calls and one onto the tail,
@@ -1159,7 +1159,7 @@ them turned up a loss every player had.
   (16bbe34, gate M37). NeoForge put a `List.isEmpty` guard before vanilla's glider-slot choice, so custom flight with no
   glider item never reached `EntityElytraEvents.CUSTOM(entity, true)` — no per-tick wear or fuel, and the glide game
   event twice as often. `FabricEntityMixinAnchors` moves the tick onto the guard when it is proven to be the only way to
-  the slot choice. M37's `glide-tick` fails alone with `-Dforbric.fabricElytraTickAnchor=off`; a real elytra is the control.
+  the slot choice. M37's `glide-tick` fails alone with `-Dneoforbric.fabricElytraTickAnchor=off`; a real elytra is the control.
 - Sleeping direction (5e75f87, M37): `MODIFY_SLEEPING_DIRECTION` wrapped `BedBlock.getBedOrientation`, which NeoForge's
   `LivingEntity.getBedOrientation` no longer calls; it now modifies that method's answer whenever there is a sleeping
   position. Both new M37 cases (a turned bed, a stone spot) fail with the anchors off.
@@ -1169,7 +1169,7 @@ them turned up a loss every player had.
   it fails only with the rebind off.
 - fabric-particles' ground block on sprint and landing dust (b14f149, gate M53): an argument-blind `@At(NEW)` naming
   vanilla's constructor moves to the one construction NeoForge widened (`MixinAtWidenedCall`, depth-paired;
-  `-Dforbric.mixinAtWidenNew=off`); MixinFit judges it the same way and names both constructors when it does not fit.
+  `-Dneoforbric.mixinAtWidenNew=off`); MixinFit judges it the same way and names both constructors when it does not fit.
 - An adversarial review of these seven commits (four readers, four verifiers; 10 findings, all confirmed, none a
   crash) was closed in b17d0eb: mod-bus events the kernel delivers per container now go phase by phase as
   `ModLoader.postEvent` does (an earlier mod's LOWEST tooltip appender registered before a later mod's HIGHEST); the
@@ -1201,7 +1201,7 @@ them turned up a loss every player had.
   `shouldSpreadLiquid`, so on NeoForge a mod's rule fires when a block next to the liquid changes and never when the
   liquid is placed. Both registries walk the neighbours in vanilla's order and try every rule at one neighbour before
   the next, so on MinecraftForge a mod's rule above beats vanilla's water to the east.
-- `FluidInteractionsInjector` (`-Dforbric.fluidInteractions=off` puts the neuter back) makes each merged entry point
+- `FluidInteractionsInjector` (`-Dneoforbric.fluidInteractions=off` puts the neuter back) makes each merged entry point
   run what its own family runs there. `onPlace` stays as merged and asks MinecraftForge's registry whole (no longer
   neutered): vanilla's rules and MinecraftForge mods', in MinecraftForge's order, which is also NeoForge's placement (a
   fluid that is no MinecraftForge mod's gets its MinecraftForge type from its fluid tags, as vanilla decides).
@@ -1267,7 +1267,7 @@ them turned up a loss every player had.
   check makes that test fail. The census through `unfitMixins` over the real `carpet.mixins.json` reports nothing
   with the adapters on and both stale rows with them off. A/B, kernel e0aa078c (a79061ff): 14/14 probe results equal
   native Fabric's. The control kernel 67aede69 (699c8214) gets 10/14, differing exactly on clear_main, the cancelled
-  bed (also 3 s later) and the cancelled TNT. With `-Dforbric.carpetMixins=off` it is 5/14. The Carpet gate grew from
+  bed (also 3 s later) and the cancelled TNT. With `-Dneoforbric.carpetMixins=off` it is 5/14. The Carpet gate grew from
   22 to 27 checks: a direct `Level.setBlock` under `impendingFillSkipUpdates` for the redirect, which nothing
   differentiated before; a script emptying a hand; the cancelled bed; the cancelled unstable TNT; and the native swap
   veto now expects one Scarpet event. Its baseline fails exactly 16 Carpet checks and 0 base-fluid ones, and

@@ -30,7 +30,7 @@ __pycache__/
 # the whole project depends on.
 /FML/
 # fabric-loader/ is where bootstrap.sh clones the substrate: upstream's code at an upstream tag plus
-# forbric-loader/patches/. Deliberately NOT vendored, so its provenance stays inspectable.
+# neoforbric-loader/patches/. Deliberately NOT vendored, so its provenance stays inspectable.
 /fabric-loader/
 
 # ---- Test-instance runtime state ----
@@ -38,7 +38,7 @@ logs/
 saves/
 world/
 # ...but not a source package that happens to be called world. `world/` has no leading
-# slash, so it matches at ANY depth, and it was swallowing forbric-loader's
+# slash, so it matches at ANY depth, and it was swallowing neoforbric-loader's
 # src/test/java/net/minecraft/world/** stand-ins — three files that were therefore never
 # committed, so a fresh clone failed `./gradlew build` on missing net.minecraft.world
 # classes. Same shape as the `config/` exception below.
@@ -51,7 +51,7 @@ resourcepacks/
 defaultconfigs/
 quickPlay/
 downloads/
-.forbric-kernel/
+.neoforbric-kernel/
 .fabric/
 .cache/
 .physics_mod_cache/
@@ -81,4 +81,4 @@ CLAUDE.md
 # Two empty .lck/.part files from an interrupted wrapper download, tracked here for months.
 .gradle-local/
 # Generated nested arbitration gate instance; its inputs are declared by gate-m19, not source files.
-/forbric-kernel/run/server-nesteddupe/
+/neoforbric-kernel/run/server-nesteddupe/

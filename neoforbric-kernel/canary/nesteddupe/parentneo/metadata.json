@@ -1,0 +1,10 @@
+{
+  "jars": [
+    {
+      "identifier": { "group": "neoforbric.nestlib", "artifact": "neoforbricnestlib-neo" },
+      "version": { "range": "[1.0.0,)", "artifactVersion": "1.0.0" },
+      "path": "META-INF/jarjar/neoforbricnestlib-neo.jar",
+      "isObfuscated": false
+    }
+  ]
+}

@@ -20,7 +20,7 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-KERNEL = ROOT / 'forbric-kernel'
+KERNEL = ROOT / 'neoforbric-kernel'
 STATE = KERNEL / '.dev'
 MC_VERSION = '26.2'
 API_PINS = (
@@ -36,17 +36,17 @@ STAGED_FILES = ('neoforge-base/patched-mc-neoforge-26.2.jar', 'neoforge-runtime/
                 # Also only read by tests: the pins that tie the NeoForge side to this base,
                 # and the canary mod (see CANARIES).
                 'neoforge-patched/patched-mc-neoforge-26.2.jar.pins',
-                'neoforge-runtime/forbricneolive.jar')
-# forbric-loader/run/build-testmods.sh's canary mod, built the same way into the stage: (sources, jar, javac
-# --release, the staged game jars it compiles against). Its sources go beside it, as in forbric-loader/run/,
+                'neoforge-runtime/neoforbricneolive.jar')
+# neoforbric-loader/run/build-testmods.sh's canary mod, built the same way into the stage: (sources, jar, javac
+# --release, the staged game jars it compiles against). Its sources go beside it, as in neoforbric-loader/run/,
 # because the tests check the packaged data against the source it was built from.
-CANARY_SOURCES = ROOT / 'forbric-loader' / 'run'
+CANARY_SOURCES = ROOT / 'neoforbric-loader' / 'run'
 CANARIES = (
-    ('livemod-src-neoforge', 'neoforge-runtime/forbricneolive.jar', '21',
+    ('livemod-src-neoforge', 'neoforge-runtime/neoforbricneolive.jar', '21',
      ('neoforge-runtime/neoforge-runtime.jar', 'neoforge-patched/patched-mc-neoforge-26.2.jar')),
 )
 # What build-testmods.sh packages besides classes.
-CANARY_RESOURCES = ('META-INF', 'forbriclive.mixins.json', 'data', 'assets')
+CANARY_RESOURCES = ('META-INF', 'neoforbriclive.mixins.json', 'data', 'assets')
 CONSOLE_PINS = (
     ('jline-reader', '26333a275de502adf1dd9e6ea50aa0b4021412c71490df9ed5e88a648886ee89'),
     ('jline-terminal', 'c0f5d70901255da66a94e59778b265d19f9308342578e34c88fc92d1b0c65fef'),
@@ -118,7 +118,7 @@ def fetch(url, target, expected=None, algorithm='sha1', size=None, cache=None):
             raise RuntimeError(f'local cache changed while copying: {cache}')
         temporary.replace(target)
         return
-    request = urllib.request.Request(url, headers={'User-Agent': 'Forbric-dev/1.0'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'NeoForbric-dev/1.0'})
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as stream:
@@ -235,7 +235,7 @@ def stage_assets(mc, metadata):
 
 
 def java_bin(requested=None):
-    requested = requested or os.environ.get('FORBRIC_JAVA')
+    requested = requested or os.environ.get('NEOFORBRIC_JAVA')
     if requested:
         path = Path(requested).expanduser()
         if path.is_dir():
@@ -256,7 +256,7 @@ def java_environment(java, minimum=25):
     home = Path(values['java.home'])
     if not (home / 'bin' / ('javac.exe' if os.name == 'nt' else 'javac')).is_file():
         raise RuntimeError(f'a full JDK is required, not a JRE: {home}')
-    return dict(os.environ, JAVA_HOME=str(home), FORBRIC_DEV_ARCH=values['os.arch'])
+    return dict(os.environ, JAVA_HOME=str(home), NEOFORBRIC_DEV_ARCH=values['os.arch'])
 
 
 def gradle(module, arguments, env, capture=False):
@@ -272,8 +272,8 @@ def gradle(module, arguments, env, capture=False):
 def kernel_libraries(env, mc, stage):
     """sponge-mixin and ASM as the kernel resolves them, which a vanilla Minecraft tree does not have."""
     # The kernel's prepareDev task hands its classpath over rather than have this start a second build of itself.
-    classpath = env.get('FORBRIC_KERNEL_CLASSPATH') or (gradle(
-        'forbric-kernel', ['-q', 'printBootClasspath'] + build_properties(mc, stage), env, capture=True).strip().splitlines() or [''])[-1]
+    classpath = env.get('NEOFORBRIC_KERNEL_CLASSPATH') or (gradle(
+        'neoforbric-kernel', ['-q', 'printBootClasspath'] + build_properties(mc, stage), env, capture=True).strip().splitlines() or [''])[-1]
     jars = [Path(p) for p in classpath.split(os.pathsep) if p.endswith('.jar')]
     chosen = [p for p in jars if p.name.startswith(('sponge-mixin-', 'asm-'))]
     for prefix in ('sponge-mixin-', 'asm-tree-'):
@@ -293,7 +293,7 @@ def stage_canaries(stage, libraries, java_home, sources=CANARY_SOURCES):
         shutil.copytree(sources / source, tree)
         target = stage / output
         target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix='forbric-canary-') as scratch:
+        with tempfile.TemporaryDirectory(prefix='neoforbric-canary-') as scratch:
             classes = Path(scratch) / 'classes'
             classpath = os.pathsep.join(str(p) for p in [stage / jar_path for jar_path in game] + list(libraries))
             subprocess.run([javac, '--release', release, '-proc:none', '-cp', classpath, '-d', str(classes)]
@@ -312,7 +312,7 @@ def stage_canaries(stage, libraries, java_home, sources=CANARY_SOURCES):
 
 def options(args, arch=None):
     mc = Path(args.mc_dir or os.environ.get('MC_DIR') or STATE / 'minecraft').expanduser().resolve()
-    old = Path(args.staged or os.environ.get('FORBRIC_OLD') or STATE / 'staged').expanduser().resolve()
+    old = Path(args.staged or os.environ.get('NEOFORBRIC_OLD') or STATE / 'staged').expanduser().resolve()
     instance = Path(args.instance or os.environ.get('RUNDIR') or STATE / ('client' if args.command == 'client' else 'server')).expanduser().resolve()
     arch = arch or platform.machine()
     arch = {'aarch64': 'arm64', 'amd64': 'x86_64'}.get(arch.lower(), arch.lower())
@@ -322,22 +322,22 @@ def options(args, arch=None):
 
 
 def build_properties(mc, stage):
-    return [f'-Pforbric.stagedRoot={stage}', f'-Pforbric.mcLibraries={mc / "libraries"}',
-            f'-Pforbric.fabricApi={STATE / "api" / API_PINS[0][0]}',
-            f'-Pforbric.rebornEnergy={STATE / "api" / API_PINS[1][0]}']
+    return [f'-Pneoforbric.stagedRoot={stage}', f'-Pneoforbric.mcLibraries={mc / "libraries"}',
+            f'-Pneoforbric.fabricApi={STATE / "api" / API_PINS[0][0]}',
+            f'-Pneoforbric.rebornEnergy={STATE / "api" / API_PINS[1][0]}']
 
 
 def prepare(args, java, env):
-    mc, stage, _, natives = options(args, env['FORBRIC_DEV_ARCH'])
-    gradle('forbric-kernel-installer', ['devToolsJar'], env)
-    tools = ROOT / 'forbric-kernel-installer/build/libs/forbric-dev-tools.jar'
+    mc, stage, _, natives = options(args, env['NEOFORBRIC_DEV_ARCH'])
+    gradle('neoforbric-kernel-installer', ['devToolsJar'], env)
+    tools = ROOT / 'neoforbric-kernel-installer/build/libs/neoforbric-dev-tools.jar'
     subprocess.run([java, '-jar', str(tools), str(mc), str(stage), java], cwd=ROOT, env=env, check=True)
-    stage_minecraft(mc, natives, env['FORBRIC_DEV_ARCH'], assets=not getattr(args, 'no_assets', False))
+    stage_minecraft(mc, natives, env['NEOFORBRIC_DEV_ARCH'], assets=not getattr(args, 'no_assets', False))
     for name, url, sha in API_PINS:
         fetch(url, STATE / 'api' / name, sha, 'sha256')
     metadata = json.loads((mc / f'versions/{MC_VERSION}/{MC_VERSION}.json').read_text())
     game_libraries = [confined(mc / 'libraries', entry['path'])
-                      for entry in libraries(metadata, arch=env['FORBRIC_DEV_ARCH']) if entry['path'].endswith('.jar')]
+                      for entry in libraries(metadata, arch=env['NEOFORBRIC_DEV_ARCH']) if entry['path'].endswith('.jar')]
     stage_canaries(stage, game_libraries + kernel_libraries(env, mc, stage), env['JAVA_HOME'])
     print('[dev] Prepared. Launch with python3 tools/dev.py client (Windows: py tools/dev.py client).', flush=True)
 
@@ -378,12 +378,12 @@ def launch_arguments(side, info, mc, stage, instance, natives, jvm=(), game=(), 
         raise RuntimeError('missing Minecraft libraries; run prepare: ' + ', '.join(missing[:3]))
     # The dedicated console uses jline, absent from some version metadata.
     owned += [str(p) for p in sorted((mc / 'libraries/org/jline').glob('**/jline-*-3.25.1.jar')) if str(p) not in owned]
-    boot = os.environ.get('FORBRIC_BOOT_JAR', info['bootJar'])
+    boot = os.environ.get('NEOFORBRIC_BOOT_JAR', info['bootJar'])
     with zipfile.ZipFile(boot) as archive:
-        if 'META-INF/jars/forbric-kernel-runtime.jar' not in archive.namelist():
+        if 'META-INF/jars/neoforbric-kernel-runtime.jar' not in archive.namelist():
             raise RuntimeError('refusing to launch a boot-only kernel jar; run prepare and rebuild')
     merged = stage / STAGED_FILES[0]
-    metadata_jar = merged.parent / 'forbric-game-metadata.jar'
+    metadata_jar = merged.parent / 'neoforbric-game-metadata.jar'
     with zipfile.ZipFile(merged) as archive:
         version = archive.read('version.json')
     # System-classloader consumers need metadata, but must never see game bytecode on the parent classpath.
@@ -393,16 +393,16 @@ def launch_arguments(side, info, mc, stage, instance, natives, jvm=(), game=(), 
     args = ([] if side == 'server' or system != 'osx' else ['-XstartOnFirstThread'])
     args += [f'-Djava.library.path={natives}',
              '-Djava.awt.headless=true'] if side == 'server' else [f'-Djava.library.path={natives}']
-    args += [f'-Dforbric.compatibilityPolicy={os.environ.get("FORBRIC_COMPAT_POLICY", "strict")}',
-             f'-Dforbric.dependencyDialog={os.environ.get("FORBRIC_DEP_DIALOG", "off")}']
-    args += list(jvm) + ['-cp', cp, 'net.forbric.kernel.boot.Kernel' + side.title() + 'Launch',
+    args += [f'-Dneoforbric.compatibilityPolicy={os.environ.get("NEOFORBRIC_COMPAT_POLICY", "strict")}',
+             f'-Dneoforbric.dependencyDialog={os.environ.get("NEOFORBRIC_DEP_DIALOG", "off")}']
+    args += list(jvm) + ['-cp', cp, 'net.neoforbric.kernel.boot.Kernel' + side.title() + 'Launch',
                         '--gameJar', str(stage / STAGED_FILES[0]),
                         '--runtimeJar', pathsep.join([str(stage / STAGED_FILES[2]), str(stage / STAGED_FILES[3])]),
                         '--libraryPath', pathsep.join(owned), '--', '--gameDir', str(instance)]
     if side == 'client':
-        args += ['--version', '26.2-forbric-dev', '--assetsDir', str(mc / 'assets'),
+        args += ['--version', '26.2-neoforbric-dev', '--assetsDir', str(mc / 'assets'),
                  '--assetIndex', metadata['assetIndex']['id'], '--accessToken', '0',
-                 '--username', 'ForbricDev', '--uuid', '00000000000000000000000000000000',
+                 '--username', 'NeoForbricDev', '--uuid', '00000000000000000000000000000000',
                  '--userType', 'legacy', '--versionType', 'release']
     else:
         args += ['--nogui']
@@ -422,7 +422,7 @@ def java_command(java, argument_file, arguments, windows=None, launcher=None):
         return [java, '@' + str(argument_file)]
     # Both argv and @files pass through Windows Java's native codepage. Keep its command ASCII:
     # URL-encoded manifest classpaths load the real jars; UTF-8 JSON carries application arguments.
-    launcher = Path(launcher or ROOT / 'forbric-kernel-installer/build/libs/forbric-dev-tools.jar')
+    launcher = Path(launcher or ROOT / 'neoforbric-kernel-installer/build/libs/neoforbric-dev-tools.jar')
     if not launcher.exists():
         raise RuntimeError('Unicode Windows launch needs the development tools jar; run prepare first')
     cp_index = arguments.index('-cp')
@@ -432,9 +432,9 @@ def java_command(java, argument_file, arguments, windows=None, launcher=None):
             vm_flags.append(value)
         elif value.startswith('-Djava.library.path='):
             source = Path(value.split('=', 1)[1])
-            destination = argument_file.parent / '.forbric-natives'
+            destination = argument_file.parent / '.neoforbric-natives'
             shutil.copytree(source, destination, dirs_exist_ok=True)
-            vm_flags.append('-Djava.library.path=.forbric-natives')
+            vm_flags.append('-Djava.library.path=.neoforbric-natives')
         elif value.startswith('-D') and '=' in value:
             key, setting = value[2:].split('=', 1)
             properties[key] = setting
@@ -449,29 +449,29 @@ def java_command(java, argument_file, arguments, windows=None, launcher=None):
         lines.append(' ' + attribute[:71])
         attribute = attribute[71:]
     manifest = 'Manifest-Version: 1.0\r\n' + '\r\n'.join(lines) + '\r\n\r\n'
-    classpath_jar = argument_file.parent / '.forbric-classpath.jar'
+    classpath_jar = argument_file.parent / '.neoforbric-classpath.jar'
     with zipfile.ZipFile(classpath_jar, 'w') as archive:
         archive.writestr('META-INF/MANIFEST.MF', manifest)
-    configuration = argument_file.parent / '.forbric-launch.json'
+    configuration = argument_file.parent / '.neoforbric-launch.json'
     configuration.write_text(json.dumps(dict(mainClass=arguments[cp_index + 2],
                                              arguments=list(arguments[cp_index + 3:]),
                                              properties=properties)), encoding='utf-8')
     return [java] + vm_flags + ['-cp', classpath_jar.name,
-                              'net.forbric.installer.kernel.DevLaunch', configuration.name]
+                              'net.neoforbric.installer.kernel.DevLaunch', configuration.name]
 
 
 def launch(args, java, env):
-    mc, stage, instance, natives = options(args, env['FORBRIC_DEV_ARCH'])
+    mc, stage, instance, natives = options(args, env['NEOFORBRIC_DEV_ARCH'])
     if args.command == 'client' and args.no_assets:
         raise RuntimeError('the client needs Minecraft assets; drop --no-assets')
     need_assets = args.command == 'client' or not (args.no_assets or assets_skipped(mc))
-    if not ready(mc, stage, natives, env['FORBRIC_DEV_ARCH'], assets=need_assets):
+    if not ready(mc, stage, natives, env['NEOFORBRIC_DEV_ARCH'], assets=need_assets):
         if args.no_build:
             raise RuntimeError('development inputs missing; run prepareDev first')
         prepare(args, java, env)
     info_path = STATE / 'launch-build.json'
     if not args.no_build:
-        gradle('forbric-kernel', ['jar', 'writeDevClasspath'] + build_properties(mc, stage), env)
+        gradle('neoforbric-kernel', ['jar', 'writeDevClasspath'] + build_properties(mc, stage), env)
     info = json.loads(info_path.read_text())
     instance.mkdir(parents=True, exist_ok=True)
     (instance / 'mods').mkdir(exist_ok=True)
@@ -488,16 +488,16 @@ def launch(args, java, env):
             if not args.accept_eula:
                 raise RuntimeError('server requires Minecraft EULA acceptance: use --accept-eula or set eula=true in ' + str(eula))
             eula.write_text('eula=true\n')
-    argument_file = instance / '.forbric-java.args'
+    argument_file = instance / '.neoforbric-java.args'
     command = launch_arguments(args.command, info, mc, stage, instance, natives, args.jvm, args.game,
-                               arch=env['FORBRIC_DEV_ARCH'])
+                               arch=env['NEOFORBRIC_DEV_ARCH'])
     write_argument_file(argument_file, command)
     if args.dry_run:
         print(json.dumps([java] + command, indent=2))
         return
     print(f'[dev] {args.command}: {instance}', flush=True)
     if os.name == 'nt' and any(not value.isascii() for value in [str(argument_file)] + command):
-        gradle('forbric-kernel-installer', ['devToolsJar'], env)
+        gradle('neoforbric-kernel-installer', ['devToolsJar'], env)
     subprocess.run(java_command(java, argument_file, command), cwd=instance, env=env, check=True)
 
 
@@ -506,7 +506,7 @@ def doctor(args):
     failures, arch = [], None
     try:
         java = java_bin(args.java)
-        arch = java_environment(java).get('FORBRIC_DEV_ARCH')
+        arch = java_environment(java).get('NEOFORBRIC_DEV_ARCH')
         mc, stage, instance, natives = options(args, arch)
         print('[dev] JDK: ' + java)
     except (OSError, subprocess.SubprocessError, RuntimeError, KeyError) as error:
@@ -535,11 +535,11 @@ def doctor(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['doctor', 'prepare', 'client', 'server', 'test', 'integration', 'gate', 'tool-test'])
-    parser.add_argument('--mc-dir', help='MC_DIR; default: isolated forbric-kernel/.dev/minecraft')
-    parser.add_argument('--staged', help='FORBRIC_OLD; directory containing run/; default: .dev/staged')
+    parser.add_argument('--mc-dir', help='MC_DIR; default: isolated neoforbric-kernel/.dev/minecraft')
+    parser.add_argument('--staged', help='NEOFORBRIC_OLD; directory containing run/; default: .dev/staged')
     parser.add_argument('--instance', help='RUNDIR; default: .dev/client or .dev/server')
     parser.add_argument('--natives', help='NATIVES_DIR; default: .dev/natives/<platform>')
-    parser.add_argument('--java', help='JDK home or java executable; FORBRIC_JAVA, JAVA_HOME, then PATH')
+    parser.add_argument('--java', help='JDK home or java executable; NEOFORBRIC_JAVA, JAVA_HOME, then PATH')
     parser.add_argument('--jvm', action='append', default=[], help='repeat --jvm=-Dkey=value')
     parser.add_argument('--accept-eula', action='store_true', help='accept https://aka.ms/MinecraftEULA for the dev server')
     parser.add_argument('--no-assets', action='store_true',
@@ -573,12 +573,12 @@ def main(argv=None):
         elif args.command in ('client', 'server'):
             launch(args, java, env)
         elif args.command == 'test':
-            gradle('forbric-kernel', ['check'], env)
+            gradle('neoforbric-kernel', ['check'], env)
         elif args.command == 'integration':
-            mc, stage, _, natives = options(args, env['FORBRIC_DEV_ARCH'])
-            if not ready(mc, stage, natives, env['FORBRIC_DEV_ARCH'], assets=not (args.no_assets or assets_skipped(mc))):
+            mc, stage, _, natives = options(args, env['NEOFORBRIC_DEV_ARCH'])
+            if not ready(mc, stage, natives, env['NEOFORBRIC_DEV_ARCH'], assets=not (args.no_assets or assets_skipped(mc))):
                 prepare(args, java, env)
-            gradle('forbric-kernel', ['cleanTest', 'cleanTransferTest', 'integrationTest'] + build_properties(mc, stage), env)
+            gradle('neoforbric-kernel', ['cleanTest', 'cleanTransferTest', 'integrationTest'] + build_properties(mc, stage), env)
         elif args.command == 'gate':
             if not re.fullmatch(r'm[0-9]+[a-z]?(?:-[a-z0-9-]+)?', args.gate):
                 raise RuntimeError('invalid gate name')
@@ -589,7 +589,7 @@ def main(argv=None):
                 raise RuntimeError('legacy gates require Bash and their documented local fixtures')
             # Legacy gates keep their own staging defaults; do not silently point them at an empty dev fixture set.
             if args.staged:
-                env['FORBRIC_OLD'] = str(Path(args.staged).resolve())
+                env['NEOFORBRIC_OLD'] = str(Path(args.staged).resolve())
             if args.mc_dir:
                 env['MC_DIR'] = str(Path(args.mc_dir).resolve())
             subprocess.run(['bash', str(gate)], cwd=ROOT, env=env, check=True)

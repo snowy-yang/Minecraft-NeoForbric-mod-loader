@@ -2,7 +2,7 @@
 """Run nightly, on the developer's Mac, what CI cannot run: the client gates (they open a macOS window), the
 gates that need third-party mod packs, and the soak.
 
-launchd starts it (com.forbric.nightly.plist; README.md beside this file says how to install it). Python
+launchd starts it (com.neoforbric.nightly.plist; README.md beside this file says how to install it). Python
 standard library only, like tools/dev.py. One night:
 
   1. fetch, and put a dedicated worktree (--work) detached at origin/main. The main checkout is only read:
@@ -28,35 +28,35 @@ import subprocess
 import sys
 import time
 
-REPO_SLUG = 'Ray-T-r/Minecraft-Forbric-mod-loader'
+REPO_SLUG = 'Ray-T-r/Minecraft-NeoForbric-mod-loader'
 STATUS_CONTEXT = 'nightly/dev-mac'
 RESULTS_BRANCH = 'ci-results'
 SOAK_GATE = 'gate-m34-soak.sh'
 SUNDAY = 6  # datetime.date.weekday()
 # Everything the gates and the staged tests read from a checkout that is not in git, found by reading
-# forbric-kernel/run/gate-m*.sh, gates-all.sh, gates-parallel.py and the tests' fixture paths. The rest of what
-# they read comes from FORBRIC_OLD (the staged game jars, the downloaded mods and canaries in
-# forbric-loader/run) and MC_DIR, which stay in the main checkout and are passed by environment instead.
+# neoforbric-kernel/run/gate-m*.sh, gates-all.sh, gates-parallel.py and the tests' fixture paths. The rest of what
+# they read comes from NEOFORBRIC_OLD (the staged game jars, the downloaded mods and canaries in
+# neoforbric-loader/run) and MC_DIR, which stay in the main checkout and are passed by environment instead.
 FIXTURES = (
     # Pack installs. The client gates get their own copy of client-merged-pack from gates-parallel.py, so no
     # gate writes through these links; the others are only read (m8 reads client-kernel/mods, the staged tests
     # read client-popular and client-kernel).
-    'forbric-kernel/run/client-merged-pack',
-    'forbric-kernel/run/client-popular',
-    'forbric-kernel/run/client-neo-pack',
-    'forbric-kernel/run/client-kernel',
+    'neoforbric-kernel/run/client-merged-pack',
+    'neoforbric-kernel/run/client-popular',
+    'neoforbric-kernel/run/client-neo-pack',
+    'neoforbric-kernel/run/client-kernel',
     # The third-party mod sets the bytecode tests read (sweep90, carpet, create-fly, ...).
-    'forbric-kernel/build/compat-inputs',
+    'neoforbric-kernel/build/compat-inputs',
     # Two more the tests read by path (GuiItemCaptureMixinAdapterTest, KernelClientHookMixinAnchorsTest,
     # CompatPluginPlatformInjectorTest). Without them the first nightly's strict run failed those tests as skipped.
-    'forbric-kernel/build/sweep80-mac',
-    'forbric-kernel/build/sweep100-mac-network',
-    # The fabric-loader substrate ./bootstrap.sh checks out (gitignored). forbric-loader compiles its sources, so the
+    'neoforbric-kernel/build/sweep80-mac',
+    'neoforbric-kernel/build/sweep100-mac-network',
+    # The fabric-loader substrate ./bootstrap.sh checks out (gitignored). neoforbric-loader compiles its sources, so the
     # installer build (gate-m17) and gate-m0's bundled-baseline check cannot run without it; the first nightly
     # reported both as failures of the code under test.
     'fabric-loader',
     # tools/dev.py's state: the pinned fabric-api and energy jars and the natives.
-    'forbric-kernel/.dev',
+    'neoforbric-kernel/.dev',
 )
 GIT = ('git',)
 GH = ('gh',)
@@ -103,7 +103,7 @@ class Night:
         self.sha, self.subject, self.ref = '', '', ''
         self.errors, self.missing_fixtures = [], []
         self.integration = Step('integration', 'python3 tools/dev.py integration')
-        self.gates = Step('gates', 'bash forbric-kernel/run/compat/gates-all.sh')
+        self.gates = Step('gates', 'bash neoforbric-kernel/run/compat/gates-all.sh')
         self.junit = ''
         self.gate_results = []
         self.logs = ''
@@ -303,7 +303,7 @@ def junit_summary(runner, work):
     if not script.is_file():
         return '_tools/junit_report.py is not in the tested commit; no JUnit totals._'
     result = runner.run(PYTHON + (script, 'summary', '--title', 'JUnit totals', '--results',
-            work / 'forbric-kernel/build/test-results', '--suites', 'test,transferTest', '--root', work),
+            work / 'neoforbric-kernel/build/test-results', '--suites', 'test,transferTest', '--root', work),
             writes=False, check=False)
     if result.returncode:
         return f'_junit_report.py summary exited {result.returncode}:_ `{result.stderr.strip()[-300:]}`'
@@ -332,7 +332,7 @@ def render_summary(night, slug=REPO_SLUG):
     a game log or a failing bytecode comparison can carry Mojang code, and never a path on the Mac."""
     verdict = 'DRY RUN' if night.dry_run else 'PASS' if night.passed else 'FAIL'
     subject = night.subject.replace('|', '\\|')
-    lines = [f'# Forbric nightly {night.date}: {verdict}', '']
+    lines = [f'# NeoForbric nightly {night.date}: {verdict}', '']
     if night.dry_run:
         lines += ['_Dry run: nothing was run, committed or pushed._', '']
     lines += ['| | |', '| --- | --- |',
@@ -352,7 +352,7 @@ def render_summary(night, slug=REPO_SLUG):
     lines += [night.junit or '_No JUnit results: the step did not run._', '']
     lines += [f'## Gates: `{night.gates.display}`', '']
     if night.gates.ran and not night.gate_results:
-        lines += ['_No `forbric-kernel/build/gates/summary.txt`: the run stopped before any gate reported._', '']
+        lines += ['_No `neoforbric-kernel/build/gates/summary.txt`: the run stopped before any gate reported._', '']
     attention = [r for r in night.gate_results if r[1] != 'GREEN']
     if attention:
         lines += [f'- `{gate}` {verdict} {rest}'.rstrip() for gate, verdict, rest in attention] + ['']
@@ -361,7 +361,7 @@ def render_summary(night, slug=REPO_SLUG):
         lines += [f'RESULT {gate} {verdict} {rest}'.rstrip() for gate, verdict, rest in night.gate_results]
         lines += ['```', '', '</details>', '']
     if night.logs:
-        lines += [f'Logs stay on the Mac, in the nightly worktree: `{night.logs}/` and `forbric-kernel/build/gates/`.', '']
+        lines += [f'Logs stay on the Mac, in the nightly worktree: `{night.logs}/` and `neoforbric-kernel/build/gates/`.', '']
     return '\n'.join(lines)
 
 
@@ -436,11 +436,11 @@ def set_status(runner, night, slug, results_url):
 def parse_arguments(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--repo', required=True, help='the main checkout; only read, apart from fetch and worktree bookkeeping')
-    parser.add_argument('--work', default=str(Path.home() / 'Documents/Forbric-nightly'),
-            help='the nightly worktree (default ~/Documents/Forbric-nightly); results go to <work>-results')
+    parser.add_argument('--work', default=str(Path.home() / 'Documents/NeoForbric-nightly'),
+            help='the nightly worktree (default ~/Documents/NeoForbric-nightly); results go to <work>-results')
     parser.add_argument('--remote', default='origin')
     parser.add_argument('--branch', default='main', help='the branch of --remote to test')
-    parser.add_argument('--forbric-old', help='FORBRIC_OLD for the tests and gates; default <repo>/forbric-loader')
+    parser.add_argument('--neoforbric-old', help='NEOFORBRIC_OLD for the tests and gates; default <repo>/neoforbric-loader')
     parser.add_argument('--mc-dir', help='MC_DIR; default $MC_DIR, else the launch scripts\' default Minecraft directory')
     parser.add_argument('--date', type=datetime.date.fromisoformat, help='the night, YYYY-MM-DD; default today')
     parser.add_argument('--soak', choices=('auto', 'always', 'never'), default='auto', help='auto: on Sundays only')
@@ -480,7 +480,7 @@ def run_night(options, runner):
     if not night.errors:
         logs = work / 'build/nightly'
         night.logs = 'build/nightly'
-        env = {'FORBRIC_OLD': str(Path(options.forbric_old).expanduser() if options.forbric_old else repo / 'forbric-loader'),
+        env = {'NEOFORBRIC_OLD': str(Path(options.neoforbric_old).expanduser() if options.neoforbric_old else repo / 'neoforbric-loader'),
                 'MC_DIR': str(Path(options.mc_dir).expanduser() if options.mc_dir
                         else Path(os.environ.get('MC_DIR') or default_minecraft_dir()))}
         runner.step(night.integration, PYTHON + ('tools/dev.py', 'integration'), work, env,
@@ -491,10 +491,10 @@ def run_night(options, runner):
         arguments = gates_arguments(night.soak, options.jobs)
         night.gates.display += ' ' + ' '.join(arguments)
         limit = options.gates_timeout_min or (360 if night.soak else 180)
-        runner.step(night.gates, BASH + ('forbric-kernel/run/compat/gates-all.sh',) + tuple(arguments), work, env,
+        runner.step(night.gates, BASH + ('neoforbric-kernel/run/compat/gates-all.sh',) + tuple(arguments), work, env,
                 limit * 60, logs / 'gates.log')
         if night.gates.ran:
-            night.gate_results = read_gate_results(work / 'forbric-kernel/build/gates/summary.txt')
+            night.gate_results = read_gate_results(work / 'neoforbric-kernel/build/gates/summary.txt')
 
     text = render_summary(night, options.slug)
     if options.dry_run:

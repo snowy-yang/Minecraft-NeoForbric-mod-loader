@@ -1,0 +1,13 @@
+modLoader="javafml"
+loaderVersion="[3,)"
+license="Apache-2.0"
+[[mods]]
+modId="neoforbrictransferneo"
+version="1.0.0"
+displayName="NeoForbric M33 NeoForge Machine"
+[[dependencies.neoforbrictransferneo]]
+modId="neoforbrictransferfabric"
+type="required"
+versionRange="[1,)"
+ordering="AFTER"
+side="BOTH"

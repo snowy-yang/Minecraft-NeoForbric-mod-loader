@@ -1,0 +1,9 @@
+modLoader="javafml"
+loaderVersion="[3,)"
+license="Apache-2.0"
+
+[[mods]]
+modId="neoforbricnestneo"
+version="1.0.0"
+displayName="NeoForbric Nested-Duplicate Canary (NeoForge parent)"
+description='''Nests the NeoForge build of neoforbricnestlib, the way a NeoForge world map nests its own xaerolib.'''

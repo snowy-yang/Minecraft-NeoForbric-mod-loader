@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricruntime",
+  "version": "0.1.0",
+  "name": "NeoForbric Runtime (NeoForge bridge)",
+  "description": "The Knot-loaded half of NeoForbric: the reflective NeoForge runtime driver that seeds the FML environment and brings up @Mod classes beside Fabric mods \u2014 packaged as a mod so Knot's transforming classloader loads it where the Mojmap game classes and the real NeoForge runtime live.",
+  "environment": "*",
+  "license": "Apache-2.0",
+  "entrypoints": {
+    "preLaunch": [
+      "net.neoforbric.loader.impl.forge.neoforge.NeoForbricNeoForgeRuntime"
+    ]
+  },
+  "mixins": [
+    "neoforbric-loader.mixins.json",
+    "neoforbric-neoforge-bridge.mixins.json"
+  ],
+  "jars": [
+    {
+      "file": "META-INF/jars/mixinextras-fabric.jar"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.0"
+  }
+}

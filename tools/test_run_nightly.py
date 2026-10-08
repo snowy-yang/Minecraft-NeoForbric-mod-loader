@@ -26,20 +26,20 @@ FAKE_DEV = r'''
 import json, os, subprocess, sys, time
 from pathlib import Path
 root = Path.cwd()
-marker = root / 'forbric-kernel/build/left-by-an-earlier-night.txt'
-entry = dict(tool='dev', argv=sys.argv[1:], cwd=str(root), FORBRIC_OLD=os.environ.get('FORBRIC_OLD'),
+marker = root / 'neoforbric-kernel/build/left-by-an-earlier-night.txt'
+entry = dict(tool='dev', argv=sys.argv[1:], cwd=str(root), NEOFORBRIC_OLD=os.environ.get('NEOFORBRIC_OLD'),
              MC_DIR=os.environ.get('MC_DIR'), stale=marker.exists(),
-             linked=os.path.islink(root / 'forbric-kernel/run/client-merged-pack'))
+             linked=os.path.islink(root / 'neoforbric-kernel/run/client-merged-pack'))
 with open(os.environ['FAKE_NIGHT_LOG'], 'a') as log:
     log.write(json.dumps(entry) + '\n')
 marker.parent.mkdir(parents=True, exist_ok=True)
 marker.write_text('x')
 for suite, count in (('test', 2), ('transferTest', 1)):
-    results = root / 'forbric-kernel/build/test-results' / suite
+    results = root / 'neoforbric-kernel/build/test-results' / suite
     results.mkdir(parents=True, exist_ok=True)
-    cases = ''.join(f'<testcase classname="net.forbric.Fake" name="case{i}"/>' for i in range(count))
-    (results / 'TEST-net.forbric.Fake.xml').write_text(
-        f'<testsuite name="net.forbric.Fake" tests="{count}" skipped="0" failures="0" errors="0">{cases}</testsuite>')
+    cases = ''.join(f'<testcase classname="net.neoforbric.Fake" name="case{i}"/>' for i in range(count))
+    (results / 'TEST-net.neoforbric.Fake.xml').write_text(
+        f'<testsuite name="net.neoforbric.Fake" tests="{count}" skipped="0" failures="0" errors="0">{cases}</testsuite>')
 if os.environ.get('FAKE_CHILD_PROOF'):
     subprocess.Popen([sys.executable, '-c', 'import sys, time; time.sleep(3); open(sys.argv[1], "w").write("alive")',
                       os.environ['FAKE_CHILD_PROOF']])
@@ -64,7 +64,7 @@ for gate in ('gate-m0.sh', 'gate-m9-client.sh', 'gate-m34-soak.sh'):
         lines.append(f'RESULT {gate} RED (exit=1)')
     else:
         lines.append(f'RESULT {gate} GREEN (exit=0)')
-out = Path('forbric-kernel/build/gates')
+out = Path('neoforbric-kernel/build/gates')
 out.mkdir(parents=True, exist_ok=True)
 (out / 'summary.txt').write_text('\n'.join(lines) + '\n')
 print('\n'.join(lines))
@@ -95,7 +95,7 @@ def remove_tree(path):
 
 class NightlyTest(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix='forbric nightly '))
+        self.root = Path(tempfile.mkdtemp(prefix='neoforbric nightly '))
         self.addCleanup(remove_tree, self.root)
         self.origin = self.root / 'origin.git'
         git('init', '--quiet', '--bare', '-b', 'main', self.origin)
@@ -103,7 +103,7 @@ class NightlyTest(unittest.TestCase):
         git('init', '--quiet', '-b', 'main', upstream)
         self.identify(upstream)
         self.put(upstream, 'tools/dev.py', FAKE_DEV)
-        self.put(upstream, 'forbric-kernel/run/compat/gates-all.sh', FAKE_GATES)
+        self.put(upstream, 'neoforbric-kernel/run/compat/gates-all.sh', FAKE_GATES)
         self.put(upstream, 'tools/junit_report.py', (ROOT / 'tools/junit_report.py').read_text(encoding='utf-8'))
         git('add', '-A', cwd=upstream)
         git('commit', '--quiet', '-m', 'first', cwd=upstream)
@@ -111,7 +111,7 @@ class NightlyTest(unittest.TestCase):
         git('push', '--quiet', 'origin', 'main', cwd=upstream)
 
         # The developer's main checkout: on a feature branch of its own, with uncommitted work and the fixtures.
-        self.repo = self.root / 'Forbric'
+        self.repo = self.root / 'NeoForbric'
         git('clone', '--quiet', self.origin, self.repo)
         self.identify(self.repo)
         git('checkout', '--quiet', '-b', 'feature', cwd=self.repo)
@@ -119,9 +119,9 @@ class NightlyTest(unittest.TestCase):
         git('add', 'feature.txt', cwd=self.repo)
         git('commit', '--quiet', '-m', 'local work', cwd=self.repo)
         self.put(self.repo, 'uncommitted.txt', 'not yet\n')
-        self.fixture = self.repo / 'forbric-kernel/run/client-merged-pack'
+        self.fixture = self.repo / 'neoforbric-kernel/run/client-merged-pack'
         self.put(self.fixture, 'options.txt', 'original\n')
-        self.put(self.repo, 'forbric-kernel/.dev/api/fabric-api.jar', 'jar')
+        self.put(self.repo, 'neoforbric-kernel/.dev/api/fabric-api.jar', 'jar')
 
         # origin/main moves on after the clone: the night must test what it fetches, not the stale ref.
         self.put(upstream, 'README.md', 'second\n')
@@ -130,7 +130,7 @@ class NightlyTest(unittest.TestCase):
         git('push', '--quiet', 'origin', 'main', cwd=upstream)
         self.tested = git('rev-parse', 'HEAD', cwd=upstream)
 
-        self.work = self.root / 'Forbric-nightly'
+        self.work = self.root / 'NeoForbric-nightly'
         self.night_log = self.root / 'night.jsonl'
         self.gh_log = self.root / 'gh.jsonl'
         fake_gh = self.put(self.root, 'fake-gh.py', FAKE_GH)
@@ -201,7 +201,7 @@ class NightlyTest(unittest.TestCase):
         self.assertEqual(self.tested, git('rev-parse', 'HEAD', cwd=self.work))
         detached = subprocess.run(['git', 'symbolic-ref', '-q', 'HEAD'], cwd=self.work, capture_output=True)
         self.assertNotEqual(0, detached.returncode, 'the nightly worktree must be detached')
-        link = self.work / 'forbric-kernel/run/client-merged-pack'
+        link = self.work / 'neoforbric-kernel/run/client-merged-pack'
         self.assertTrue(link.is_symlink())
         self.assertEqual(self.fixture.resolve(), link.resolve())
         self.assertEqual('original\n', (self.fixture / 'options.txt').read_text())
@@ -209,7 +209,7 @@ class NightlyTest(unittest.TestCase):
         [dev] = self.calls('dev')
         self.assertEqual(['integration'], dev['argv'])
         self.assertEqual(self.work.resolve(), Path(dev['cwd']).resolve())
-        self.assertEqual(str(self.repo.resolve() / 'forbric-loader'), dev['FORBRIC_OLD'])
+        self.assertEqual(str(self.repo.resolve() / 'neoforbric-loader'), dev['NEOFORBRIC_OLD'])
         self.assertEqual(str(self.root / 'minecraft'), dev['MC_DIR'])
         self.assertTrue(dev['linked'])
         [gates] = self.calls('gates')
@@ -220,7 +220,7 @@ class NightlyTest(unittest.TestCase):
         self.assertEqual(origin_before, {k: v for k, v in origin_after.items() if k != 'refs/heads/ci-results'})
         self.assertEqual('', git('--git-dir', self.origin, 'log', '-1', '--format=%P', 'ci-results'))
         summary = self.published(f'results/{SATURDAY}/summary.md')
-        self.assertIn(f'# Forbric nightly {SATURDAY}: PASS', summary)
+        self.assertIn(f'# NeoForbric nightly {SATURDAY}: PASS', summary)
         self.assertIn(self.tested[:12], summary)
         self.assertIn('second \\| with a pipe', summary)
         self.assertIn('skipped: it runs on Sundays', summary)
@@ -229,7 +229,7 @@ class NightlyTest(unittest.TestCase):
         self.assertIn(f'results/{SATURDAY}/summary.md', self.published('latest.md'))
 
         [status] = self.statuses()
-        self.assertEqual(['api', f'repos/Ray-T-r/Minecraft-Forbric-mod-loader/statuses/{self.tested}',
+        self.assertEqual(['api', f'repos/Ray-T-r/Minecraft-NeoForbric-mod-loader/statuses/{self.tested}',
                           '-f', 'state=success', '-f', 'context=nightly/dev-mac'], status[:6])
         self.assertTrue(any(a.startswith('target_url=https://github.com/') and a.endswith(f'/{SATURDAY}/summary.md')
                             for a in status))
@@ -251,11 +251,11 @@ class NightlyTest(unittest.TestCase):
 
         self.assertEqual(first, git('--git-dir', self.origin, 'log', '-1', '--format=%P', 'ci-results'))
         summary = self.published(f'results/{SUNDAY}/summary.md')
-        self.assertIn(f'# Forbric nightly {SUNDAY}: FAIL', summary)
+        self.assertIn(f'# NeoForbric nightly {SUNDAY}: FAIL', summary)
         self.assertIn('- `gate-m9-client.sh` RED (exit=1)', summary)
         self.assertIn('run: a `--release` run, nothing skipped', summary)
         self.assertIn(f'results/{SUNDAY}/summary.md', self.published('latest.md'))
-        self.assertIn(f'# Forbric nightly {SATURDAY}: PASS', self.published(f'results/{SATURDAY}/summary.md'))
+        self.assertIn(f'# NeoForbric nightly {SATURDAY}: PASS', self.published(f'results/{SATURDAY}/summary.md'))
         status = self.statuses()[-1]
         self.assertIn('state=failure', status)
         self.assertTrue(any(a.startswith('description=') and 'gate-m9-client.sh' in a for a in status), status)
@@ -297,7 +297,7 @@ class NightlyTest(unittest.TestCase):
         self.assertEqual([], self.statuses())
         for expected in ('[dry-run] git -C', 'fetch --quiet --prune origin', 'worktree add --quiet --detach',
                          'tools/dev.py integration', '--skip gate-m34-soak.sh', 'push --quiet origin ci-results',
-                         'api repos/Ray-T-r/Minecraft-Forbric-mod-loader/statuses/', '# Forbric nightly 2026-10-03: DRY RUN'):
+                         'api repos/Ray-T-r/Minecraft-NeoForbric-mod-loader/statuses/', '# NeoForbric nightly 2026-10-03: DRY RUN'):
             self.assertIn(expected, output)
 
     def test_the_main_checkout_and_folders_in_it_are_never_used_as_the_nightly_worktree(self):
@@ -326,17 +326,17 @@ class ScheduleAndSummaryTest(unittest.TestCase):
         self.assertEqual(['-j', 'auto', '--release'], nightly.gates_arguments(True, 'auto'))
 
     def test_summary_from_junit_xml_and_gate_results(self):
-        work = Path(tempfile.mkdtemp(prefix='forbric nightly summary '))
+        work = Path(tempfile.mkdtemp(prefix='neoforbric nightly summary '))
         self.addCleanup(remove_tree, work)
         (work / 'tools').mkdir()
         shutil.copy(ROOT / 'tools/junit_report.py', work / 'tools/junit_report.py')
-        results = work / 'forbric-kernel/build/test-results'
+        results = work / 'neoforbric-kernel/build/test-results'
         (results / 'test').mkdir(parents=True)
         (results / 'test/TEST-a.xml').write_text(
             '<testsuite name="a" tests="3" skipped="1" failures="1" errors="0">'
-            '<testcase classname="net.forbric.A" name="passes"/>'
-            '<testcase classname="net.forbric.A" name="breaks"><failure type="AssertionError" message="no"/></testcase>'
-            f'<testcase classname="net.forbric.A" name="waits"><skipped message="fixture absent: {work}/x.jar"/></testcase>'
+            '<testcase classname="net.neoforbric.A" name="passes"/>'
+            '<testcase classname="net.neoforbric.A" name="breaks"><failure type="AssertionError" message="no"/></testcase>'
+            f'<testcase classname="net.neoforbric.A" name="waits"><skipped message="fixture absent: {work}/x.jar"/></testcase>'
             '</testsuite>')
         gates = work / 'summary.txt'
         gates.write_text('RESULT gate-m0.sh GREEN (exit=0)\nRESULT gate-m9-client.sh RED (exit=1)\n'
@@ -349,21 +349,21 @@ class ScheduleAndSummaryTest(unittest.TestCase):
         night.gates = nightly.Step('gates', 'bash gates-all.sh', ran=True, returncode=1, seconds=1800)
         night.junit = nightly.junit_summary(nightly.Runner(False, io.StringIO()), work)
         night.gate_results = nightly.read_gate_results(gates)
-        night.missing_fixtures = ['forbric-kernel/run/client-popular']
+        night.missing_fixtures = ['neoforbric-kernel/run/client-popular']
         text = nightly.render_summary(night)
 
-        self.assertIn('# Forbric nightly 2026-10-03: FAIL', text)
+        self.assertIn('# NeoForbric nightly 2026-10-03: FAIL', text)
         self.assertIn('| integration | FAILED (exit 1) in 10 min |', text)
         self.assertIn('| gates | FAILED (exit 1) in 30 min: 1 GREEN, 1 RED, 1 SKIP |', text)
         self.assertIn('| test | 3 | 2 | 1 | 33.3 | 1 |', text)
         self.assertIn('Did not execute (no results): `transferTest`', text)
-        self.assertIn('- `test` net.forbric.A.breaks (AssertionError)', text)
+        self.assertIn('- `test` net.neoforbric.A.breaks (AssertionError)', text)
         self.assertIn('fixture absent: $ROOT/x.jar', text)
         self.assertNotIn(str(work), text)
         self.assertIn('- `gate-m9-client.sh` RED (exit=1)', text)
         self.assertIn('- `gate-m34-soak.sh` SKIP (explicit --skip)', text)
         self.assertIn('All 3 RESULT lines', text)
-        self.assertIn('`forbric-kernel/run/client-popular`', text)
+        self.assertIn('`neoforbric-kernel/run/client-popular`', text)
         self.assertEqual('integration FAILED (exit 1); gates FAILED (exit 1): 1 GREEN, 1 RED, 1 SKIP (gate-m9-client.sh)',
                          nightly.status_description(night))
 

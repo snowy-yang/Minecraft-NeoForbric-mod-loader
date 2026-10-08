@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricbrokencanary",
+  "version": "1.0.0",
+  "name": "NeoForbric Broken Canary",
+  "description": "A mod that fails on purpose, so the gate can prove the other mods still load and this one is named.",
+  "license": "Apache-2.0",
+  "environment": "*",
+  "authors": ["The NeoForbric Project"],
+  "entrypoints": {
+    "main": [
+      "neoforbric.brokencanary.NeoForbricBrokenCanary"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "*"
+  }
+}

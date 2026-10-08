@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def kernel_command(workflow):
-    """The command the kernel job's 'Build and check' step runs inside forbric-kernel/."""
-    match = re.search(r'- name: Build and check[^\n]*\n(?:[ \t]+[^\n]*\n)*?[ \t]+run: cd forbric-kernel && ([^\n]+)\n', workflow)
+    """The command the kernel job's 'Build and check' step runs inside neoforbric-kernel/."""
+    match = re.search(r'- name: Build and check[^\n]*\n(?:[ \t]+[^\n]*\n)*?[ \t]+run: cd neoforbric-kernel && ([^\n]+)\n', workflow)
     if not match:
-        raise AssertionError("build.yml has no 'Build and check' step running in forbric-kernel")
+        raise AssertionError("build.yml has no 'Build and check' step running in neoforbric-kernel")
     return match.group(1).strip()
 
 
@@ -32,10 +32,10 @@ class CiContractTest(unittest.TestCase):
 
     def test_the_contract_can_tell_a_stale_description(self):
         workflow = ('      - name: Build and check (boot only)\n        shell: bash\n'
-                    '        run: cd forbric-kernel && ./gradlew build -Pforbric.skipBaseline=ci-unstaged\n')
+                    '        run: cd neoforbric-kernel && ./gradlew build -Pneoforbric.skipBaseline=ci-unstaged\n')
         command = kernel_command(workflow)
-        self.assertEqual(command, './gradlew build -Pforbric.skipBaseline=ci-unstaged')
-        stale = '- **CI** (`build.yml`): job `kernel` runs `./gradlew jar test` in\n  `forbric-kernel/`.\n\n## 17.'
+        self.assertEqual(command, './gradlew build -Pneoforbric.skipBaseline=ci-unstaged')
+        stale = '- **CI** (`build.yml`): job `kernel` runs `./gradlew jar test` in\n  `neoforbric-kernel/`.\n\n## 17.'
         self.assertNotIn(f'`{command}`', ci_bullet(stale))
 
 

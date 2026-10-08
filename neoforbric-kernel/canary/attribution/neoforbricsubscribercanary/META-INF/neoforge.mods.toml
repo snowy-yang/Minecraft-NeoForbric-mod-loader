@@ -1,0 +1,19 @@
+modLoader="javafml"
+loaderVersion="[3,)"
+license="Apache-2.0"
+
+[[mods]]
+modId="neoforbricsubscribercanary"
+version="1.0.0"
+displayName="NeoForbric Subscriber Canary"
+description='''
+One @EventBusSubscriber whose static initializer throws. The dead-event half moved to neoforbricforgecanary when
+NeoForge's last dead row, ItemTooltipEvent, was bridged.
+'''
+
+[[dependencies.neoforbricsubscribercanary]]
+modId="neoforge"
+type="required"
+versionRange="[3,)"
+ordering="NONE"
+side="BOTH"

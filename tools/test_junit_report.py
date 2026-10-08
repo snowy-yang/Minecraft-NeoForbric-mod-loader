@@ -24,7 +24,7 @@ def skipped(message=None):
 
 class JUnitReportTest(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix='forbric junit ')
+        self.temporary = tempfile.TemporaryDirectory(prefix='neoforbric junit ')
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.results = self.root / 'test-results'
@@ -36,7 +36,7 @@ class JUnitReportTest(unittest.TestCase):
             cls=cls, tests=tests, skipped=skipped_count, failures=failures, cases='\n'.join(cases)), encoding='utf-8')
 
     def standard(self):
-        checkout = '/home/runner/work/forbric'
+        checkout = '/home/runner/work/neoforbric'
         self.suite('test', 'a.SkipsTest', [
             case('a.SkipsTest', 'staged()', skipped(f'Assumption failed: staged jar absent at {checkout}/x.jar')),
             case('a.SkipsTest', 'runs()'),
@@ -49,7 +49,7 @@ class JUnitReportTest(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             code = junit_report.main(['ratchet', '--profile', 'ci-unstaged', '--results', str(self.results),
                                       '--executed', 'test', '--baseline', str(self.root / 'base.tsv'),
-                                      '--actual', str(self.root / 'actual.tsv'), '--root', '/home/runner/work/forbric',
+                                      '--actual', str(self.root / 'actual.tsv'), '--root', '/home/runner/work/neoforbric',
                                       *extra])
         return code, out.getvalue()
 

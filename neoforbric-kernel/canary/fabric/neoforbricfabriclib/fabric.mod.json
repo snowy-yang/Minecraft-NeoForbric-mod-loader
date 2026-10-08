@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricfabriclib",
+  "version": "0.2.0",
+  "name": "NeoForbric Fabric Canary Library (JiJ)",
+  "description": "A jar-in-jar nested Fabric mod; its entrypoint firing proves JiJ extraction + nested discovery.",
+  "license": "Apache-2.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "neoforbric.fabriclib.NeoForbricFabricLib"
+    ]
+  }
+}

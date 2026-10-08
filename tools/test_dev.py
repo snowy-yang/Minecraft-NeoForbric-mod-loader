@@ -17,7 +17,7 @@ import dev
 
 class DevelopmentWorkflowTest(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix='forbric dev paths ')
+        self.temporary = tempfile.TemporaryDirectory(prefix='neoforbric dev paths ')
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
@@ -141,7 +141,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
         boot = self.root / 'kernel.jar'
         with zipfile.ZipFile(boot, 'w') as archive:
             if with_runtime:
-                archive.writestr('META-INF/jars/forbric-kernel-runtime.jar', b'runtime')
+                archive.writestr('META-INF/jars/neoforbric-kernel-runtime.jar', b'runtime')
         merged = stage / dev.STAGED_FILES[0]
         merged.parent.mkdir(parents=True)
         with zipfile.ZipFile(merged, 'w') as archive:
@@ -161,7 +161,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
         self.assertNotIn('-XstartOnFirstThread', linux)
         self.assertIn('-XstartOnFirstThread', mac)
         self.assertIn('Minecraft With Spaces', win[win.index('--assetsDir')+1])
-        with zipfile.ZipFile(stage / 'merged-base/forbric-game-metadata.jar') as archive:
+        with zipfile.ZipFile(stage / 'merged-base/neoforbric-game-metadata.jar') as archive:
             self.assertEqual(archive.namelist(), ['version.json'])
 
     def test_boot_only_jar_is_refused(self):
@@ -185,8 +185,8 @@ class DevelopmentWorkflowTest(unittest.TestCase):
         source.write_text('public class EchoArgs { public static void main(String[] a) { for (String s:a) '
                           'System.out.println(java.util.Base64.getEncoder().encodeToString('
                           's.getBytes(java.nio.charset.StandardCharsets.UTF_8))); '
-                          'if (System.getProperty("forbric.test") != null) System.out.println('
-                          'java.util.Base64.getEncoder().encodeToString(System.getProperty("forbric.test")'
+                          'if (System.getProperty("neoforbric.test") != null) System.out.println('
+                          'java.util.Base64.getEncoder().encodeToString(System.getProperty("neoforbric.test")'
                           '.getBytes(java.nio.charset.StandardCharsets.UTF_8))); } }')
         classes, helper = self.root / 'classes', self.root / 'helper'
         classes.mkdir()
@@ -195,7 +195,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
         env = dev.java_environment(java, minimum=21)
         javac = str(Path(env['JAVA_HOME']) / 'bin' / ('javac.exe' if os.name == 'nt' else 'javac'))
         subprocess.run([javac, '-d', str(classes), str(source)], check=True)
-        package = dev.ROOT / 'forbric-kernel-installer/src/main/java/net/forbric/installer/kernel'
+        package = dev.ROOT / 'neoforbric-kernel-installer/src/main/java/net/neoforbric/installer/kernel'
         subprocess.run([javac, '--release', '17', '-d', str(helper),
                         str(package / 'Json.java'), str(package / 'DevLaunch.java')], check=True)
         # Relocate after javac so the test does not itself depend on native compiler Unicode argv support.
@@ -212,7 +212,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
             output = subprocess.check_output(dev.java_command(java, path, command, windows=windows, launcher=helper),
                                              cwd=self.root, text=True)
             self.assertEqual([base64.b64decode(line).decode('utf-8') for line in output.splitlines()], arguments)
-        command = ['-Dforbric.test=中文值', '-cp', str(unicode_classes), 'EchoArgs']
+        command = ['-Dneoforbric.test=中文值', '-cp', str(unicode_classes), 'EchoArgs']
         output = subprocess.check_output(dev.java_command(java, path, command, windows=True, launcher=helper),
                                          cwd=self.root, text=True)
         self.assertEqual(base64.b64decode(output.strip()).decode('utf-8'), '中文值')
@@ -250,7 +250,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
 
         dev.stage_canaries(stage, [mixin], env['JAVA_HOME'], sources)
 
-        with zipfile.ZipFile(stage / 'neoforge-runtime/forbricneolive.jar') as archive:
+        with zipfile.ZipFile(stage / 'neoforge-runtime/neoforbricneolive.jar') as archive:
             names = set(archive.namelist())
         self.assertTrue({'live/Probe.class', 'META-INF/neoforge.mods.toml', 'data/live/probe.json'} <= names, names)
         self.assertFalse({'live/Probe.java', 'notes.txt'} & names)
@@ -266,11 +266,11 @@ class DevelopmentWorkflowTest(unittest.TestCase):
             jar.write_bytes(b'')
         classpath = os.pathsep.join([str(self.root / 'classes')] + [str(jar) for jar in jars])
         with patch.object(dev, 'gradle') as gradle:
-            chosen = dev.kernel_libraries({'FORBRIC_KERNEL_CLASSPATH': classpath}, self.root, self.root)
+            chosen = dev.kernel_libraries({'NEOFORBRIC_KERNEL_CLASSPATH': classpath}, self.root, self.root)
         gradle.assert_not_called()
         self.assertEqual(chosen, jars[:3])
         with self.assertRaisesRegex(RuntimeError, 'sponge-mixin'):
-            dev.kernel_libraries({'FORBRIC_KERNEL_CLASSPATH': os.pathsep.join(map(str, jars[1:]))}, self.root, self.root)
+            dev.kernel_libraries({'NEOFORBRIC_KERNEL_CLASSPATH': os.pathsep.join(map(str, jars[1:]))}, self.root, self.root)
 
     def test_windows_retains_argfiles_for_ascii_launches(self):
         path = self.root / 'command.args'

@@ -1,33 +1,33 @@
 # Mod 兼容测试：不成功的 mod（待修）
 
 测试日期：2026-09-26 至 2026-09-27
-加载器：Forbric main `11ca1ffa`，用 `forbric-kernel-installer` 装进 Mac 官方目录 `~/Library/Application Support/minecraft`（版本 `26.2-forbric`）
+加载器：NeoForbric main `11ca1ffa`，用 `neoforbric-kernel-installer` 装进 Mac 官方目录 `~/Library/Application Support/minecraft`（版本 `26.2-neoforbric`）
 下面的历史测试保留当时结果；后续修复及验证单独记录，不回写原始统计。
 
-## 130 个纯 Fabric mod：原生 Fabric 与 Forbric 同字节对照（服务端，2026-10-03）
+## 130 个纯 Fabric mod：原生 Fabric 与 NeoForbric 同字节对照（服务端，2026-10-03）
 
-用 `PICK_LOADER=fabric PICK_COUNT=130 PICK_SIDE=server`、种子 `20261003` 抽了 49 个热门 + 81 个随机的纯 Fabric 服务端主体，连同依赖共 165 个 jar（sha1 已固定）。同一组 jar 分别跑原生 Fabric Loader 0.19.5 和 Forbric（内核 SHA-256 `80ad82d1…`，strict 策略）专用服，判据是到 `Done` 后实测跑满 tick 数。证据在 `forbric-kernel/run/compat/reports/2026-10-03-pure-fabric-server/`，工具是 `run/compat/fabric-ab.py` 和 `native-controls.py run-set`。**只测了服务端，客户端、联机和渲染没测。**
+用 `PICK_LOADER=fabric PICK_COUNT=130 PICK_SIDE=server`、种子 `20261003` 抽了 49 个热门 + 81 个随机的纯 Fabric 服务端主体，连同依赖共 165 个 jar（sha1 已固定）。同一组 jar 分别跑原生 Fabric Loader 0.19.5 和 NeoForbric（内核 SHA-256 `80ad82d1…`，strict 策略）专用服，判据是到 `Done` 后实测跑满 tick 数。证据在 `neoforbric-kernel/run/compat/reports/2026-10-03-pure-fabric-server/`，工具是 `run/compat/fabric-ab.py` 和 `native-controls.py run-set`。**只测了服务端，客户端、联机和渲染没测。**
 
 | | 结果 |
 |---|---|
-| 单独跑（各带依赖，200 tick） | 119 两边都过 · **7 只在 Forbric 失败** · 4 两边都失败 · 0 只在原生失败 |
+| 单独跑（各带依赖，200 tick） | 119 两边都过 · **7 只在 NeoForbric 失败** · 4 两边都失败 · 0 只在原生失败 |
 | 全部 130 个一起（165 jar） | 两边都起不来（原生自己先死在 beilin-data-portability，那是 1.21.x 的 mod） |
-| 原生能单独跑的 126 个一起（159 jar） | 原生 Done，Forbric 被策略拒绝；ddmin 22 次启动缩到 4 个主体，都在上面那 7 个里，**没有新的组合冲突** |
+| 原生能单独跑的 126 个一起（159 jar） | 原生 Done，NeoForbric 被策略拒绝；ddmin 22 次启动缩到 4 个主体，都在上面那 7 个里，**没有新的组合冲突** |
 | 两边都能单独跑的 119 个一起（149 jar） | 两边都跑满 1200 tick |
 
-只在 Forbric 失败的 7 个（都是 Forbric 的缺陷，未修）：
+只在 NeoForbric 失败的 7 个（都是 NeoForbric 的缺陷，未修）：
 
-- notenoughcrashes：它的一个 mixin 目标在原版里本来就不存在，原生静默跳过，Forbric 却算成必需损失并拒绝启动（误报）。
+- notenoughcrashes：它的一个 mixin 目标在原版里本来就不存在，原生静默跳过，NeoForbric 却算成必需损失并拒绝启动（误报）。
 - debugify、EnhancedVisuals（经 CreativeCore）、MoogsEndStructures（经 MoogsStructureLib）：合并基底的方法体或描述符和原版不同，mixin 锚点找不到。
 - moreladders：合并基底的铜氧化走 NeoForge 数据映射，Fabric 初始化时读到还没绑定的值。
-- ViaVersion（经 ViaFabric）：Forbric 多加载了一个 Minecraft 版本不符的嵌套 jar，两个入口都跑。
+- ViaVersion（经 ViaFabric）：NeoForbric 多加载了一个 Minecraft 版本不符的嵌套 jar，两个入口都跑。
 - meowantixray：方块注册表的运行时类型是一个非 public 的 MinecraftForge 类，mod 反射调用被拒，进服后崩溃。
 
 前 6 个改用 continue 策略都能进服跑满 200 tick，但对应功能缺失。两边都失败的 4 个是 mod 自己的问题（1.21.x 的 mod、注册时空指针、用了 Fabric API 却没声明依赖）。
 
 ## 同一批 100 个 mod 用当前内核复测（2026-10-03）
 
-输入与 2026-10-01 完全相同（同一份 manifest、依赖闭包和 jar，SHA-256 已复核），只换了内核：main `ddceddb6` 的内核代码（构建自 `9d6bdc2e`，两者内核源码一致），装进与上次相同布局的**隔离**安装目录，不碰日常使用的版本配置。证据在 `forbric-kernel/run/compat/reports/2026-10-03-sweep100-rerun/`。
+输入与 2026-10-01 完全相同（同一份 manifest、依赖闭包和 jar，SHA-256 已复核），只换了内核：main `ddceddb6` 的内核代码（构建自 `9d6bdc2e`，两者内核源码一致），装进与上次相同布局的**隔离**安装目录，不碰日常使用的版本配置。证据在 `neoforbric-kernel/run/compat/reports/2026-10-03-sweep100-rerun/`。
 
 | | 2026-10-01 | 2026-10-03 |
 |---|---:|---:|
@@ -37,7 +37,7 @@
 | 只拿掉互相冲突的那一对中的一个后一起装（6000 tick + 存档重载） | 需同时拿掉 cwb 和 EnchantCraft，86 个通过 | **只拿掉 cwb，89 个 mod / 110 个 jar 通过** |
 
 - 单独加载没有任何一项变差。变好的两项：c2me（之前依赖模块降级）、lplm（之前崩溃）。其余 10 个仍不严格成功，原因与上次相同；tuanzis_server_mod 从"没进世界"变成"卡住"，仍算失败。
-- 全混装崩溃的原因仍是 Sodium 自己的检查：`Multiple overrides for option 'sodium:general.fullscreen_mode'! Sources: chloride and cwb`——两个 mod 都要改 Sodium 同一个选项。同样三个 jar 放进官方 NeoForge 26.2.0.88 客户端（不经过 Forbric）也崩，第一行异常一字不差；Sodium 只配其中任何一个都能进标题界面（`forbric-kernel/run/compat/reports/2026-10-03-native-sodium-pair/`）。cwb 上游 2026-08-03 已把 chloride 标为不兼容（Kira-NT/cubes-without-borders#139），但还没进 26.2 的发布版。这次 Forbric 的崩溃分析直接点名这两个 mod，并给出写进 `forbric-disabled.txt` 就能不加载 cwb 启动的那一行。
+- 全混装崩溃的原因仍是 Sodium 自己的检查：`Multiple overrides for option 'sodium:general.fullscreen_mode'! Sources: chloride and cwb`——两个 mod 都要改 Sodium 同一个选项。同样三个 jar 放进官方 NeoForge 26.2.0.88 客户端（不经过 NeoForbric）也崩，第一行异常一字不差；Sodium 只配其中任何一个都能进标题界面（`neoforbric-kernel/run/compat/reports/2026-10-03-native-sodium-pair/`）。cwb 上游 2026-08-03 已把 chloride 标为不兼容（Kira-NT/cubes-without-borders#139），但还没进 26.2 的发布版。这次 NeoForbric 的崩溃分析直接点名这两个 mod，并给出写进 `neoforbric-disabled.txt` 就能不加载 cwb 启动的那一行。
 - 自动二分（`run/compat/mac/ddmin.py`）在真实游戏里 **4 次启动**（含 1 次全包参照，种子是报错里点名的两个 mod）就把 111 个 jar 的失败包缩到 {chloride, cwb}（加上它们依赖的 Sodium），不用再按报错手工排查。拿掉这一对后其余 88 个也一起通过。
 - EnchantCraft 上次也挡住全混装（原生 NeoForge 同样复现）；当前内核已让它不再把加入的玩家踢出，这次全混装里不再是阻断项。
 - "只拿掉 cwb 后通过"仍然**不算**完整混装成功：完整混装的定义是所有严格成功的主体一起，不做任何排除。
@@ -50,7 +50,7 @@
 
 - 排除历史测试的 570 个项目，按项目 ID 确认本轮 100 个主体没有重复；种子 `20261001`。下载量前 200 中尚未测过且可用的热门项目只剩 35 个，因此采用 **35 热门 + 65 随机**，加载器构建随机选择。
 - 依赖额外计入，共 **128 个 jar**，分母始终为 100 个主体。补齐 Puzzle 未声明却直接使用的 MidnightLib；原始 mod jar 均未改写。初始错误依赖闭包、修正前结果和中断记录另存，不计作额外主体。
-- 每个主体只带自己的必要依赖，使用干净测试目录和同一个原版世界，逐个启动官方格式的已安装 Forbric 配置。第 100 tick 截图，第 200 tick 正常断开退出。
+- 每个主体只带自己的必要依赖，使用干净测试目录和同一个原版世界，逐个启动官方格式的已安装 NeoForbric 配置。第 100 tick 截图，第 200 tick 正常断开退出。
 - 严格成功要求进入世界、实际绘制、正常退出，主体、内嵌模块及所有加载依赖的报告状态均为 `OK`，无已确认必要损失、入口失败或未解决依赖。使用“继续”策略收集诊断并不会让失败变为严格成功。
 - 100 个最新结果均绑定同一个冻结内核 SHA-256：`48425134ce52b4bbd235677a8f72b1457d4756e68d74326cd21693f70197a468`。主体与依赖文件的 SHA-256 均已复核；源码修复集基于 `fd4fa20e`。
 
@@ -83,7 +83,7 @@
 ### 完整混装与冲突隔离
 
 - **完整包：88 个主体 + 必要依赖，共 109 个 jar。严格启动失败，重载标为 NOT_RUN。** 明确错误为 Chloride 与 CWB 同时覆盖 `sodium:general.fullscreen_mode`。未删除冲突成员后把结果改成成功。
-- 隔离 CWB 后暴露了 Spectre 配置入口缺失以及 Controlify/JECharacters 插件问题；对应 Forbric 修复已落实。修复后进世界又遇到 EnchantCraft 配方编码拒绝新实例。
+- 隔离 CWB 后暴露了 Spectre 配置入口缺失以及 Controlify/JECharacters 插件问题；对应 NeoForbric 修复已落实。修复后进世界又遇到 EnchantCraft 配方编码拒绝新实例。
 - 用 **官方 NeoForge 26.2.0.88、未修改的 EnchantCraft jar** 做原生对照，同样复现 StreamCodec.unit 拒绝新建 ApplyEnchantRecipe 的异常；原生服务器正常启动和停止。
 - **仅用于诊断的最终包：排除 CWB、EnchantCraft，86 个主体、107 个 jar。** 6000 tick 首次加载、正常保存退出，以及 200 tick 保存后重载均严格通过；报告无非 OK mod，必要损失为零。此结果不替代完整包的失败。
 - 保存检查兼容 26.2 新目录结构，要求实际的新 level.dat 及玩家/区块写入，不能用复制进来的旧存档充当保存证据；混装测试目录关闭失焦暂停。
@@ -105,7 +105,7 @@
 | Sound Visualizer | 进世界，主体 OK | 依赖 Architectury 的 rightClickAir 注入未附着 |
 | Tuanzi’s Server Mod | 未进入世界，报告 OK | 它自己的白名单拒绝测试账号 CompatPlayer；属于配置阻挡，不能据此认定加载器损坏 |
 
-清单、闭包、每个主体的最新结果、冻结指纹及混装结果见 [本轮机器可读记录](forbric-kernel/run/compat/reports/2026-10-01-sweep100/summary.json) 和 [抽样清单](forbric-kernel/run/compat/reports/2026-10-01-sweep100/manifest.json)。完整控制台、截图、崩溃报告和保存世界保存在本机 `forbric-kernel/build/sweep100-mac-network/`；原生对照在 `build/sweep100-native-recipe/`，回归及未放行 soak 证据在 `build/sweep100-validation/`。
+清单、闭包、每个主体的最新结果、冻结指纹及混装结果见 [本轮机器可读记录](neoforbric-kernel/run/compat/reports/2026-10-01-sweep100/summary.json) 和 [抽样清单](neoforbric-kernel/run/compat/reports/2026-10-01-sweep100/manifest.json)。完整控制台、截图、崩溃报告和保存世界保存在本机 `neoforbric-kernel/build/sweep100-mac-network/`；原生对照在 `build/sweep100-native-recipe/`，回归及未放行 soak 证据在 `build/sweep100-validation/`。
 
 
 ## 后续修复：Carpet（2026-09-30）
@@ -114,7 +114,7 @@
 
 独立服务器行为测试共 22 项：关闭修复时 7 项通过，启用修复后严格兼容模式下 22 项全部通过，且 Carpet 的已确认兼容损失为零。另有 7 项真实字节码专项测试全部通过。覆盖规则开关、放置和邻居更新、原版流体产物、创造/生存模式的事件次数及取消效果；不代表已验证所有 Carpet 规则或扩展模组。
 
-复现方法见 [Carpet 行为测试](forbric-kernel/canary/carpet/README.md)。
+复现方法见 [Carpet 行为测试](neoforbric-kernel/canary/carpet/README.md)。
 
 ### 后续修复：Scarpet 回调的时机（2026-10-02）
 
@@ -141,7 +141,7 @@
 ### 方法
 
 - 从 Modrinth 抽了 **3 批互不相同的随机 mod**。每批 30 个热门（下载量前 200 名里随机抽）+ 50 个随机（全部 26.2 mod 里随机抽），加载器随机，再加上依赖，分别是 110 / 97 / 104 个 jar。3 批之间不重复，也不和下面旧测试的那批重复。
-- 每批分别用两个版本各测一轮：main `11ca1ffa`（装在官方目录）和 [release v0.2.0](https://github.com/Ray-T-r/Minecraft-Forbric-mod-loader/releases/tag/v0.2.0)（用它自己的安装器装在单独的目录里）。
+- 每批分别用两个版本各测一轮：main `11ca1ffa`（装在官方目录）和 [release v0.2.0](https://github.com/Ray-T-r/Minecraft-NeoForbric-mod-loader/releases/tag/v0.2.0)（用它自己的安装器装在单独的目录里）。
 - 测法和下面旧测试一样：每个 jar 单独加载，只带它必需的依赖，进同一个原版世界，截图后退出。
 - v0.2.0 没有逐 mod 的加载报告，所以两个版本统一用同一个口径判定"加载成功"：进了世界、画面画出来、正常退出，**并且**日志里没有这个 mod 的入口失败、`@Mod` 构造失败或 mixin 应用失败（两个版本打的是同样的日志行）。
 - 有少数 mod 缺的依赖在 Modrinth 上按 mod id 找不到，这些 mod 在两个版本里都是缺依赖状态测的。
@@ -209,9 +209,9 @@ Alex's Mobs Continued（main 崩溃）、Drippy Loading Screen（main 卡在加�
 
 ### 证据位置（本地，不在仓库里）
 
-- 3 批 mod 清单：`forbric-kernel/build/sweep80-mac/v020-rounds/r1..r3/manifest.json`
-- main 每轮结果：`forbric-kernel/build/sweep80-mac/per-mod-main-r1..r3/`；v0.2.0：`per-mod-v020-r1..r3/`
-- 对比汇总：`forbric-kernel/build/sweep80-mac/compare.json`、`compare.txt`
+- 3 批 mod 清单：`neoforbric-kernel/build/sweep80-mac/v020-rounds/r1..r3/manifest.json`
+- main 每轮结果：`neoforbric-kernel/build/sweep80-mac/per-mod-main-r1..r3/`；v0.2.0：`per-mod-v020-r1..r3/`
+- 对比汇总：`neoforbric-kernel/build/sweep80-mac/compare.json`、`compare.txt`
 
 ---
 
@@ -230,7 +230,7 @@ Alex's Mobs Continued（main 崩溃）、Drippy Loading Screen（main 卡在加�
 - 兼容策略设为"继续"（相当于玩家在提示窗口里点了继续）。
 - 同样的测试跑了 3 轮。
 
-"完全正常" = 进了世界、画面画出来了、正常退出，并且这个 mod 在 Forbric 加载报告里是 OK。
+"完全正常" = 进了世界、画面画出来了、正常退出，并且这个 mod 在 NeoForbric 加载报告里是 OK。
 
 ### 成功率
 
@@ -262,7 +262,7 @@ Alex's Mobs Continued（main 崩溃）、Drippy Loading Screen（main 卡在加�
 
 #### 能进世界，但 mod 没加载成功（4 个）
 
-| mod | 来源 | 加载器 | 版本 | Forbric 加载报告原文（未核实） |
+| mod | 来源 | 加载器 | 版本 | NeoForbric 加载报告原文（未核实） |
 |---|---|---|---|---|
 | [Resourceful Config](https://modrinth.com/mod/resourceful-config) | 热门 | Fabric | 5.0.0 | did not finish loading — its main entrypoint threw |
 | [andonium](https://modrinth.com/mod/andonium2) | 随机 | Fabric | 2.2.1+26.2-fabric | did not finish loading — its main entrypoint threw |
@@ -271,7 +271,7 @@ Alex's Mobs Continued（main 崩溃）、Drippy Loading Screen（main 卡在加�
 
 #### 能进世界，但 mod 部分功能没生效（8 个）
 
-| mod | 来源 | 加载器 | 版本 | Forbric 加载报告原文（未核实） |
+| mod | 来源 | 加载器 | 版本 | NeoForbric 加载报告原文（未核实） |
 |---|---|---|---|---|
 | [fabric-api](https://modrinth.com/mod/fabric-api) | 依赖 | Fabric | 0.161.0+26.2 | 4 个模块部分未生效：fabric-block-api-v1、fabric-creative-tab-api-v1、fabric-loot-api-v3、fabric-registry-sync-v0 |
 | [Architectury API](https://modrinth.com/mod/architectury-api) | 热门 | Fabric | 21.1.10+fabric | A required injector has no attachment in the actual defined class |
@@ -285,11 +285,11 @@ Alex's Mobs Continued（main 崩溃）、Drippy Loading Screen（main 卡在加�
 ### 其他测试中看到的情况（未单独复测）
 
 - **只在整包里出现**：andonium 和整包一起加载时，服务端生成地形直接崩溃；把 andonium 拿掉后世界能生成。单独测 andonium 时能进世界（但 andonium 自己加载失败，见上表）。
-- **缺依赖但照样加载了**：wcopy（chat-copy）需要 Chat Heads，hide-minimega-leaderboards 需要 Legacy4J（没有 26.2 版）。两个都没装依赖，Forbric 照样加载、进了世界、没有报错，所以算作"完全正常"。
+- **缺依赖但照样加载了**：wcopy（chat-copy）需要 Chat Heads，hide-minimega-leaderboards 需要 Legacy4J（没有 26.2 版）。两个都没装依赖，NeoForbric 照样加载、进了世界、没有报错，所以算作"完全正常"。
 - **Modrinth 没标出的依赖**：blockframe 需要 owo-lib、ibcarpet 需要 Carpet、Supermarket Life 需要 MCA Reborn、chunky-friends 需要 Chunky、Peterwolf's Railroads One 需要 Minecart Chain。补上后，除了带着 MCA 的 Supermarket Life，其余都完全正常。
 
 ### 证据位置（本地，不在仓库里）
 
-- 每个 jar 每一轮的日志、加载报告、截图、崩溃报告：`forbric-kernel/build/sweep80-mac/per-mod/`、`per-mod-r2/`、`per-mod-r3/`
-- 选中的 mod 清单（含版本、SHA-1、下载地址）：`forbric-kernel/build/sweep80-mac/manifest.json`
-- 汇总：`forbric-kernel/build/sweep80-mac/summary.json`
+- 每个 jar 每一轮的日志、加载报告、截图、崩溃报告：`neoforbric-kernel/build/sweep80-mac/per-mod/`、`per-mod-r2/`、`per-mod-r3/`
+- 选中的 mod 清单（含版本、SHA-1、下载地址）：`neoforbric-kernel/build/sweep80-mac/manifest.json`
+- 汇总：`neoforbric-kernel/build/sweep80-mac/summary.json`

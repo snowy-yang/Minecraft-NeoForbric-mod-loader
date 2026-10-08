@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricnestlib",
+  "version": "1.0.0",
+  "name": "NeoForbric Nested-Duplicate Canary Library (Fabric build)",
+  "description": "The Fabric build of a library that a Fabric mod and a NeoForge mod each nest. Its twin under META-INF/jarjar of the NeoForge parent claims the same id.",
+  "license": "Apache-2.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "neoforbric.nestlib.NestLibFabric"
+    ]
+  }
+}

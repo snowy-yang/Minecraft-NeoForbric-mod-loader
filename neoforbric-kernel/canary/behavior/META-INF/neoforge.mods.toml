@@ -1,0 +1,9 @@
+modLoader="javafml"
+loaderVersion="[3,)"
+license="Apache-2.0"
+[[mods]]
+modId="neoforbricbehaviorprobe"
+version="1.0.0"
+displayName="NeoForbric M35 World Behavior Probe"
+[[mixins]]
+config="neoforbricbehaviorprobe.mixins.json"

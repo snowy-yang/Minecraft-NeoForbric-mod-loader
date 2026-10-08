@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Fetch and patch the fabric-loader substrate this repository builds against.
 #
-# Forbric reuses the Apache-2.0 fabric-loader as its substrate: forbric-loader/build.gradle compiles
-# the substrate's source roots alongside Forbric's own (see CREDITS.md / NOTICE). That checkout is NOT
+# NeoForbric reuses the Apache-2.0 fabric-loader as its substrate: neoforbric-loader/build.gradle compiles
+# the substrate's source roots alongside NeoForbric's own (see CREDITS.md / NOTICE). That checkout is NOT
 # vendored here -- it stays a sibling directory, upstream and inspectable, which is what keeps the
 # clean-room provenance auditable. This script puts it there.
 #
@@ -16,12 +16,12 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SUBSTRATE="$HERE/fabric-loader"
-PATCHES="$HERE/forbric-loader/patches/fabric-loader"
+PATCHES="$HERE/neoforbric-loader/patches/fabric-loader"
 REMOTE="${FABRIC_LOADER_REMOTE:-https://github.com/FabricMC/fabric-loader.git}"
 
-# Single source of truth for which upstream release Forbric's patches apply to.
-REF="$(sed -n 's/^fabric_loader_ref[[:space:]]*=[[:space:]]*//p' "$HERE/forbric-loader/gradle.properties" | tr -d '[:space:]')"
-[ -n "$REF" ] || { echo "bootstrap: fabric_loader_ref missing from forbric-loader/gradle.properties" >&2; exit 1; }
+# Single source of truth for which upstream release NeoForbric's patches apply to.
+REF="$(sed -n 's/^fabric_loader_ref[[:space:]]*=[[:space:]]*//p' "$HERE/neoforbric-loader/gradle.properties" | tr -d '[:space:]')"
+[ -n "$REF" ] || { echo "bootstrap: fabric_loader_ref missing from neoforbric-loader/gradle.properties" >&2; exit 1; }
 
 check_only=0
 [ "${1:-}" = "--check" ] && check_only=1
@@ -54,4 +54,4 @@ for patch in "$PATCHES"/*.patch; do
 done
 
 echo "bootstrap: substrate at $REF -- $applied patch(es) applied, $already already present"
-exec "$HERE/forbric-loader/run/verify-substrate-patches.sh"
+exec "$HERE/neoforbric-loader/run/verify-substrate-patches.sh"

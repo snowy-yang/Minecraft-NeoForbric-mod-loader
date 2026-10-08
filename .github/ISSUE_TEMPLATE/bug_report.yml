@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem you encountered while using Forbric.
+description: Report a problem you encountered while using NeoForbric.
 body:
   - type: markdown
     attributes:
@@ -11,7 +11,7 @@ body:
     attributes:
       label: Problem description
       description: Describe what happened and what you expected. Include screenshots and relevant version information if available.
-      placeholder: What problem did you encounter while using Forbric?
+      placeholder: What problem did you encounter while using NeoForbric?
     validations:
       required: true
 

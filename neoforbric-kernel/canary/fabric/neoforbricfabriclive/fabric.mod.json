@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricfabriclive",
+  "version": "1.0.0",
+  "name": "NeoForbric Fabric Live Canary",
+  "description": "Proves the sovereign kernel runs a real Fabric mod: entrypoints, custom keys, JiJ, registry writes.",
+  "license": "Apache-2.0",
+  "environment": "*",
+  "authors": ["The NeoForbric Project"],
+  "entrypoints": {
+    "preLaunch": [
+      "neoforbric.fabriclive.LivePreLaunch"
+    ],
+    "main": [
+      "neoforbric.fabriclive.NeoForbricFabricLive"
+    ],
+    "server": [
+      "neoforbric.fabriclive.NeoForbricFabricLiveServer"
+    ],
+    "client": [
+      "neoforbric.fabriclive.NeoForbricFabricLiveClient"
+    ],
+    "neoforbric:probe": [
+      "neoforbric.fabriclive.ProbeImpl",
+      "neoforbric.fabriclive.ProbeImpl::STATIC_PROBE",
+      "neoforbric.fabriclive.NeverConstructedProbe"
+    ]
+  },
+  "jars": [
+    { "file": "META-INF/jars/neoforbricfabriclib.jar" }
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "*"
+  },
+  "custom": {
+    "neoforbric:canary": {
+      "kind": "fabric",
+      "expects": ["entrypoints", "jij", "registry"]
+    }
+  }
+}

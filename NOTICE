@@ -1,21 +1,21 @@
-Forbric — a clean-room unified Minecraft mod loader
-Copyright 2026 The Forbric Project
+NeoForbric — a clean-room unified Minecraft mod loader
+Copyright 2026 The NeoForbric Project
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This repository contains three modules, all Apache-2.0:
 
-    forbric-kernel/            the sovereign kernel — the current loader, which
+    neoforbric-kernel/            the sovereign kernel — the current loader, which
                                runs Fabric and NeoForge mods in one instance
-    forbric-kernel-installer/  the standalone installer for the kernel; it builds
+    neoforbric-kernel-installer/  the standalone installer for the kernel; it builds
                                the game artifacts on the user's own machine
-    forbric-loader/            the first-generation loader, kept as a differential
+    neoforbric-loader/            the first-generation loader, kept as a differential
                                oracle and still built by CI
 
 ================================================================================
-forbric-loader
+neoforbric-loader
 ================================================================================
-forbric-loader is built against Fabric Loader, which is licensed under the
+neoforbric-loader is built against Fabric Loader, which is licensed under the
 Apache License, Version 2.0.
 
     Fabric Loader
@@ -24,21 +24,21 @@ Apache License, Version 2.0.
 
 That substrate is NOT vendored into this repository. bootstrap.sh checks it out
 as a sibling directory at the pinned upstream release and applies
-forbric-loader/patches/fabric-loader/; forbric-loader/build.gradle then compiles
-its source roots alongside Forbric's own, so a jar built from this repository
+neoforbric-loader/patches/fabric-loader/; neoforbric-loader/build.gradle then compiles
+its source roots alongside NeoForbric's own, so a jar built from this repository
 contains compiled FabricMC code.
 
 The substrate attribution, the clean-room statement for the Forge-family
 (NeoForge) code, the
 no-MCP-mapping-data statement, and the list of bundled third-party dependencies
-and their licences are in forbric-loader/NOTICE. That file governs what a built
+and their licences are in neoforbric-loader/NOTICE. That file governs what a built
 loader jar redistributes; it is not restated here.
 
-See also forbric-loader/CREDITS.md (provenance) and forbric-loader/MAPPINGS.md
+See also neoforbric-loader/CREDITS.md (provenance) and neoforbric-loader/MAPPINGS.md
 (mapping sources).
 
 ================================================================================
-forbric-kernel
+neoforbric-kernel
 ================================================================================
 The kernel does NOT compile the Fabric Loader substrate. It vendors only the
 small mod-facing net.fabricmc surface it needs — those files keep their original
@@ -47,13 +47,13 @@ FabricMC copyright headers — and is otherwise its own clean-room code.
 Its substrate attribution, its clean-room statement for the Forge-family
 (NeoForge) code, its
 no-MCP-mapping-data statement and its list of bundled third-party dependencies
-and their licences are in forbric-kernel/NOTICE. That file governs what a built
+and their licences are in neoforbric-kernel/NOTICE. That file governs what a built
 kernel jar redistributes; it is not restated here.
 
 ================================================================================
-forbric-kernel-installer
+neoforbric-kernel-installer
 ================================================================================
-forbric-kernel-installer is Forbric's own code. At install time it downloads and
+neoforbric-kernel-installer is NeoForbric's own code. At install time it downloads and
 BUILDS, on the user's own machine, artifacts that are not part of this
 repository — game files from Mojang and the NeoForge runtime jars — each of
 which keeps its own licence and its publisher's terms. Those artifacts are never

@@ -24,7 +24,7 @@ CLASS_LEVEL = 'skipped without a message (a class-level abort, e.g. in @BeforeAl
 JUNIT_PREFIX = 'Assumption failed: '
 HEADER = ('# Skipped tests this CI profile is allowed to have: suite<TAB>class<TAB>test<TAB>reason.\n'
           '# Compared on the first three columns; the reason is for the reader.\n'
-          '# Regenerate: ./gradlew check -Pforbric.skipBaseline={profile} -Pforbric.writeSkipBaseline\n'
+          '# Regenerate: ./gradlew check -Pneoforbric.skipBaseline={profile} -Pneoforbric.writeSkipBaseline\n'
           '# or copy skips-actual-{profile}.tsv from the CI artifact.\n')
 
 
@@ -188,7 +188,7 @@ def main(argv=None):
         return 0
     if not Path(args.baseline).is_file():
         print(f'skip baseline {args.baseline} does not exist; this run skipped {len(actual)} line(s), written to '
-              f'{args.actual}. Commit that file as the baseline, or rerun with -Pforbric.writeSkipBaseline.')
+              f'{args.actual}. Commit that file as the baseline, or rerun with -Pneoforbric.writeSkipBaseline.')
         return 1
     new, stale = ratchet(actual, read_baseline(args.baseline))
     if not new and not stale:

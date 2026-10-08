@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricmixincanary",
+  "version": "1.0.0",
+  "name": "NeoForbric Mixin Canary",
+  "description": "Two mixins that go wrong on purpose: one that does not fit the merged game, one that fails to apply at world creation.",
+  "license": "Apache-2.0",
+  "environment": "*",
+  "authors": ["The NeoForbric Project"],
+  "mixins": ["neoforbricmixincanary.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "*"
+  }
+}

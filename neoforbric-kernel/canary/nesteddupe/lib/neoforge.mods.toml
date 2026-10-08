@@ -1,0 +1,9 @@
+modLoader="javafml"
+loaderVersion="[3,)"
+license="Apache-2.0"
+
+[[mods]]
+modId="neoforbricnestlib"
+version="1.0.0"
+displayName="NeoForbric Nested-Duplicate Canary Library (NeoForge build)"
+description='''The NeoForge build of the same library the Fabric parent nests. Same mod id, different jar, different ecosystem.'''

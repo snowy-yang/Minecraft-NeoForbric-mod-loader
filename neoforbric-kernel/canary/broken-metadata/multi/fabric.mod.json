@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricbadmetamulti",
+  "version": "1.0.0",
+  "name": "NeoForbric Bad Metadata Canary (universal)",
+  "description": "Its neoforge.mods.toml cannot be read; its fabric.mod.json can.",
+  "license": "Apache-2.0",
+  "environment": "*",
+  "depends": {
+    "minecraft": "*"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "neoforbricmenuprobe",
+  "version": "1.0.0",
+  "name": "NeoForbric menu codec probe",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["neoforbric.menuprobe.MenuProbe"]
+  },
+  "depends": {
+    "fabric-api": "*",
+    "farmersdelight": "*"
+  }
+}
