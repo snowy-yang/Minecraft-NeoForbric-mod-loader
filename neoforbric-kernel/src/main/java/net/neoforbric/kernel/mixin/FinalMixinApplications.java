@@ -161,11 +161,10 @@ public final class FinalMixinApplications {
       &&WatchdogDumpEquivalence.candidate(mixin,injector.name(),injector.desc(),injector.bodyHash(),target);
     if(pending)state=Outcome.UNKNOWN;
     if(replacement!=null)state=Outcome.EQUIVALENT;
-    // Attached, but only inside a forwarding stub the merge kept for vanilla's signature, where the mod's own platform
-    // ran code: it runs only when something still calls that old signature. torrential's fuel hook stays on
-    // FuelValues.vanillaBurnTimes' stub (its captures need the stub's arguments), which the merged server never called
-    // until the kernel's fuel bridge began handing its table through it (KernelFabricFuel.throughVanillaReturnHooks).
-    // Still a reference, so not a loss; not a discharge either.
+    // Attached, but only inside a forwarding stub the carrier kept for vanilla's signature, where the mod's own
+    // platform ran code: it runs only when something still calls that old signature. A handler whose captures need
+    // the stub's own arguments cannot move to the delegate, so it stays — and a side that never calls the stub
+    // never runs it. Still a reference, so not a loss; not a discharge either.
     String stub=references>0?stubOnlyHost(target,candidates.getFirst(),plan.config().name()):null;
     observed.put(binary+"#"+injector.symbol(),stub!=null?Outcome.UNKNOWN:state);
     String id=id(plan,injector,binary),mod=owner(plan.config().name());

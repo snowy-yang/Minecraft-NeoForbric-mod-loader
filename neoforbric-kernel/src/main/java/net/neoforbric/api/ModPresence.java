@@ -38,7 +38,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * draws. Nothing throws, nothing logs, and the feature is simply invisible — Physics Mod's block debris and
  * ragdolls were exactly this: present, loaded, mixins applied, drawing into a path Sodium no longer runs.
  *
- * <p>This registry is the single answer all three lists are seeded from or fall back to. It is PRESENCE ONLY:
+ * <p>This registry is the single answer both families' lists are seeded from or fall back to. It is PRESENCE ONLY:
  * declaring a Fabric mod here does not give it a NeoForge container, an event bus or a config, and does not put
  * it in either family's <em>loading</em> list (which is what a multiplayer handshake announces). It states the
  * one thing that is unambiguously true — that mod is running in this instance, at this version.
@@ -156,7 +156,7 @@ public final class ModPresence {
 	 * The spelling-insensitive form of a mod id: lower case, with {@code -} and {@code _} unified.
 	 *
 	 * <p>Only those two, and nothing else. This is not a fuzzy match — it encodes exactly one fact, that the
-	 * three ecosystems disagree about which separator a mod id may contain, and nothing about what a mod is.
+	 * the two ecosystems disagree about which separator a mod id may contain, and nothing about what a mod is.
 	 */
 	public static String spellingKey(String id) {
 		return id.replace('-', '_').toLowerCase(java.util.Locale.ROOT);

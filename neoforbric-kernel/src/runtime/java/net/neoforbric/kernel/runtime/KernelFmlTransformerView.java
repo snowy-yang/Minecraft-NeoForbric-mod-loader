@@ -17,59 +17,57 @@
 package net.neoforbric.kernel.runtime;
 
 import java.lang.reflect.Field;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.SequencedMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.spongepowered.asm.mixin.transformer.IMixinTransformer;
 
-import net.neoforged.fml.classloading.transformation.ClassProcessorSet;
-import net.neoforged.fml.classloading.transformation.ClassTransformer;
-import net.neoforged.fml.classloading.transformation.TransformingClassLoader;
-import net.neoforged.fml.loading.mixin.FMLMixinClassProcessor;
-import net.neoforged.neoforgespi.transformation.ClassProcessor;
-import net.neoforged.neoforgespi.transformation.ClassProcessorIds;
-import net.neoforged.neoforgespi.transformation.ProcessorName;
+import cpw.mods.modlauncher.ClassTransformer;
+import cpw.mods.modlauncher.LaunchPluginHandler;
+import cpw.mods.modlauncher.TransformingClassLoader;
+
+import org.spongepowered.asm.launch.MixinLaunchPluginLegacy;
+import org.spongepowered.asm.service.modlauncher.MixinTransformationHandler;
 
 import net.neoforbric.kernel.mixin.MixinWeaverSlot;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
 /**
- * FML's {@code TransformingClassLoader}, as far as a NeoForge mod walks it to reach the live Mixin weaver — built
- * from the carrier's own classes and holding the kernel's weaver, so that what the mod writes back is what weaves.
+ * modlauncher's {@code TransformingClassLoader}, as far as a NeoForge mod walks it to reach the live Mixin
+ * weaver — built from the carrier's own classes and holding the kernel's weaver, so that what the mod writes
+ * back is what weaves.
  *
  * <h2>Who walks it</h2>
  *
- * <p>LibJF's mixin plugin ({@code libjf_unsafe_v0}): {@code (TransformingClassLoader)} the context loader, then by
- * reflection {@code classTransformer} → {@code processors} → {@code processors.get(ClassProcessorIds.MIXIN)} →
- * {@code FMLMixinClassProcessor.transformer}, which it wraps in its own {@code AsmTransformer} and writes back.
- * On NeoForge that processor reads the field again for every class, so from then on every class goes through
- * Mixin and then LibJF's {@code libjf:asm} patches (LibJF Data Manipulation's resource-pack hook is one). Under
- * the kernel the context loader is {@code NeoForbricClassLoader}, the cast failed, and LibJF logged "Could not
- * initialize LibJF ASM" and applied no patch at all.
+ * <p>LibJF's mixin plugin ({@code libjf_unsafe_v0}, the NeoForge build): {@code (TransformingClassLoader)} the
+ * context loader, then by reflection {@code classTransformer} on the loader, {@code pluginHandler} on the
+ * transformer, {@code LaunchPluginHandler.get("mixin")} to the Mixin plugin, {@code processors.getFirst()} to
+ * the transformation handler, and its {@code transformer} — which it wraps in its own {@code AsmTransformer}
+ * and writes back. On NeoForge every class goes through Mixin and then LibJF's {@code libjf:asm} patches
+ * (LibJF Data Manipulation's resource-pack hook is one). Under the kernel the context loader is
+ * {@code NeoForbricClassLoader}, the cast failed, and LibJF logged "Could not initialize LibJF ASM" and applied
+ * no patch at all.
  *
  * <h2>What is built, and what is not</h2>
  *
- * <p>Exactly that path and nothing beside it. {@code FMLMixinClassProcessor} and {@code TransformingClassLoader}
- * are allocated without a constructor: the real ones need FML's Mixin service and a module layer the kernel does
- * not have, and nothing here ever asks them to process, load or define a class — a guest only reads their fields.
- * {@code ClassProcessorSet} is allocated too, with only {@code processors} filled, rather than built by
- * {@code ClassProcessorSet.of}: that constructor registers a "Class Processors" crash-report section, and every
- * crash report would then list a processor set that never ran. {@code ClassTransformer} is built through its
- * public constructor, which only stores its arguments.
- *
- * <p>The processor's field is then what {@link MixinWeaverSlot} reads for every class, so a wrapper written into
- * it is the weaver from the next class on — and a guest that walks the view after another guest finds the first
- * guest's wrapper there, as on NeoForge.
+ * <p>Exactly that chain and nothing beside it. {@code TransformingClassLoader}, {@code ClassTransformer} and
+ * {@code LaunchPluginHandler} are modlauncher's own classes, allocated without a constructor: the real ones
+ * want a {@code TransformStore} of registered transformers and a plugin handler the kernel does not have, and
+ * nothing here ever asks them to transform, load or define a class — a guest only reads their fields.
+ * {@code MixinLaunchPluginLegacy} and {@code MixinTransformationHandler} are Mixin's modlauncher service
+ * classes, allocated the same way: neither has a static initialiser, and the only field filled on the handler
+ * is the transformer itself. The plugin handler's {@code plugins} map holds exactly one entry — "mixin", the
+ * name LibJF asks for — because its {@code get} reads that map and nothing else.
  *
  * <h2>When it cannot be built</h2>
  *
  * <p>The real context loader comes back, and the guest's cast fails exactly as it did before this existed.
  * Allocating a {@code TransformingClassLoader} initialises {@code ModuleClassLoader}, whose static initialiser
  * needs java.lang.invoke opened; the kernel's launch profile does not open it, and
- * {@code ModuleClassLoaderInitInjector} is what lets that initialiser finish anyway. Nothing thrown while building
- * — {@code ExceptionInInitializerError} included — leaves this method: the caller is a guest's plugin, and it
- * runs while the kernel is defining a class.
+ * {@code ModuleClassLoaderInitInjector} is what lets that initialiser finish anyway. Nothing thrown while
+ * building — {@code ExceptionInInitializerError} included — leaves this method: the caller is a guest's
+ * plugin, and it runs while the kernel is defining a class.
  *
  * <p>{@code -Dneoforbric.fmlTransformerView=off}: the real loader, always.
  */
@@ -102,42 +100,48 @@ public final class KernelFmlTransformerView {
 			// from a class loaded before the kernel's Mixin bootstrap. A later caller may still get the view.
 			if (saidTooEarly) return null;
 			saidTooEarly = true;
-			NeoForbricLog.warn("[NeoForbric/FmlView] a NeoForge mod asked for FML's TransformingClassLoader before Mixin "
-					+ "was up; it gets the kernel's loader, and its cast fails as it would have before");
+			NeoForbricLog.warn("[NeoForbric/FmlView] a NeoForge mod asked for modlauncher's TransformingClassLoader "
+					+ "before Mixin was up; it gets the kernel's loader, and its cast fails as it would have before");
 			return null;
 		}
 		try {
-			FMLMixinClassProcessor processor = allocate(FMLMixinClassProcessor.class);
-			Field transformer = FMLMixinClassProcessor.class.getDeclaredField("transformer");
+			MixinTransformationHandler handler = allocate(MixinTransformationHandler.class);
+			Field transformer = MixinTransformationHandler.class.getDeclaredField("transformer");
 			transformer.setAccessible(true);
-			transformer.set(processor, weaver);
+			transformer.set(handler, weaver);
 
-			SequencedMap<ProcessorName, ClassProcessor> processors = new LinkedHashMap<>();
-			processors.put(ClassProcessorIds.MIXIN, processor);
-			ClassProcessorSet set = allocate(ClassProcessorSet.class);
-			write(ClassProcessorSet.class, "processors", set, Collections.unmodifiableSequencedMap(processors));
+			MixinLaunchPluginLegacy plugin = allocate(MixinLaunchPluginLegacy.class);
+			write(MixinLaunchPluginLegacy.class, "processors", plugin, List.of(handler));
+
+			LaunchPluginHandler plugins = allocate(LaunchPluginHandler.class);
+			Map<String, Object> only = new HashMap<>();
+			only.put("mixin", plugin);
+			write(LaunchPluginHandler.class, "plugins", plugins, only);
+
+			ClassTransformer carrier = allocate(ClassTransformer.class);
+			write(ClassTransformer.class, "pluginHandler", carrier, plugins);
 
 			TransformingClassLoader loader = allocate(TransformingClassLoader.class);
-			write(TransformingClassLoader.class, "classTransformer", loader, new ClassTransformer(set, null));
+			write(TransformingClassLoader.class, "classTransformer", loader, carrier);
 
 			MixinWeaverSlot.watch(() -> {
 				try {
-					return transformer.get(processor);
+					return transformer.get(handler);
 				} catch (IllegalAccessException impossible) {
 					// setAccessible(true) above; answering "no replacement" keeps the kernel's own weaver.
 					return null;
 				}
 			});
 			view = loader;
-			NeoForbricLog.info("[NeoForbric/FmlView] a NeoForge mod reaches the Mixin weaver through FML's "
-					+ "TransformingClassLoader — it is handed a view whose MIXIN processor holds the kernel's weaver, "
+			NeoForbricLog.info("[NeoForbric/FmlView] a NeoForge mod reaches the Mixin weaver through modlauncher's "
+					+ "TransformingClassLoader — it is handed a view whose MIXIN plugin holds the kernel's weaver, "
 					+ "and whatever it writes there weaves every class from then on, as on NeoForge");
 			return loader;
 		} catch (Throwable unbuildable) {
 			gaveUp = true;
-			NeoForbricLog.warn("[NeoForbric/FmlView] could not build FML's TransformingClassLoader view (%s) — a NeoForge "
-					+ "mod that reaches the Mixin weaver through it (LibJF's ASM layer) starts without its class "
-					+ "patches, as before", String.valueOf(cause(unbuildable)));
+			NeoForbricLog.warn("[NeoForbric/FmlView] could not build modlauncher's TransformingClassLoader view (%s) — a "
+					+ "NeoForge mod that reaches the Mixin weaver through it (LibJF's ASM layer) starts without its "
+					+ "class patches, as before", String.valueOf(cause(unbuildable)));
 			return null;
 		}
 	}

@@ -3,21 +3,24 @@ package net.neoforbric.kernel.runtime.transfer;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.function.BooleanSupplier;
-import java.util.function.Supplier;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 import net.fabricmc.fabric.api.transfer.v1.storage.SlottedStorage;
 import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;
 import net.fabricmc.fabric.api.transfer.v1.storage.base.SingleSlotStorage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.resource.Resource;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 
 /**
- * Location-bound views never retain a resolved foreign handler. Every operation resolves it anew, and a removed
- * endpoint becomes empty. If removal happens inside a provider callback, throwing before the adapter's nested
- * transaction commits lets the real engine roll the provider back instead of silently writing into a dead object.
+ * Location-bound live views that never retain a resolved foreign store. Every operation resolves it anew,
+ * and a removed endpoint becomes empty. If removal happens inside a provider callback, throwing before the
+ * adapter's scope commits lets the real engine roll the provider back instead of silently writing into a
+ * dead object.
+ *
+ * <p>26.x also kept the NeoForge-side live views here; 1.21.1's adapters absorb them (NativeTransferAdapters
+ * takes the lookup, validity and generation directly), so what remains is the Fabric side — any ecosystem's
+ * storages — and energy, whose immediate {@link IEnergyStorage} is not an adapter's job to wrap twice.
  */
 public final class LiveTransferEndpoints {
 	private LiveTransferEndpoints() { }
@@ -25,57 +28,45 @@ public final class LiveTransferEndpoints {
 		Unavailable(String message) { super(message); }
 	}
 	static void stillValid(BooleanSupplier valid) {
-		if (!valid.getAsBoolean()) throw new Unavailable("Transfer endpoint invalidated during an operation");
+		if (valid != null && !valid.getAsBoolean()) throw new Unavailable("Transfer endpoint invalidated during an operation");
 	}
-	public static <N extends Resource> ResourceHandler<N> neo(Supplier<ResourceHandler<N>> lookup, BooleanSupplier valid, N empty) {
-		return neo(lookup, valid, () -> 0L, empty);
+	static void unchanged(long before, LongSupplier generation) {
+		if (generation != null && before != generation.getAsLong()) throw new Unavailable("Transfer capability invalidated during an operation");
 	}
-	public static <N extends Resource> ResourceHandler<N> neo(Supplier<ResourceHandler<N>> lookup, BooleanSupplier valid, LongSupplier generation, N empty) {
-		return new ResourceHandler<>() {
-			private ResourceHandler<N> current() { return valid.getAsBoolean() ? lookup.get() : null; }
-			private ResourceHandler<N> current(int slot) { var current = current(); return current != null && slot >= 0 && slot < current.size() ? current : null; }
-			public int size() { var h = current(); return h == null ? 0 : h.size(); }
-			public N getResource(int slot) { var h = current(slot); return h == null ? empty : h.getResource(slot); }
-			public long getAmountAsLong(int slot) { var h = current(slot); return h == null ? 0 : h.getAmountAsLong(slot); }
-			public long getCapacityAsLong(int slot, N resource) { var h = current(slot); return h == null ? 0 : h.getCapacityAsLong(slot, resource); }
-			public boolean isValid(int slot, N resource) { var h = current(slot); return h != null && h.isValid(slot, resource); }
-			public int insert(int slot, N resource, int max, net.neoforged.neoforge.transfer.transaction.TransactionContext tx) {
-				var h = current(slot); if (h == null) return 0;
-				long before = generation.getAsLong();
-				int amount = h.insert(slot, resource, max, tx); stillValid(valid); unchanged(before, generation); return amount;
-			}
-			public int extract(int slot, N resource, int max, net.neoforged.neoforge.transfer.transaction.TransactionContext tx) {
-				var h = current(slot); if (h == null) return 0;
-				long before = generation.getAsLong();
-				int amount = h.extract(slot, resource, max, tx); stillValid(valid); unchanged(before, generation); return amount;
-			}
-		};
-	}
-	/** The same rules for a NeoForge energy handler: resolved per operation, empty once its endpoint is gone. */
-	public static EnergyHandler energy(Supplier<EnergyHandler> lookup, BooleanSupplier valid, LongSupplier generation) {
+
+	/** The same rules for a NeoForge energy store: resolved per operation, empty once its endpoint is gone. */
+	public static IEnergyStorage energy(Supplier<IEnergyStorage> lookup, BooleanSupplier valid, LongSupplier generation) {
 		return new LiveEnergy(lookup, valid, generation);
 	}
-	private record LiveEnergy(Supplier<EnergyHandler> lookup, BooleanSupplier valid, LongSupplier generation) implements EnergyHandler, EnergyAbilities {
-		private EnergyHandler current() { return valid.getAsBoolean() ? lookup.get() : null; }
-		public long getAmountAsLong() { var h = current(); return h == null ? 0 : h.getAmountAsLong(); }
-		public long getCapacityAsLong() { var h = current(); return h == null ? 0 : h.getCapacityAsLong(); }
-		public int insert(int max, net.neoforged.neoforge.transfer.transaction.TransactionContext tx) {
-			var h = current(); if (h == null) return 0;
+
+	private record LiveEnergy(Supplier<IEnergyStorage> lookup, BooleanSupplier valid, LongSupplier generation) implements IEnergyStorage {
+		private IEnergyStorage current() { return valid.getAsBoolean() ? lookup.get() : null; }
+		private int move(int maximum, boolean simulate) {
+			IEnergyStorage h = current();
+			if (h == null) return 0;
 			long before = generation.getAsLong();
-			int amount = h.insert(max, tx); stillValid(valid); unchanged(before, generation); return amount;
+			int amount = simulate ? h.receiveEnergy(maximum, true) : h.receiveEnergy(maximum, false);
+			stillValid(valid); unchanged(before, generation);
+			return amount;
 		}
-		public int extract(int max, net.neoforged.neoforge.transfer.transaction.TransactionContext tx) {
-			var h = current(); if (h == null) return 0;
+		public int receiveEnergy(int maximum, boolean simulate) { return move(maximum, simulate); }
+		public int extractEnergy(int maximum, boolean simulate) {
+			IEnergyStorage h = current();
+			if (h == null) return 0;
 			long before = generation.getAsLong();
-			int amount = h.extract(max, tx); stillValid(valid); unchanged(before, generation); return amount;
+			int amount = h.extractEnergy(maximum, simulate);
+			stillValid(valid); unchanged(before, generation);
+			return amount;
 		}
-		// The store's own flag when it has one; otherwise the legacy rule, capacity > 0. Nothing when gone.
-		public boolean canInsert() { var h = current(); return h != null && EnergyAbilities.neoCanInsert(h); }
-		public boolean canExtract() { var h = current(); return h != null && EnergyAbilities.neoCanExtract(h); }
+		public int getEnergyStored() { IEnergyStorage h = current(); return h == null ? 0 : h.getEnergyStored(); }
+		public int getMaxEnergyStored() { IEnergyStorage h = current(); return h == null ? 0 : h.getMaxEnergyStored(); }
+		public boolean canExtract() { IEnergyStorage h = current(); return h != null && h.canExtract(); }
+		public boolean canReceive() { IEnergyStorage h = current(); return h != null && h.canReceive(); }
 		// Identity, not the record's component equality: two live views of one place are two endpoints.
 		@Override public boolean equals(Object other) { return this == other; }
 		@Override public int hashCode() { return System.identityHashCode(this); }
 	}
+
 	public static <F> SlottedStorage<F> fabric(Supplier<SlottedStorage<F>> lookup, BooleanSupplier valid, F empty) {
 		return fabric(lookup, valid, () -> 0L, empty);
 	}
@@ -123,8 +114,5 @@ public final class LiveTransferEndpoints {
 				};
 			}
 		};
-	}
-	static void unchanged(long before, LongSupplier generation) {
-		if (before != generation.getAsLong()) throw new Unavailable("Transfer capability invalidated during an operation");
 	}
 }

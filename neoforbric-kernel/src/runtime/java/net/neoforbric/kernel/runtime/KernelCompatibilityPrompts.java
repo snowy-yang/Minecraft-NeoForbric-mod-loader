@@ -33,9 +33,9 @@ public final class KernelCompatibilityPrompts {
 	private KernelCompatibilityPrompts() { }
 
 	public static void tick(Minecraft minecraft) {
-		if (stopping || !minecraft.isRunning() || minecraft.gui == null || minecraft.gui.overlay() != null) return;
+		if (stopping || !minecraft.isRunning() || minecraft.getOverlay() != null) return;
 		if (prompt != null) {
-			if (minecraft.gui.screen() == prompt) return;
+			if (minecraft.screen == prompt) return;
 			// Another screen replacing the prompt -- a death screen, a kick, a mod's own menu -- is neither the
 			// player's consent nor their refusal. The question is asked again, now, over whatever replaced it, and
 			// the answer returns there.
@@ -70,7 +70,7 @@ public final class KernelCompatibilityPrompts {
 		List<CompatibilityFinding> shown = List.copyOf(pending.subList(0, Math.min(PAGE, pending.size())));
 		// The rest stay queued for the prompt after this one; drain() emptied the queue.
 		if (shown.size() < pending.size()) CompatibilityDecision.queue();
-		previous = minecraft.gui.screen();
+		previous = minecraft.screen;
 		active = shown;
 		// The launch's own question, asked here because no window could ask it (a phone launcher's runtime cannot
 		// start one): the same contract as that window, so Quit stops the game rather than returning to the title.
@@ -78,7 +78,7 @@ public final class KernelCompatibilityPrompts {
 		try {
 			prompt = new KernelCompatibilityScreen(shown, pending.size() - shown.size(), activeForLaunch,
 					continued -> answer(minecraft, continued));
-			minecraft.gui.setScreen(prompt);
+			minecraft.setScreen(prompt);
 			NeoForbricLog.info("[NeoForbric/Compatibility] asking in the game about %d required feature loss(es)%s",
 					shown.size(), activeForLaunch ? " the launch could not ask about in a window" : "");
 		} catch (RuntimeException | LinkageError unavailable) {
@@ -112,7 +112,7 @@ public final class KernelCompatibilityPrompts {
 		previous = null;
 		if (continued) {
 			CompatibilityDecision.acknowledge(answered);
-			minecraft.gui.setScreen(restore);
+			minecraft.setScreen(restore);
 			return;
 		}
 		if (forLaunch) {
@@ -128,12 +128,14 @@ public final class KernelCompatibilityPrompts {
 		NeoForbricLog.warn("[NeoForbric/Compatibility] continuation was declined for %d required feature loss(es); %s",
 				refused.size(), minecraft.level != null ? "saving and leaving this world" : "nothing to leave");
 		if (minecraft.level != null) {
-			minecraft.disconnectWithSavingScreen();
-			minecraft.gui.setScreen(new TitleScreen());
+			// 26.x had a saving-screen disconnect; 1.21.1's vanilla path saves server-side before the client
+			// drops, so plain disconnect() is the whole idiom here.
+			minecraft.disconnect();
+			minecraft.setScreen(new TitleScreen());
 		} else {
 			// Not in a world: nothing to save, and whatever was on screen -- the title, or a disconnect screen still
 			// carrying the server's reason -- stays.
-			minecraft.gui.setScreen(restore == null ? new TitleScreen() : restore);
+			minecraft.setScreen(restore == null ? new TitleScreen() : restore);
 		}
 	}
 
@@ -142,7 +144,7 @@ public final class KernelCompatibilityPrompts {
 		// Recorded before the stop, so the launcher's boundary reports this policy stop as 78 once Main returns.
 		CompatibilityDecision.recordPolicyStop();
 		NeoForbricLog.error("[NeoForbric/Compatibility] FATAL: %s; saving and stopping normally", reason);
-		if (minecraft.level != null) minecraft.disconnectWithSavingScreen();
+		if (minecraft.level != null) minecraft.disconnect();
 		minecraft.stop();
 	}
 }

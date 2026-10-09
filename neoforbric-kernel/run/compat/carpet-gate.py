@@ -44,7 +44,7 @@ def stale(console, compatibility):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--carpet', type=Path, required=True, help='Unmodified fabric-carpet-26.2+v260616.jar')
+    parser.add_argument('--carpet', type=Path, required=True, help='Unmodified fabric-carpet-1.4.147.jar (the 1.21.1 build)')
     parser.add_argument('--staged-root', type=Path, help='The shared neoforbric-loader/run directory')
     parser.add_argument('--output', type=Path, help='A new directory for logs, worlds and reports')
     args = parser.parse_args()
@@ -54,15 +54,14 @@ def main():
     carpet = args.carpet.resolve()
     with zipfile.ZipFile(carpet) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
-        if metadata.get('id') != 'carpet' or metadata.get('version') != '26.2+v260616':
-            parser.error('This gate targets Carpet 26.2+v260616')
+        if metadata.get('id') != 'carpet' or metadata.get('version') != '1.4.147':
+            parser.error('This gate targets Carpet 1.4.147 (the 1.21.1-era build this anchor pins)')
     output = (args.output or kernel / 'build/verification' / ('carpet-' + datetime.now().strftime('%Y%m%d-%H%M%S'))).resolve()
     output.mkdir(parents=True, exist_ok=False)
     root = kernel / 'canary/carpet'
-    game = stage / 'neoforge-patched/patched-mc-neoforge-1.21.1.jar'
-    forge = stage / 'merged-base/forge-runtime-interop.jar'
+    game = stage / 'neoforge-base/patched-mc-neoforge-1.21.1.jar'
     neo = stage / 'neoforge-runtime/neoforge-runtime.jar'
-    cp = [game, forge, neo, carpet]
+    cp = [game, neo, carpet]
     for lib in json.loads((mc / 'versions/1.21.1/1.21.1.json').read_text())['libraries']:
         path = lib.get('downloads', {}).get('artifact', {}).get('path')
         if path and (mc / 'libraries' / path).is_file():

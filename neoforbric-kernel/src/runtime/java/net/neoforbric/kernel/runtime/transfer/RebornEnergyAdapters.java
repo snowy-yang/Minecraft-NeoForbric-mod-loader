@@ -7,33 +7,45 @@ import java.util.function.Supplier;
 
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 import team.reborn.energy.api.EnergyStorage;
 
 /**
- * Team Reborn Energy (the Fabric ecosystem's energy API) and NeoForge's EnergyHandler, through PairedTransactions:
- * each operation runs in a REAL nested transaction of the provider's own engine, opened under the peer of the
- * consumer's current transaction, and commits into it. Nothing moves outside the consumer's scope, a nested abort
- * restores the provider through its own journal, and final notifications wait for both roots.
+ * Team Reborn Energy (the Fabric ecosystem's energy API) and 1.21.1's immediate NeoForge
+ * {@link IEnergyStorage}, bridged the same way the item and fluid adapters bridge their APIs:
+ * <ul>
+ * <li><b>Fabric consumer, NeoForge store</b> ({@link #fabric}): inside an open Fabric transaction the
+ * Reborn-facing view answers with a {@code simulate=true} call and registers the real call as a close
+ * callback that replays on commit and does nothing on abort. Between simulation and replay another actor
+ * may change the store, so the replay may move less than the simulation said.</li>
+ * <li><b>NeoForge consumer, Reborn store</b> ({@link #neo}): each operation opens a Fabric root of its own
+ * (a NeoForge caller brings no transaction); a simulate aborts that scope, an execute commits it, so a
+ * simulation leaves the Reborn store exactly as it found it.</li>
+ * </ul>
  *
- * <p>Units are 1:1 (see EnergyUnits). A Reborn request larger than an int is asked of NeoForge as Integer.MAX_VALUE;
- * the rest is never moved and stays in its source. A provider answer outside [0, request] is rejected before the
- * nested scope commits, so it is rolled back.
+ * <p>26.x paired live transaction objects through both engines here; 1.21.1 NeoForge energy is immediate
+ * with simulate booleans, so the pairing is gone and only the two honest half-bridges remain.
  *
- * <p>Only this class, RebornEnergyBridge and nothing else in the runtime names a Reborn type. They are loaded only
- * when KernelTransferInterop found Team Reborn Energy installed; without it no Reborn class is ever requested.
+ * <p>Units are 1:1 (see EnergyUnits). A Reborn request larger than an int is asked of NeoForge as
+ * Integer.MAX_VALUE; the rest is never moved and stays in its source. A provider answer outside [0, request]
+ * is rejected before the scope commits, so it is rolled back.
+ *
+ * <p>Only this class, RebornEnergyBridge and nothing else in the runtime names a Reborn type. They are loaded
+ * only when KernelTransferInterop found Team Reborn Energy installed; without it no Reborn class is ever
+ * requested.
  */
 public final class RebornEnergyAdapters {
 	private RebornEnergyAdapters() { }
 
-	/** A NeoForge view of a Reborn store; our own Reborn view of a NeoForge handler unwraps to that handler. */
-	public static EnergyHandler neo(EnergyStorage storage) {
+	/** A NeoForge view of a Reborn store; our own Reborn view of a NeoForge store unwraps to that store. */
+	public static IEnergyStorage neo(EnergyStorage storage) {
 		Objects.requireNonNull(storage);
 		if (storage instanceof FromNeo own) return own.handler();
 		return new FromFabric(storage);
 	}
-	/** A Reborn view of a NeoForge handler; our own NeoForge view of a Reborn store unwraps to that store. */
-	public static EnergyStorage fabric(EnergyHandler handler) {
+
+	/** A Reborn view of a NeoForge store; our own NeoForge view of a Reborn store unwraps to that store. */
+	public static EnergyStorage fabric(IEnergyStorage handler) {
 		Objects.requireNonNull(handler);
 		if (handler instanceof FromFabric own) return own.storage();
 		return new FromNeo(handler);
@@ -44,18 +56,16 @@ public final class RebornEnergyAdapters {
 		return new Live(lookup, valid, generation);
 	}
 
-	private record FromFabric(EnergyStorage storage) implements EnergyHandler, EnergyAbilities {
-		public long getAmountAsLong() { return EnergyUnits.reported(storage.getAmount()); }
-		public long getCapacityAsLong() { return EnergyUnits.reported(storage.getCapacity()); }
-		public int insert(int maximum, net.neoforged.neoforge.transfer.transaction.TransactionContext context) { return move(maximum, context, true); }
-		public int extract(int maximum, net.neoforged.neoforge.transfer.transaction.TransactionContext context) { return move(maximum, context, false); }
-		private int move(int maximum, net.neoforged.neoforge.transfer.transaction.TransactionContext context, boolean insert) {
-			if (maximum < 0) throw new IllegalArgumentException("Negative energy amount: " + maximum);
+	/** Reborn (transactional) seen as NeoForge (immediate): each call owns a one-shot Fabric root. */
+	private record FromFabric(EnergyStorage storage) implements IEnergyStorage {
+		public int receiveEnergy(int maximum, boolean simulate) { return move(maximum, simulate, true); }
+		public int extractEnergy(int maximum, boolean simulate) { return move(maximum, simulate, false); }
+		private int move(int maximum, boolean simulate, boolean receive) {
+			if (maximum < 0) throw new IllegalArgumentException("Negative energy amount");
 			if (maximum == 0) return 0;
-			TransactionContext parent = PairedTransactions.fabric(context);
-			try (Transaction nested = parent.openNested()) {
-				long moved = EnergyUnits.moved(insert ? storage.insert(maximum, nested) : storage.extract(maximum, nested), maximum);
-				nested.commit();
+			try (Transaction nested = Transaction.openOuter()) {
+				long moved = EnergyUnits.moved(receive ? storage.insert(maximum, nested) : storage.extract(maximum, nested), maximum);
+				if (!simulate) nested.commit();
 				return (int) moved;
 			} catch (LiveTransferEndpoints.Unavailable invalidated) {
 				NativeTransferAdapters.requireSuccessfulRollback(invalidated, storage);
@@ -63,33 +73,36 @@ public final class RebornEnergyAdapters {
 				return 0;
 			}
 		}
-		public boolean canInsert() { return storage.supportsInsertion(); }
+		public int getEnergyStored() { return EnergyUnits.saturated(EnergyUnits.reported(storage.getAmount())); }
+		public int getMaxEnergyStored() { return EnergyUnits.saturated(EnergyUnits.reported(storage.getCapacity())); }
 		public boolean canExtract() { return storage.supportsExtraction(); }
+		public boolean canReceive() { return storage.supportsInsertion(); }
 		@Override public boolean equals(Object other) { return this == other; }
 		@Override public int hashCode() { return System.identityHashCode(this); }
 	}
 
-	private record FromNeo(EnergyHandler handler) implements EnergyStorage {
-		public boolean supportsInsertion() { return EnergyAbilities.fabricCanInsert(handler); }
-		public boolean supportsExtraction() { return EnergyAbilities.fabricCanExtract(handler); }
+	/** NeoForge (immediate) seen as Reborn (transactional): answer with the simulation, replay at commit. */
+	private record FromNeo(IEnergyStorage handler) implements EnergyStorage {
+		public boolean supportsInsertion() { return handler.canReceive(); }
+		public boolean supportsExtraction() { return handler.canExtract(); }
 		public long insert(long maximum, TransactionContext context) { return move(maximum, context, true); }
 		public long extract(long maximum, TransactionContext context) { return move(maximum, context, false); }
-		private long move(long maximum, TransactionContext context, boolean insert) {
+		private long move(long maximum, TransactionContext context, boolean receive) {
 			int request = EnergyUnits.request(maximum);
 			if (request == 0) return 0;
-			var parent = PairedTransactions.neo(context);
-			try (var nested = net.neoforged.neoforge.transfer.transaction.Transaction.open(parent)) {
-				long moved = EnergyUnits.moved(insert ? handler.insert(request, nested) : handler.extract(request, nested), request);
-				nested.commit();
-				return moved;
-			} catch (LiveTransferEndpoints.Unavailable invalidated) {
-				NativeTransferAdapters.requireSuccessfulRollback(invalidated, handler);
-				TransferIssues.report("ENDPOINT_INVALIDATED", handler, invalidated.getMessage() + "; the nested operation was rolled back");
-				return 0;
-			}
+			int simulated = receive ? handler.receiveEnergy(request, true) : handler.extractEnergy(request, true);
+			if (EnergyUnits.moved(simulated, request) == 0) return 0;
+			// The real call runs when the Fabric transaction commits, with the simulated amount as its cap.
+			// A store that dies or shrinks before then moves less than promised, and the mismatch is reported.
+			context.addCloseCallback((closed, result) -> {
+				int moved = receive ? handler.receiveEnergy(simulated, false) : handler.extractEnergy(simulated, false);
+				if (moved != simulated) TransferIssues.report("REPLAY_MISMATCH", handler,
+						"the real energy move transferred " + moved + " of the promised " + simulated + "; another actor changed the store between simulate and commit");
+			});
+			return simulated;
 		}
-		public long getAmount() { return EnergyUnits.reported(handler.getAmountAsLong()); }
-		public long getCapacity() { return EnergyUnits.reported(handler.getCapacityAsLong()); }
+		public long getAmount() { return EnergyUnits.reported(handler.getEnergyStored()); }
+		public long getCapacity() { return EnergyUnits.reported(handler.getMaxEnergyStored()); }
 		@Override public boolean equals(Object other) { return this == other; }
 		@Override public int hashCode() { return System.identityHashCode(this); }
 	}

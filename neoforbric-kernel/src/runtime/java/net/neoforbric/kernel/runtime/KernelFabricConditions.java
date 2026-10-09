@@ -31,7 +31,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.RegistryOps;
 
 import net.neoforbric.kernel.util.NeoForbricLog;
@@ -50,8 +50,8 @@ import net.neoforbric.kernel.util.Reflect;
  *       anchor does not exist — and the kernel rewrites every guest config's {@code defaultRequire} to 0, so it
  *       SOFT-SKIPS. Silently.</li>
  *   <li>{@code SimpleJsonResourceReloadListenerMixin.skipData} targets
- *       {@code lambda$scanDirectory$0(Map, Identifier, Object)}; the merged base's is
- *       {@code (Identifier, Identifier, Map, Optional)}, because NeoForge's patch made the value optional and
+ *       {@code lambda$scanDirectory$0(Map, ResourceLocation, Object)}; the merged base's is
+ *       {@code (ResourceLocation, ResourceLocation, Map, Optional)}, because NeoForge's patch made the value optional and
  *       reordered the captures. Mixin rejects the class, taking the sibling injection with it.</li>
  * </ul>
  *
@@ -154,7 +154,7 @@ public final class KernelFabricConditions {
 		RegistryOps.RegistryInfoLookup lookup =
 				ops instanceof RegistryOps<?> registry ? registry.lookupProvider : null;
 		try {
-			boolean keep = (boolean) handle.invoke(json, KEY, (Identifier) null, lookup);
+			boolean keep = (boolean) handle.invoke(json, KEY, (ResourceLocation) null, lookup);
 			int judged = JUDGED.incrementAndGet();
 			if (!announced) {
 				announced = true;
@@ -183,7 +183,7 @@ public final class KernelFabricConditions {
 			try {
 				Class<?> impl = Class.forName(IMPL, false, KernelFabricConditions.class.getClassLoader());
 				evaluator = MethodHandles.lookup().findStatic(impl, "applyResourceConditions",
-						MethodType.methodType(boolean.class, JsonObject.class, String.class, Identifier.class,
+						MethodType.methodType(boolean.class, JsonObject.class, String.class, ResourceLocation.class,
 								RegistryOps.RegistryInfoLookup.class));
 			} catch (Throwable absent) {
 				evaluator = null;
@@ -222,8 +222,8 @@ public final class KernelFabricConditions {
 	 * that recognises the marker and cancels the map-put.
 	 *
 	 * <p>On the merged base the producer applies and the consumer does not. The merge left the class carrying TWO
-	 * methods named {@code lambda$scanDirectory$0} — NeoForge's {@code (Identifier,Identifier,Map,Optional)} and
-	 * vanilla's {@code (Codec,Identifier,Map,Object)} — and the live {@code invokedynamic} binds the first. So
+	 * methods named {@code lambda$scanDirectory$0} — NeoForge's {@code (ResourceLocation,ResourceLocation,Map,Optional)} and
+	 * vanilla's {@code (Codec,ResourceLocation,Map,Object)} — and the live {@code invokedynamic} binds the first. So
 	 * fabric's {@code @Inject}, written against the second, attaches to nothing, and the bare Object flows into
 	 * {@code DataResult.ifSuccess} whose consumer casts it to {@code Optional}: ClassCastException, datapack load
 	 * fails, "can't proceed with server load", and the server never starts.

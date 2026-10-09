@@ -55,7 +55,13 @@ def devFabricApi = file('.dev/api/fabric-api-0.116.17+1.21.1.jar')
 def stagedFabricApi = file(project.findProperty('neoforbric.fabricApi') ?: (devFabricApi.isFile() ? devFabricApi
 		: new File(stagedRoot.parentFile.parentFile, 'neoforbric-kernel/run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar')))
 def transferApiModules = ['fabric-transfer-api-v1-', 'fabric-api-lookup-api-v1-', 'fabric-api-base-']
+def transferStagingDir = layout.buildDirectory.dir('transfer-api-staging')
 def transferModulesDir = layout.buildDirectory.dir('transfer-api-compile')
+// Real 1.21.1 fabric-api ships intermediary-named modules while the staged game is Mojmap; the modules are
+// remapped into the base's namespace before they join the compile classpath (see FabricModuleRemapTool).
+def intermediaryMappings = file(project.findProperty('neoforbric.intermediary') ?: '.dev/mappings/intermediary-1.21.1.tiny')
+def mojmapMappings = file(project.findProperty('neoforbric.mojmap') ?: '.dev/minecraft/.neoforbric-build/nfrt/artifacts/minecraft_1.21.1_client_mappings.txt')
+def vanillaClient = file(project.findProperty('neoforbric.vanillaClient') ?: '.dev/minecraft/versions/1.21.1/1.21.1.jar')
 def extractTransferApis = tasks.register('extractTransferApis', Sync) {
 	onlyIf { !stagedGameJars.isEmpty() }
 	// Lazy, so a missing jar reaches compileRuntimeJava's message instead of failing while inputs are snapshotted.
@@ -63,17 +69,47 @@ def extractTransferApis = tasks.register('extractTransferApis', Sync) {
 	include transferApiModules.collect { "META-INF/jars/${it}*.jar" }
 	eachFile { path = name }
 	includeEmptyDirs = false
-	into transferModulesDir
+	into transferStagingDir
 	// A fabric-api jar nesting two versions of one module would put both on the compile path; one of each.
 	doLast {
-		def extracted = transferModulesDir.get().asFile.listFiles()*.name
+		def extracted = transferStagingDir.get().asFile.listFiles()*.name
 		transferApiModules.each { prefix ->
 			def found = extracted.findAll { it.startsWith(prefix) && it.endsWith('.jar') }
 			if (found.size() != 1) throw new GradleException("${stagedFabricApi} must nest exactly one ${prefix}*.jar; found ${found}")
 		}
 	}
 }
-def transferModuleFiles = files(fileTree(transferModulesDir) { include '*.jar' }).builtBy(extractTransferApis)
+def remapTransferApis = tasks.register('remapTransferApis', JavaExec) {
+	onlyIf { !stagedGameJars.isEmpty() }
+	group = 'build'
+	description = 'Remaps fabric-api\'s transfer modules from intermediary to the base\'s Mojmap namespace.'
+	dependsOn extractTransferApis
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'net.neoforbric.kernel.mapping.FabricModuleRemapTool'
+	// Lazy: the module list exists only after extraction, and a missing pin must read as the doFirst message below.
+	argumentProviders.add(new org.gradle.process.CommandLineArgumentProvider() {
+		@Override java.util.List<String> asArguments() {
+			def staged = transferStagingDir.get().asFile.listFiles() ?: []
+			[
+				intermediaryMappings.absolutePath, mojmapMappings.absolutePath, vanillaClient.absolutePath,
+				layout.buildDirectory.dir('transfer-api-cache').get().asFile.absolutePath,
+				transferModulesDir.get().asFile.absolutePath
+			] + staged.collect { it.absolutePath }.findAll { it.endsWith('.jar') }
+		}
+	})
+	doFirst {
+		if (!stagedFabricApi.isFile()) throw new GradleException("The kernel game side includes its transfer " +
+				"component and compiles it against Fabric API's transfer modules, but ${stagedFabricApi} does not " +
+				"exist. Pass -Pneoforbric.fabricApi=<a fabric-api jar for ${mcVersion}> (the compatibility pack's is the default).")
+		if (!intermediaryMappings.isFile() || !mojmapMappings.isFile() || !vanillaClient.isFile()) {
+			throw new GradleException("Fabric API's 1.21.1 modules are intermediary-named and must be remapped " +
+					"into the base's Mojmap namespace to compile; one of the mapping inputs is absent. Run " +
+					"python3 ../tools/dev.py prepare (stages ${intermediaryMappings} and the Mojang mappings) " +
+					"or pass -Pneoforbric.intermediary=/ -Pneoforbric.mojmap=/ -Pneoforbric.vanillaClient= yourself.")
+		}
+	}
+}
+def transferModuleFiles = files(fileTree(transferModulesDir) { include '*.jar' }).builtBy(remapTransferApis)
 // Team Reborn Energy 5.0.0 (mod id team_reborn_energy, MIT), the energy API Fabric mods use: Fabric API has none.
 // The energy half of the transfer component compiles against it and, like the transfer modules, it is never bundled:
 // a pack that wants Fabric energy installs it as an ordinary mod. Same rule as above: a machine that builds the game
@@ -85,12 +121,43 @@ def transferModuleFiles = files(fileTree(transferModulesDir) { include '*.jar' }
 // property it is taken from beside the staged tree, else from this checkout's own run/energy-api/, so a fresh clone
 // or a second working tree needs only the file dropped there. verifyRebornEnergy checks it on EVERY game-side build:
 // compileRuntimeJava's own up-to-date check sees only the jar's API, so a same-API file never re-ran it.
-def rebornEnergySha256 = '889afc438d3e4add5cfdac76517da7987a2c495e4731690a56f2c5dee775db59'
-def rebornEnergyDefaults = [file('.dev/api/energy-5.0.0.jar'),
-		new File(stagedRoot.parentFile.parentFile, 'neoforbric-kernel/run/energy-api/energy-5.0.0.jar'),
-		file('run/energy-api/energy-5.0.0.jar')]
-def stagedRebornEnergy = file(project.findProperty('neoforbric.rebornEnergy')
+def rebornEnergySha256 = '072cd9fad2ec00c3b11b5862f34bb12f0554f727958ad685ac7b81b4fd79eac3'
+def rebornEnergyDefaults = [file('.dev/api/energy-4.2.0.jar'),
+		new File(stagedRoot.parentFile.parentFile, 'neoforbric-kernel/run/energy-api/energy-4.2.0.jar'),
+		file('run/energy-api/energy-4.2.0.jar')]
+def rebornEnergyInput = file(project.findProperty('neoforbric.rebornEnergy')
 		?: (rebornEnergyDefaults.find { it.isFile() } ?: rebornEnergyDefaults[0]))
+// 4.2.0 ships intermediary names (the 5.0.0 artifact was recompiled as Java 25 bytecode, unreadable from a
+// Java 21 build); the build remaps it into the base's Mojmap namespace, exactly as the fabric-api modules.
+def remappedEnergyDir = layout.buildDirectory.dir('energy-remap')
+def remapRebornEnergy = tasks.register('remapRebornEnergy', JavaExec) {
+	onlyIf { !stagedGameJars.isEmpty() }
+	group = 'build'
+	description = 'Remaps Team Reborn Energy from intermediary to the base\'s Mojmap namespace.'
+	dependsOn remapTransferApis
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'net.neoforbric.kernel.mapping.FabricModuleRemapTool'
+	argumentProviders.add(new org.gradle.process.CommandLineArgumentProvider() {
+		@Override java.util.List<String> asArguments() {
+			// Only the energy jar is a remap INPUT; the raw fabric modules join the classpath through the tool's
+			// own module list handling only for hierarchy, and their names are identical in both namespaces, so
+			// they are not remap inputs here.
+			[
+				intermediaryMappings.absolutePath, mojmapMappings.absolutePath, vanillaClient.absolutePath,
+				layout.buildDirectory.dir('energy-remap-cache').get().asFile.absolutePath,
+				remappedEnergyDir.get().asFile.absolutePath, rebornEnergyInput.absolutePath
+			]
+		}
+	})
+	doFirst {
+		if (!rebornEnergyInput.isFile()) throw new GradleException("The kernel game side includes its energy bridge " +
+				"and compiles it against Team Reborn Energy, but ${rebornEnergyInput} does not exist. Pass " +
+				"-Pneoforbric.rebornEnergy=<an energy-4.2.0.jar> or run python3 ../tools/dev.py prepare.")
+	}
+}
+// What the game side actually links against: the remapped jar. -Pneoforbric.rebornEnergy=<jar> still names the
+// RAW intermediary jar; it is remapped by the task, never linked raw.
+def stagedRebornEnergy = remappedEnergyDir.map { it.file(rebornEnergyInput.name) }
 // Integration runs pass -Pneoforbric.requireTransfer=true: there a skipped transfer suite is a failure, not a pass.
 def strictIntegration = gradle.startParameter.taskNames.any { it.tokenize(':').last() == 'integrationTest' }
 def requireTransfer = project.findProperty('neoforbric.requireTransfer') == 'true' || strictIntegration
@@ -301,20 +368,20 @@ tasks.named('compileRuntimeJava') {
 }
 // No outputs, so never up to date: it runs whenever the game side is built.
 def verifyRebornEnergy = tasks.register('verifyRebornEnergy') {
-	description = 'Checks the Team Reborn Energy jar the game side compiles against: present, and exactly the pinned 5.0.0 file.'
+	description = 'Checks the Team Reborn Energy jar the game side remaps and compiles against: present, and exactly the pinned 4.2.0 file.'
 	onlyIf { !stagedGameJars.isEmpty() }
 	doLast {
-		if (!stagedRebornEnergy.isFile()) throw new GradleException("The kernel game side includes its energy bridge " +
-				"and compiles it against Team Reborn Energy 5.0.0, but ${stagedRebornEnergy} does not exist. Pass " +
-				"-Pneoforbric.rebornEnergy=<energy-5.0.0.jar> or put the file in neoforbric-kernel/run/energy-api/ " +
-				"(team_reborn_energy 5.0.0, MIT, https://github.com/TechReborn/Energy; SHA-256 ${rebornEnergySha256}).")
-		def digest = java.security.MessageDigest.getInstance('SHA-256').digest(stagedRebornEnergy.bytes).encodeHex().toString()
-		if (digest != rebornEnergySha256) throw new GradleException("${stagedRebornEnergy} is not the Team Reborn Energy " +
-				"5.0.0 jar the energy bridge is built and tested against: its SHA-256 is ${digest}, expected " +
+		if (!rebornEnergyInput.isFile()) throw new GradleException("The kernel game side includes its energy bridge " +
+				"and compiles it against Team Reborn Energy, but ${rebornEnergyInput} does not exist. Pass " +
+				"-Pneoforbric.rebornEnergy=<energy-4.2.0.jar> or put the file in neoforbric-kernel/run/energy-api/ " +
+				"(team_reborn_energy 4.2.0, MIT, https://github.com/TechReborn/Energy; SHA-256 ${rebornEnergySha256}).")
+		def digest = java.security.MessageDigest.getInstance('SHA-256').digest(rebornEnergyInput.bytes).encodeHex().toString()
+		if (digest != rebornEnergySha256) throw new GradleException("${rebornEnergyInput} is not the Team Reborn Energy " +
+				"4.2.0 jar the energy bridge is built and tested against: its SHA-256 is ${digest}, expected " +
 				"${rebornEnergySha256}. Use that exact file; another Reborn build needs the bridge re-verified and this pin changed.")
 	}
 }
-tasks.named('compileRuntimeJava') { dependsOn verifyRebornEnergy }
+tasks.named('compileRuntimeJava') { dependsOn verifyRebornEnergy, remapRebornEnergy }
 // Links against the game side, so it is built exactly when the game side is.
 tasks.named('compileModMenuApiJava') {
 	onlyIf { !stagedGameJars.isEmpty() }
@@ -500,7 +567,7 @@ tasks.register('runtimeJar', Jar) {
 				.collect { "META-INF/neoforbric/modmenu-api/com/terraformersmc/modmenu/${it}.class.bin".toString() }
 				.findAll { !entries.contains(it) }
 		if (standIn) throw new GradleException("neoforbric-kernel-runtime.jar was built without its Mod Menu API stand-in: ${standIn}")
-		def missing = ['BlockTransferBridge', 'TransferIssues', 'PairedTransactions', 'RebornEnergyBridge',
+		def missing = ['BlockTransferBridge', 'TransferIssues', 'RebornEnergyBridge',
 				'RebornEnergyAdapters', 'EnergyUnits']
 				.collect { "net/neoforbric/kernel/runtime/transfer/${it}.class".toString() }.findAll { !entries.contains(it) }
 		if (missing) throw new GradleException("neoforbric-kernel-runtime.jar was built without its transfer component: ${missing}")

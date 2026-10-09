@@ -94,7 +94,7 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 	}
 
 	/** The repairs {@link #transform} runs, in its order; a test pins the two lists against each other. */
-	static final List<String> REPAIRS = List.of("repairLambdaBootstrapHandles", "addBlockStateAppearanceResolver", "giveKeyMappingItsVanillaMap", "giveTheVanillaParticleMapAViewOfTheLiveOne", "restoreDoublePrecisionToTheRandomSources", "convertRadiansWithVanillasFoldedConstant", "callVanillasWriteByteAgain", "saveTheHeightmapsVanillaSaves", "guardNeoForgesWorldModifierPass", "letForeignResourceConditionsThrough", "letFabricResourceConditionsDecide", "translateAGuestsPrivateSkipMarker", "nameTheReloadListenersNeoForgeRefusesToName", "tolerateEmptyCreativeTabStacks", "bridgeOrphanedPipRenderers", "dropTheWindowTitlesLoaderBrand", "keepTheSaveOffTheTeardownsFailurePath", "vetoUnjudgeableOverlayConditions", "letModdedFeatureFlagsRegister", "wrapTheStreamsVanillaWraps");
+	static final List<String> REPAIRS = List.of("repairLambdaBootstrapHandles", "addBlockStateAppearanceResolver", "giveKeyMappingItsVanillaMap", "giveTheVanillaParticleMapAViewOfTheLiveOne", "restoreDoublePrecisionToTheRandomSources", "convertRadiansWithVanillasFoldedConstant", "callVanillasWriteByteAgain", "saveTheHeightmapsVanillaSaves", "guardNeoForgesWorldModifierPass", "letForeignResourceConditionsThrough", "letFabricResourceConditionsDecide", "translateAGuestsPrivateSkipMarker", "tolerateEmptyCreativeTabStacks", "dropTheWindowTitlesLoaderBrand", "keepTheSaveOffTheTeardownsFailurePath", "vetoUnjudgeableOverlayConditions", "letModdedFeatureFlagsRegister", "wrapTheStreamsVanillaWraps");
 
 	private static final String NEO_EVENT_HOOKS_BINARY = "net.neoforged.neoforge.event.EventHooks";
 
@@ -147,12 +147,8 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 				"fabric:load_conditions has no evaluator — a Fabric mod's conditional data files all load"));
 		out.add(fixed("translateAGuestsPrivateSkipMarker", JSON_RELOAD_LISTENER,
 				"fabric-api's skip marker reaches the reader's cast — the datapack load dies (\"can't proceed with server load\")"));
-		out.add(fixed("nameTheReloadListenersNeoForgeRefusesToName", ADD_CLIENT_RELOAD_LISTENERS,
-				"a Fabric mod's client reload listener kills the client — NeoForge refuses to name it"));
 		out.add(fixed("tolerateEmptyCreativeTabStacks", NEO_EVENT_HOOKS_BINARY.replace('.', '/'),
 				"one empty stack from any mod aborts the whole creative menu"));
-		out.add(fixed("bridgeOrphanedPipRenderers", GUI_RENDERER,
-				"a picture-in-picture renderer registered the vanilla way never draws"));
 		out.add(fixed("dropTheWindowTitlesLoaderBrand", "net/minecraft/client/Minecraft",
 				"the window title carries another loader's brand"));
 		out.add(fixed("keepTheSaveOffTheTeardownsFailurePath", INTEGRATED_SERVER,
@@ -207,9 +203,7 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 			changed |= claim(reporter, "letForeignResourceConditionsThrough", letForeignResourceConditionsThrough(node));
 			changed |= claim(reporter, "letFabricResourceConditionsDecide", letFabricResourceConditionsDecide(node));
 			changed |= claim(reporter, "translateAGuestsPrivateSkipMarker", translateAGuestsPrivateSkipMarker(node));
-			changed |= claim(reporter, "nameTheReloadListenersNeoForgeRefusesToName", nameTheReloadListenersNeoForgeRefusesToName(node));
 			changed |= claim(reporter, "tolerateEmptyCreativeTabStacks", tolerateEmptyCreativeTabStacks(node));
-			changed |= claim(reporter, "bridgeOrphanedPipRenderers", bridgeOrphanedPipRenderers(node));
 			changed |= claim(reporter, "dropTheWindowTitlesLoaderBrand", dropTheWindowTitlesLoaderBrand(node));
 			changed |= claim(reporter, "keepTheSaveOffTheTeardownsFailurePath", keepTheSaveOffTheTeardownsFailurePath(node));
 			changed |= claim(reporter, "vetoUnjudgeableOverlayConditions", vetoUnjudgeableOverlayConditions(node));
@@ -658,46 +652,6 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 				+ "the half that runs produces a bare Object where the half that does not would have removed the "
 				+ "file. Unrepaired, one condition-gated data file whose condition is false stops the server "
 				+ "starting at all", node.name, repaired);
-		return true;
-	}
-
-	/**
-	 * Lets a Fabric mod add a client reload listener the way Fabric mods always have, without killing the client.
-	 *
-	 * <p>{@code AddClientReloadListenersEvent.lookupName} names each listener already in the resource manager by
-	 * asking {@code VanillaClientListeners.getNameForClass}, and when that returns null it THROWS: "A non-vanilla
-	 * reload listener … was added via mixin before the AddClientReloadListenerEvent!". The assertion is written
-	 * for an instance whose only mods are NeoForge mods. Adding a listener by mixin is ordinary Fabric practice —
-	 * there is no event for it to go through — so on a multi-ecosystem instance it fires on CORRECT mod code, from
-	 * inside {@code ClientHooks.initClientHooks}, which runs inside {@code Minecraft.<init>}: vistas took the whole
-	 * client down before it drew a frame.
-	 *
-	 * <p>The name is a sort key and a registry key and nothing else, so a synthesised one leaves the listener
-	 * registered, sorted and RUNNING — which is the difference between this and swallowing the exception. Only
-	 * the lookup inside this event is redirected: NeoForge's own {@code ClientNeoForgeMod} asks the same method
-	 * about its own listeners, and those are in the table.
-	 *
-	 * <p>One instruction: same opcode, same descriptor, same stack.
-	 */
-	private static boolean nameTheReloadListenersNeoForgeRefusesToName(ClassNode node) {
-		if (!ADD_CLIENT_RELOAD_LISTENERS.equals(node.name)) return false;
-		int redirected = 0;
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-				if (!(insn instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-						|| !VANILLA_CLIENT_LISTENERS.equals(call.owner)
-						|| !"getNameForClass".equals(call.name) || !NAME_FOR_CLASS.equals(call.desc)) {
-					continue;
-				}
-				call.owner = KERNEL_RELOAD_NAMES;
-				call.name = "nameFor";
-				redirected++;
-			}
-		}
-		if (redirected == 0) return false;
-		NeoForbricLog.info("[NeoForbric/MergedBaseCompat] a client reload listener NeoForge cannot name is now given one "
-				+ "(%d lookup(s) redirected) — it used to throw inside Minecraft.<init> over a Fabric mod adding a "
-				+ "listener by mixin, which is how Fabric mods have always added them", redirected);
 		return true;
 	}
 
@@ -1637,7 +1591,7 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 				createTitle.instructions.remove(dead);
 			}
 			NeoForbricLog.info("[NeoForbric/MergedBaseCompat] took \"%s\" out of the window title — the merged base carries "
-					+ "one loader's title patch, and this instance runs all three ecosystems", brand.cst);
+					+ "one loader's title patch, and this instance runs both ecosystems", brand.cst);
 			return true;
 		}
 		return false;
@@ -1758,260 +1712,7 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 		return Type.getMethodDescriptor(Type.getReturnType(methodDesc), newArgs);
 	}
 
-	private static final String GUI_RENDERER = "net/minecraft/client/gui/render/GuiRenderer";
-	private static final String PIP_RENDERERS = "pictureInPictureRenderers";
-	private static final String PIP_POOLS = "pictureInPictureRendererPools";
-	private static final String PIP_PREPARE = "preparePictureInPictureState";
-	private static final String PIP_BUILDER_OWNER = "net/neoforbric/kernel/runtime/KernelPipRenderers";
-	private static final String PIP_BRIDGE = "neoforbric$prepareOrphanedPip";
-
-	/**
-	 * Makes a picture-in-picture renderer registered the VANILLA way draw again, by giving NeoForge's pooled lookup
-	 * a fallback to the map the merge orphaned.
-	 *
-	 * <p>{@code GuiRenderer} ends up with BOTH ecosystems' versions of the same job:
-	 *
-	 * <ul>
-	 *   <li>{@code preparePictureInPictureState(T, int)} — vanilla's. Reads {@code pictureInPictureRenderers}, a
-	 *       {@code Class -> PictureInPictureRenderer} map, and calls {@code prepare} on the one it finds. <b>Nothing
-	 *       calls it.</b></li>
-	 *   <li>{@code preparePictureInPictureState(T, int, boolean)} — NeoForge's, and the one {@code render()} calls.
-	 *       Reads {@code pictureInPictureRendererPools} instead, and returns false for a state class with no pool.</li>
-	 * </ul>
-	 *
-	 * <p>Every guest mod registers into the first map, because that is the only one vanilla has: Xaero's Minimap puts
-	 * its {@code MinimapPipRenderer} there, malilib its block-state element renderer. Both then draw nothing at all —
-	 * no exception, no log, the element is simply absent. Chasing it from the symptom is brutal, because every link
-	 * before this one is intact: the mixins apply, the hooks are called every frame, the mod's own state is live. The
-	 * lookup misses one map over.
-	 *
-	 * <p>So the null-pool branch now falls through to the orphaned map instead of returning false. Guest renderers get
-	 * exactly vanilla's contract — one instance per state class, {@code prepare} called directly — and NeoForge's
-	 * pooled renderers are untouched, which matters: a pool CLOSES the renderers a frame did not use, so handing a
-	 * guest's single long-lived instance to one would free its GL target out from under it.
-	 *
-	 * <p>The bridge method is synthesized from the descriptors of the orphaned overload itself rather than from
-	 * hard-coded names, so it stays correct if the merge shifts.
-	 */
-	private static boolean bridgeOrphanedPipRenderers(ClassNode node) {
-		if (!GUI_RENDERER.equals(node.name)) return false;
-		if (findField(node, PIP_RENDERERS) == null || findField(node, PIP_POOLS) == null) return false;
-		if (findMethodByName(node, PIP_BRIDGE) != null) return false;
-
-		MethodNode orphaned = null;
-		MethodNode live = null;
-		for (MethodNode method : node.methods) {
-			if (!PIP_PREPARE.equals(method.name)) continue;
-			if (Type.getReturnType(method.desc).getSort() == Type.BOOLEAN) live = method; else orphaned = method;
-		}
-		if (orphaned == null || live == null) return false;
-
-		// One source for the state type: the CALL SITE's. Deriving the bridge's descriptor from the orphaned overload
-		// instead would let the two drift apart if a future merge narrows one of them, and the only symptom would be a
-		// NoSuchMethodError on the first frame that actually reaches an orphaned renderer.
-		String stateDesc = Type.getArgumentTypes(live.desc)[0].getDescriptor();
-		MethodNode bridge = buildPipBridge(node, orphaned, stateDesc);
-		if (bridge == null || !redirectMissingPoolToBridge(node, live, stateDesc)) return false;
-
-		node.methods.add(bridge);
-		boolean filled = fillOrphanedPipMap(node, findField(node, PIP_RENDERERS));
-		NeoForbricLog.warn("[NeoForbric/MergedBaseCompat] gave GuiRenderer's pooled picture-in-picture lookup a fallback to "
-				+ "the orphaned vanilla map — NeoForge won preparePictureInPictureState, so every guest-registered "
-				+ "GUI element (Xaero's minimap, malilib's overlays) was registered where nothing reads%s",
-				filled ? ", and gave that map its only writer" : "");
-		return true;
-	}
-
-	/**
-	 * Assigns the orphaned map in {@code GuiRenderer.<init>}, from the constructor's own list.
-	 *
-	 * <p>The field is declared, read in one place, and <b>written nowhere</b>: NeoForge's patched constructor won
-	 * and fills its pooled map instead, so vanilla's plain one stays null. That is two failures in one. A guest
-	 * mod's picture-in-picture renderer — the shape a minimap or an in-world preview uses, appended to the
-	 * constructor's list by its mixin — has nothing registered into; and the fallback above reads the map WITHOUT
-	 * a null check, so the first frame reaching a state class with no pool would throw inside the game's own
-	 * render loop.
-	 *
-	 * <p>Appended before each RETURN of the constructor, which is where a final field may still be assigned.
-	 */
-	private static boolean fillOrphanedPipMap(ClassNode node, FieldNode renderers) {
-		if (renderers == null) return false;
-		MethodNode init = null;
-		for (MethodNode method : node.methods) {
-			if ("<init>".equals(method.name)) init = method;
-		}
-		if (init == null) return false;
-		for (AbstractInsnNode insn : init.instructions.toArray()) {
-			if (insn instanceof MethodInsnNode call && PIP_BUILDER_OWNER.equals(call.owner)) return false;
-		}
-		int listSlot = -1;
-		int slot = 1;
-		for (Type argument : Type.getArgumentTypes(init.desc)) {
-			if ("Ljava/util/List;".equals(argument.getDescriptor())) listSlot = slot;
-			slot += argument.getSize();
-		}
-		if (listSlot < 0) return false;
-		// Both constructors erase to the same descriptor. Guest mixins can append ordinary renderers
-		// to NeoForge's registration list, so filter only the pool's input and retain the original list.
-		for (AbstractInsnNode insn : init.instructions.toArray()) {
-			if (insn instanceof MethodInsnNode call && "createPools".equals(call.name)
-					&& "net/neoforged/neoforge/client/gui/PictureInPictureRendererPool".equals(call.owner)
-					&& "(Ljava/util/List;)Ljava/util/Map;".equals(call.desc)) {
-				init.instructions.insertBefore(call, new MethodInsnNode(Opcodes.INVOKESTATIC, PIP_BUILDER_OWNER,
-						"poolRegistrations", "(Ljava/util/List;)Ljava/util/List;", false));
-			}
-		}
-
-		int appended = 0;
-		for (AbstractInsnNode insn : init.instructions.toArray()) {
-			if (insn.getOpcode() != Opcodes.RETURN) continue;
-			InsnList assign = new InsnList();
-			assign.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			assign.add(new VarInsnNode(Opcodes.ALOAD, listSlot));
-			assign.add(new MethodInsnNode(Opcodes.INVOKESTATIC, PIP_BUILDER_OWNER, "build", "(Ljava/util/List;)Ljava/util/Map;",
-					false));
-			assign.add(new FieldInsnNode(Opcodes.PUTFIELD, node.name, renderers.name, renderers.desc));
-			init.instructions.insertBefore(insn, assign);
-			appended++;
-		}
-		if (appended == 0) return false;
-		init.maxStack = Math.max(init.maxStack, 2);
-		for (MethodNode method : node.methods) {
-			if (!"close".equals(method.name) || !"()V".equals(method.desc)) continue;
-			for (AbstractInsnNode insn : method.instructions.toArray()) {
-				if (insn.getOpcode() != Opcodes.RETURN) continue;
-				InsnList close = new InsnList();
-				close.add(new VarInsnNode(Opcodes.ALOAD, 0));
-				close.add(new FieldInsnNode(Opcodes.GETFIELD, node.name, renderers.name, renderers.desc));
-				close.add(new MethodInsnNode(Opcodes.INVOKESTATIC, PIP_BUILDER_OWNER, "close", "(Ljava/util/Map;)V", false));
-				method.instructions.insertBefore(insn, close);
-			}
-			method.maxStack = Math.max(method.maxStack, 1);
-		}
-		return true;
-	}
-
-	/**
-	 * Builds {@code boolean neoforbric$prepareOrphanedPip(state, i)} — vanilla's lookup, with a boolean saying whether
-	 * it found anything. Every field and call is cloned out of the orphaned overload, so nothing here is spelled twice;
-	 * {@code stateDesc} comes from the CALL SITE so the two cannot disagree.
-	 */
-	private static MethodNode buildPipBridge(ClassNode node, MethodNode orphaned, String stateDesc) {
-		FieldInsnNode renderers = null;
-		FieldInsnNode renderState = null;
-		FieldInsnNode dispatcher = null;
-		TypeInsnNode rendererCast = null;
-		MethodInsnNode mapGet = null;
-		MethodInsnNode prepare = null;
-
-		for (AbstractInsnNode insn = orphaned.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof FieldInsnNode field && field.getOpcode() == Opcodes.GETFIELD) {
-				if (PIP_RENDERERS.equals(field.name)) renderers = field;
-				else if (renderState == null) renderState = field;
-				else if (dispatcher == null) dispatcher = field;
-			} else if (insn instanceof TypeInsnNode cast && cast.getOpcode() == Opcodes.CHECKCAST) {
-				rendererCast = cast;
-			} else if (insn instanceof MethodInsnNode call) {
-				if ("get".equals(call.name)) mapGet = call;
-				else if ("prepare".equals(call.name)) prepare = call;
-			}
-		}
-		if (renderers == null || renderState == null || dispatcher == null
-				|| rendererCast == null || mapGet == null || prepare == null) {
-			NeoForbricLog.debug("[NeoForbric/MergedBaseCompat] GuiRenderer's orphaned pip overload has an unexpected shape "
-					+ "— leaving the pooled lookup alone");
-			return null;
-		}
-
-		MethodNode bridge = new MethodNode(Opcodes.ASM9, Opcodes.ACC_PRIVATE | Opcodes.ACC_SYNTHETIC,
-				PIP_BRIDGE, "(" + stateDesc + "I)Z", null, null);
-		LabelNode miss = new LabelNode();
-		InsnList code = bridge.instructions;
-
-		code.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		code.add(new FieldInsnNode(Opcodes.GETFIELD, node.name, renderers.name, renderers.desc));
-		code.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		// Object.getClass rather than the interface's, so this holds however the state type is declared.
-		code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "getClass", "()Ljava/lang/Class;",
-				false));
-		code.add(new MethodInsnNode(Opcodes.INVOKEINTERFACE, mapGet.owner, mapGet.name, mapGet.desc, true));
-		code.add(new TypeInsnNode(Opcodes.CHECKCAST, rendererCast.desc));
-		code.add(new VarInsnNode(Opcodes.ASTORE, 3));
-		code.add(new VarInsnNode(Opcodes.ALOAD, 3));
-		code.add(new JumpInsnNode(Opcodes.IFNULL, miss));
-
-		code.add(new VarInsnNode(Opcodes.ALOAD, 3));
-		code.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		code.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		code.add(new FieldInsnNode(Opcodes.GETFIELD, node.name, renderState.name, renderState.desc));
-		code.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		code.add(new FieldInsnNode(Opcodes.GETFIELD, node.name, dispatcher.name, dispatcher.desc));
-		code.add(new VarInsnNode(Opcodes.ILOAD, 2));
-		code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, prepare.owner, prepare.name, prepare.desc, false));
-		code.add(new InsnNode(Opcodes.ICONST_1));
-		code.add(new InsnNode(Opcodes.IRETURN));
-
-		code.add(miss);
-		// Both paths reach here with slot 3 holding the (null) renderer, so the frame simply appends it.
-		code.add(new FrameNode(Opcodes.F_APPEND, 1, new Object[] {rendererCast.desc}, 0, null));
-		code.add(new InsnNode(Opcodes.ICONST_0));
-		code.add(new InsnNode(Opcodes.IRETURN));
-
-		bridge.maxStack = 5;
-		bridge.maxLocals = 4;
-		return bridge;
-	}
-
-	/** Rewrites the live overload's "no pool for this state class" early return into a call to the bridge. */
-	private static boolean redirectMissingPoolToBridge(ClassNode node, MethodNode live, String stateDesc) {
-		for (AbstractInsnNode insn = live.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (!(insn instanceof FieldInsnNode field) || field.getOpcode() != Opcodes.GETFIELD
-					|| !PIP_POOLS.equals(field.name)) {
-				continue;
-			}
-
-			AbstractInsnNode jump = insn;
-			while (jump != null && !(jump instanceof JumpInsnNode)) jump = jump.getNext();
-			if (jump == null || jump.getOpcode() != Opcodes.IFNONNULL) break;
-
-			AbstractInsnNode falsy = jump.getNext();
-			while (falsy != null && falsy.getOpcode() == -1) falsy = falsy.getNext();   // labels / line numbers
-			if (falsy == null || falsy.getOpcode() != Opcodes.ICONST_0) break;
-
-			AbstractInsnNode ret = falsy.getNext();
-			while (ret != null && ret.getOpcode() == -1) ret = ret.getNext();
-			if (ret == null || ret.getOpcode() != Opcodes.IRETURN) break;
-
-			InsnList call = new InsnList();
-			call.add(new VarInsnNode(Opcodes.ALOAD, 0));
-			call.add(new VarInsnNode(Opcodes.ALOAD, 1));
-			call.add(new VarInsnNode(Opcodes.ILOAD, 2));
-			call.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, node.name, PIP_BRIDGE, "(" + stateDesc + "I)Z", false));
-			live.instructions.insertBefore(falsy, call);
-			live.instructions.remove(falsy);
-			live.maxStack = Math.max(live.maxStack, 3);
-			return true;
-		}
-
-		NeoForbricLog.debug("[NeoForbric/MergedBaseCompat] GuiRenderer's pooled pip lookup has an unexpected shape "
-				+ "— leaving it alone");
-		return false;
-	}
-
-	private static FieldNode findField(ClassNode node, String name) {
-		if (node.fields == null) return null;
-		for (FieldNode field : node.fields) {
-			if (field.name.equals(name)) return field;
-		}
-		return null;
-	}
-
-	/** First method with this name, whatever its descriptor — distinct from {@link #findMethod(ClassNode,String,String)}. */
-	private static MethodNode findMethodByName(ClassNode node, String name) {
-		for (MethodNode method : node.methods) {
-			if (method.name.equals(name)) return method;
-		}
-		return null;
-	}
-
+	// The picture-in-picture bridge this transformer used to carry is gone with 26.x's GuiRenderer: 1.21.1
+	// has no GuiRenderer and no pip render framework, so a repair for its orphaned vanilla map has no class to
+	// match. Vanilla-registered GUI overlays of that era simply do not exist here.
 }

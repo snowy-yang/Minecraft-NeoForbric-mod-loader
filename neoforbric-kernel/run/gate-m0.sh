@@ -34,7 +34,7 @@ step "0. the base the unit tests read is the base this run checks"
 # check below reads ${MERGED:-...} and ${NEO_RT:-...}. With MERGED naming a candidate and NEOFORBRIC_OLD the
 # reference checkout they are two different jars, and this gate would pass the unit tests on one base and the link
 # check on another. So each override is compared against the jar the tests read, and refused when it differs.
-for pair in "MERGED:$RUN_OLD/neoforge-base/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar" "NEO_RT:$RUN_OLD/neoforge-runtime/neoforge-runtime.jar"; do
+for pair in "MERGED:$RUN_OLD/neoforge-base/patched-mc-neoforge-1.21.1.jar" "NEO_RT:$RUN_OLD/neoforge-runtime/neoforge-runtime.jar"; do
   var="${pair%%:*}"; staged="${pair#*:}"; requested="${!var:-}"
   [ -n "$requested" ] || { echo "[kernel] PASS $var unset: the tests and the link check both read $staged"; continue; }
   if [ -f "$requested" ] && [ -f "$staged" ] && cmp -s "$requested" "$staged"; then
@@ -139,7 +139,7 @@ step "4. the merged base links (against the committed baseline)"
 LINK_BASELINE="${LINK_BASELINE:-$KERNEL/../neoforbric-loader/src/test/resources/merge/link-check-baseline.txt}"
 LINKLOG="$BUILD/gate-m0-linkcheck.log"
 if LINK_BASELINE="$LINK_BASELINE" bash "$KERNEL/../neoforbric-loader/run/check-merged-links.sh" \
-    "${MERGED:-$RUN_OLD/neoforge-base/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar}" \
+    "${MERGED:-$RUN_OLD/neoforge-base/patched-mc-neoforge-1.21.1.jar}" \
     "${NEO_RT:-$RUN_OLD/neoforge-runtime/neoforge-runtime.jar}" \
     > "$LINKLOG" 2>&1; then
   check "the merged base links no worse than the baseline" "dangling references: [0-9]+ \(known [0-9]+, new 0\)" "$LINKLOG"

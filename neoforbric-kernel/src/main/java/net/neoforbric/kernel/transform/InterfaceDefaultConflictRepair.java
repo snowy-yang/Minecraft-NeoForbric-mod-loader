@@ -43,7 +43,7 @@ import org.objectweb.asm.tree.MethodNode;
  * CALLED, from whatever unrelated code happened to call it.
  *
  * <p>On one base nobody hits this, because only one of the two interfaces exists. NeoForbric's merged base carries all
- * three ecosystems at once AND lets a mod's mixin add interfaces on top, so the pairing is ordinary here:
+ * both ecosystems at once AND lets a mod's mixin add interfaces on top, so the pairing is ordinary here:
  * EntityCulling's {@code BlockEntityRendererMixin} adds {@code BlockEntityRenderFabricExtension} to
  * {@code BlockEntityRenderer}, which on the merged base already extends NeoForge's
  * {@code IBlockEntityRendererExtension}, and both declare {@code default AABB getRenderBoundingBox(T)}. Neither

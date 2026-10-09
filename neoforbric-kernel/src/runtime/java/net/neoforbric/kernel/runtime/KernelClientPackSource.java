@@ -33,14 +33,12 @@ import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackSelectionConfig;
 import net.minecraft.server.packs.PackType;
-import net.minecraft.server.packs.metadata.pack.PackFormat;
 import net.minecraft.server.packs.metadata.pack.PackMetadataSection;
 import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackCompatibility;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.repository.PackSource;
 import net.minecraft.server.packs.repository.RepositorySource;
-import net.minecraft.util.InclusiveRange;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.neoforged.neoforge.resource.EmptyPackResources;
 import net.neoforged.neoforge.resource.ResourcePackLoader;
@@ -156,9 +154,10 @@ public final class KernelClientPackSource {
 			Component title = Component.literal("Mod Resources");
 
 			// The pack format of the running game, so the parent never reads as out of date for its own version.
-			PackFormat packFormat = SharedConstants.getCurrentVersion().packVersion(PackType.CLIENT_RESOURCES);
+			// 1.21.1's pack format is an int; the PackFormat record and its InclusiveRange are 26.x's.
+			int packFormat = SharedConstants.getCurrentVersion().getPackVersion(PackType.CLIENT_RESOURCES);
 			PackMetadataSection metadata =
-					new PackMetadataSection(title, new InclusiveRange<>(packFormat));
+					new PackMetadataSection(title, packFormat);
 
 			PackLocationInfo location =
 					new PackLocationInfo(parentId, title, PackSource.DEFAULT, Optional.empty());
@@ -256,8 +255,8 @@ public final class KernelClientPackSource {
 	private static Pack readThroughVanilla(
 			PackLocationInfo location, Pack.ResourcesSupplier resources, PackSelectionConfig selection) {
 		try {
-			PackFormat current = SharedConstants.getCurrentVersion().packVersion(PackType.CLIENT_RESOURCES);
-			Pack.Metadata read = Pack.readPackMetadata(location, resources, current, PackType.CLIENT_RESOURCES);
+			int current = SharedConstants.getCurrentVersion().getPackVersion(PackType.CLIENT_RESOURCES);
+			Pack.Metadata read = Pack.readPackMetadata(location, resources, current);
 			if (read == null) return null;
 			Pack.Metadata compatible = new Pack.Metadata(read.description(), PackCompatibility.COMPATIBLE,
 					read.requestedFeatures(), read.overlays(), read.isHidden());

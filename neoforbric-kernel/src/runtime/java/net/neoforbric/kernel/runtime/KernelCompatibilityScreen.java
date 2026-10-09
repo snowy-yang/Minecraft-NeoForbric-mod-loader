@@ -30,7 +30,10 @@ final class KernelCompatibilityScreen extends ConfirmScreen {
 	@Override public void onClose() { answer.accept(false); }
 	@Override protected void init() {
 		super.init();
-		setInitialFocus(noButton);
+		// 26.x's ConfirmScreen kept its buttons as protected Component fields, and this focused the refusal.
+		// 1.21.1 creates the buttons locally in its own init(), so there is no field to point at: focus the
+		// first child instead, which is that same refusal button.
+		setInitialFocus(children().isEmpty() ? null : children().getFirst());
 	}
 
 	static String text(List<CompatibilityFinding> findings, int more) {

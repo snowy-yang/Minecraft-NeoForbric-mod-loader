@@ -35,14 +35,12 @@ import net.neoforbric.api.Side;
 import net.neoforbric.kernel.transform.CreativePagerBridgeInjector;
 import net.neoforbric.kernel.transform.GuestInjectorPruner;
 import net.neoforbric.kernel.transform.LootTableEventBridgeInjector;
-import net.neoforbric.kernel.transform.ModelFormatFunnelInjector;
 
 /** The attribution rows: recorded by needle, judged by side and by kill switch, marked by catalog identity. */
 @org.junit.jupiter.api.parallel.ResourceLock("ModCatalog")
 class FabricApiModuleLossAuditTest {
 	private static final String LOOT = "net/fabricmc/fabric/api/loot/v3/LootTableEvents";
 	private static final String MODEL_PLUGIN = "net/fabricmc/fabric/api/client/model/loading/v1/ModelLoadingPlugin";
-	private static final String MODEL_FORMAT = "net/fabricmc/fabric/api/client/model/loading/v1/UnbakedModelDeserializer";
 	private static final String CREATIVE = "net/fabricmc/fabric/api/client/creativetab/v1/FabricCreativeModeInventoryScreen";
 	private static final String DYNAMIC_REGISTRIES = "net/fabricmc/fabric/api/event/registry/DynamicRegistries";
 	private static final String SETUP_CALLBACK = "net/fabricmc/fabric/api/event/registry/DynamicRegistrySetupCallback";
@@ -55,7 +53,6 @@ class FabricApiModuleLossAuditTest {
 		System.clearProperty(LootTableEventBridgeInjector.PROPERTY);
 		System.clearProperty(GuestInjectorPruner.PROPERTY);
 		System.clearProperty(CreativePagerBridgeInjector.PROPERTY);
-		System.clearProperty(ModelFormatFunnelInjector.PROPERTY);
 		System.clearProperty(FabricApiModuleLossAudit.SWITCH);
 		if (previous != null) ModCatalog.publish(previous);
 	}
@@ -176,34 +173,6 @@ class FabricApiModuleLossAuditTest {
 		} finally {
 			System.clearProperty("neoforbric.keepMixins");
 		}
-	}
-
-	@Test
-	void theModelPluginRowFollowsThePrunerSwitch() {
-		publish(entry("balm", "balm.jar", ""));
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(MODEL_PLUGIN));
-		FabricApiModuleLossAudit.report(Side.CLIENT);
-		assertTrue(ModCatalog.failures().isEmpty(), "the pruner lets ModelLoadingPlugins dispatch");
-		System.setProperty(GuestInjectorPruner.PROPERTY, "off");
-		FabricApiModuleLossAudit.report(Side.CLIENT);
-		ModCatalog.Entry balm = degraded("balm");
-		assertTrue(balm != null && balm.statusDetail().contains("ModelLoadingPlugin"), String.valueOf(balm));
-	}
-
-	/**
-	 * Traveler's Backpack registers a {@code fabric:type} deserializer. It was marked DEGRADED on every boot; while
-	 * the funnel parses its models, it is not.
-	 */
-	@Test
-	void theModelFormatRowFollowsTheFunnelSwitch() {
-		publish(entry("travelersbackpack", "travelersbackpack.jar", ""));
-		FabricApiModuleLossAudit.note("travelersbackpack.jar", classNaming(MODEL_FORMAT));
-		FabricApiModuleLossAudit.report(Side.CLIENT);
-		assertTrue(ModCatalog.failures().isEmpty(), "the funnel parses fabric:type models: " + ModCatalog.failures());
-		System.setProperty(ModelFormatFunnelInjector.PROPERTY, "off");
-		FabricApiModuleLossAudit.report(Side.CLIENT);
-		ModCatalog.Entry backpack = degraded("travelersbackpack");
-		assertTrue(backpack != null && backpack.statusDetail().contains("fabric:type"), String.valueOf(backpack));
 	}
 
 	@Test

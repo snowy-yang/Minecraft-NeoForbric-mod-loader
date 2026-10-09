@@ -4,7 +4,7 @@ package net.neoforbric.kernel.runtime.transfer;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import net.fabricmc.fabric.api.transfer.v1.item.ContainerStorage;
+import net.fabricmc.fabric.api.transfer.v1.item.InventoryStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
@@ -29,7 +29,7 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
  *
  * <p>HopperFabricStorageInjector calls these on NeoForge's two "found nothing" branches, which is where Fabric's own
  * injectors sit relative to the lookups: after the block's container and the entity containers, before the hopper
- * picks up item entities. The bodies are Fabric's: the same lookup, faces, {@code ContainerStorage} view and
+ * picks up item entities. The bodies are Fabric's: the same lookup, faces, {@code InventoryStorage} view and
  * one-item move, and the same answer, so the hopper's cooldown follows as it does natively. A NeoForge-visible
  * storage never reaches here, so nothing moves twice.
  */
@@ -48,7 +48,7 @@ public final class KernelFabricHopperStorage {
 		Storage<ItemVariant> target = ItemStorage.SIDED.find(world, at.relative(facing), facing.getOpposite());
 		if (target == null) return false;
 		note("inserted into", target);
-		return moveOne(ContainerStorage.of(blockEntity, facing), target) == 1;
+		return moveOne(InventoryStorage.of(blockEntity, facing), target) == 1;
 	}
 
 	/**
@@ -61,7 +61,7 @@ public final class KernelFabricHopperStorage {
 				BlockPos.containing(container.getLevelX(), container.getLevelY() + 1.0, container.getLevelZ()), Direction.DOWN);
 		if (source == null) return NOT_FOUND;
 		note("extracted from", source);
-		return moveOne(source, ContainerStorage.of(container, Direction.UP));
+		return moveOne(source, InventoryStorage.of(container, Direction.UP));
 	}
 
 	/** Fabric's move of one unit, outside any transaction: 1, 0, or {@link #NOT_FOUND} without a source. */

@@ -23,26 +23,28 @@ import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.BasicVerifier;
 
-/** NeoForge's hopper asking Fabric's item storage lookup, on the real merged HopperBlockEntity. */
+/** NeoForge's hopper asking Fabric's item storage lookup, on the real 1.21.1 NeoForge HopperBlockEntity. */
 @ResourceLock("system-properties")
 class HopperFabricStorageInjectorTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
-	private static final Path NEO = STAGED.resolve("neoforge-patched/patched-mc-neoforge-26.2.jar");
-	private static final Path FORGE = STAGED.resolve("forge-patched/patched-mc-forge-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path FABRIC_API = TestFixtures.fabricApi().toAbsolutePath();
 	private static final String HOPPER = HopperFabricStorageInjector.HOPPER_INTERNAL;
 
 	@AfterEach void reset() { System.clearProperty(HopperFabricStorageInjector.PROPERTY); }
 
-	/** What Fabric's mixin anchors on is exactly what NeoForge's body no longer calls. */
-	@Test void premiseMergedBodiesAreNeoForgesAndFabricsAnchorsAreAbsent() throws Exception {
+	/**
+	 * 1.21.1's premise: the hooks still precede the vanilla lookups (Fabric's mixin CAN bind them), but the hooks
+	 * answer handled before the lookups run — so a Fabric storage NeoForge's capability cannot see is only ever
+	 * reached by asking Fabric at the hooks' declines.
+	 */
+	@Test void premiseBodiesAreNeoForgesAndFabricsAnchorsRunAfterItsHooks() throws Exception {
 		ClassNode merged = node(NativeCoremodParityTest.read(MERGED, HOPPER));
 		MethodNode eject = method(merged, "ejectItems"), suck = method(merged, "suckInItems");
-		assertEquals(1, calls(eject, HOPPER, "getContainerOrHandlerAt"));
-		assertEquals(0, calls(eject, HOPPER, "getAttachedContainer"));
-		assertEquals(1, calls(suck, HOPPER, "getSourceContainerOrHandler"));
-		assertEquals(0, calls(suck, HOPPER, "getSourceContainer"));
+		assertEquals(1, calls(eject, "net/neoforged/neoforge/items/VanillaInventoryCodeHooks", "insertHook"));
+		assertEquals(1, calls(eject, HOPPER, "getAttachedContainer"), "vanilla lookup present, after the hook");
+		assertEquals(1, calls(suck, "net/neoforged/neoforge/items/VanillaInventoryCodeHooks", "extractHook"));
+		assertEquals(1, calls(suck, HOPPER, "getSourceContainer"), "vanilla lookup present, after the hook");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(FABRIC_API), "the pack's fabric-api is absent");
 		byte[] mixin = nested(FABRIC_API, "fabric-transfer-api-v1", "net/fabricmc/fabric/mixin/transfer/HopperBlockEntityMixin.class");
 		assertNotNull(mixin);
@@ -55,54 +57,57 @@ class HopperFabricStorageInjectorTest {
 		assertTrue(targets.stream().anyMatch(t -> t.contains(";getSourceContainer(")), targets.toString());
 	}
 
-	@Test void bothFoundNothingBranchesAskFabric() throws Exception {
+	@Test void bothHookDeclinesAskFabric() throws Exception {
 		byte[] original = NativeCoremodParityTest.read(MERGED, HOPPER);
 		ClassNode before = node(original);
 		byte[] out = new HopperFabricStorageInjector().transform(HopperFabricStorageInjector.HOPPER, original, null);
 		assertNotSame(original, out);
 		ClassNode after = node(out);
 
+		// ejectItems: the fabric ask sits at the insert hook's IFEQ; true returns true, false falls to vanilla.
 		MethodNode eject = method(after, "ejectItems");
 		MethodInsnNode insert = call(eject, HopperFabricStorageInjector.RUNTIME, "insert");
-		assertEquals(Opcodes.IRETURN, insert.getNext().getOpcode(), "insert's answer is the found-nothing return");
-		assertEquals(Opcodes.ALOAD, insert.getPrevious().getOpcode());
-		assertEquals(size(method(before, "ejectItems")) + 3, size(eject), "iconst_0 became four instructions");
+		assertTrue(insert.getPrevious() instanceof VarInsnNode load && load.getOpcode() == Opcodes.ALOAD && load.var == 2,
+				"the ask carries the hopper");
+		JumpInsnNode insertFalls = (JumpInsnNode) insert.getNext();
+		assertEquals(Opcodes.IFEQ, insertFalls.getOpcode(), "insert's false answer falls to the vanilla lookups");
+		assertEquals(Opcodes.ICONST_1, insertFalls.getNext().getOpcode());
+		assertEquals(Opcodes.IRETURN, insertFalls.getNext().getNext().getOpcode());
 		assertEquals(method(before, "ejectItems").maxLocals, eject.maxLocals);
-		assertEquals(count(method(before, "ejectItems"), Opcodes.IRETURN), count(eject, Opcodes.IRETURN));
+		assertEquals(count(method(before, "ejectItems"), Opcodes.IRETURN) + 1, count(eject, Opcodes.IRETURN));
 
+		// suckInItems: the fabric ask sits at the extract hook's IFNULL; NOT_FOUND falls, 1/0 is the answer.
 		MethodNode suck = method(after, "suckInItems");
 		MethodInsnNode extract = call(suck, HopperFabricStorageInjector.RUNTIME, "extract");
+		JumpInsnNode extractFalls = (JumpInsnNode) extract.getNext().getNext();
+		assertEquals(Opcodes.IFLT, extractFalls.getOpcode(), "NOT_FOUND falls to the vanilla lookups");
+		assertEquals(Opcodes.IRETURN, extractFalls.getNext().getOpcode());
 		assertEquals(count(method(before, "suckInItems"), Opcodes.IRETURN) + 1, count(suck, Opcodes.IRETURN));
 		assertEquals(method(before, "suckInItems").maxLocals, suck.maxLocals);
-		for (String unchanged : List.of("getItemsAtAndAbove", "getSourceContainerOrHandler", "extractHook", "isGridAligned")) {
+		for (String unchanged : List.of("getItemsAtAndAbove", "getSourceContainer", "extractHook", "isGridAligned")) {
 			assertEquals(callsNamed(method(before, "suckInItems"), unchanged), callsNamed(suck, unchanged), unchanged);
 		}
 		assertEquals(getstatics(method(before, "suckInItems"), "DOWN"), getstatics(suck, "DOWN"), "lithium's FIELD DOWN anchor count");
 		new Analyzer<>(new BasicVerifier()).analyze(HOPPER, eject);
 		new Analyzer<>(new BasicVerifier()).analyze(HOPPER, suck);
 
-		// The new branch target's frame is the handler check's target frame with the answer on the stack.
-		ClassNode expanded = new ClassNode();
-		new ClassReader(out).accept(expanded, ClassReader.EXPAND_FRAMES);
-		MethodNode suckExpanded = method(expanded, "suckInItems");
-		MethodInsnNode extractExpanded = call(suckExpanded, HopperFabricStorageInjector.RUNTIME, "extract");
-		JumpInsnNode iflt = (JumpInsnNode) extractExpanded.getNext().getNext();
-		assertEquals(Opcodes.IFLT, iflt.getOpcode());
-		FrameNode carry = frameAfter(iflt.label);
-		FrameNode handlerTarget = frameBefore(extractExpanded);
-		assertEquals(List.of(Opcodes.INTEGER), carry.stack);
-		assertEquals(handlerTarget.local, carry.local);
-		assertTrue(handlerTarget.stack.isEmpty());
-
 		assertSame(out, new HopperFabricStorageInjector().transform(HopperFabricStorageInjector.HOPPER, out, null), "a second pass changes nothing");
 	}
 
-	@Test void neoForgesOwnBodyGetsTheSameEditAndMinecraftForgesIsLeftAlone() throws Exception {
-		byte[] neo = NativeCoremodParityTest.read(NEO, HOPPER);
-		assertNotSame(neo, new HopperFabricStorageInjector().transform(HopperFabricStorageInjector.HOPPER, neo, null));
-		byte[] forge = NativeCoremodParityTest.read(FORGE, HOPPER);
-		assertSame(forge, new HopperFabricStorageInjector().transform(HopperFabricStorageInjector.HOPPER, forge, null),
-				"MinecraftForge's body calls getAttachedContainer, where Fabric's own mixin applies");
+	@Test void aVanillaHopperBodyIsLeftAlone() throws Exception {
+		// Vanilla's ejectItems/suckInItems ask no VanillaInventoryCodeHooks; Fabric's own mixin applies there
+		// and this repair's anchors are absent, so the injector must stand down whole.
+		ClassNode vanilla = node(NativeCoremodParityTest.read(MERGED, HOPPER));
+		MethodNode eject = method(vanilla, "ejectItems");
+		for (AbstractInsnNode insn : eject.instructions.toArray()) {
+			if (insn instanceof MethodInsnNode c && c.owner.equals("net/neoforged/neoforge/items/VanillaInventoryCodeHooks"))
+				eject.instructions.remove(insn); // a body without the hooks, as vanilla's is
+		}
+		ClassWriter writer = new ClassWriter(0);
+		vanilla.accept(writer);
+		byte[] bytes = writer.toByteArray();
+		assertSame(bytes, new HopperFabricStorageInjector().transform(HopperFabricStorageInjector.HOPPER, bytes, null),
+				"a body Fabric's own mixin applies to is left alone");
 	}
 
 	@Test void theSwitchLeavesTheHopperAlone() throws Exception {
@@ -116,28 +121,18 @@ class HopperFabricStorageInjectorTest {
 		ClassNode drifted = node(NativeCoremodParityTest.read(MERGED, HOPPER));
 		MethodNode suck = method(drifted, "suckInItems");
 		for (AbstractInsnNode insn : suck.instructions.toArray()) {
-			if (insn instanceof MethodInsnNode c && c.name.equals("itemHandler")) {
-				suck.instructions.insertBefore(insn, new InsnNode(Opcodes.NOP));
-				AbstractInsnNode jump = insn.getNext();
-				while (jump.getOpcode() < 0) jump = jump.getNext();
-				suck.instructions.insertBefore(jump, new InsnNode(Opcodes.DUP));
-				suck.instructions.insertBefore(jump, new InsnNode(Opcodes.POP));
+			if (insn instanceof MethodInsnNode c && c.owner.equals("net/neoforged/neoforge/items/VanillaInventoryCodeHooks")
+					&& c.name.equals("extractHook")) {
+				// The hook no longer stores its Boolean where the IFNULL reads it: the decline shape is gone.
+				AbstractInsnNode store = insn.getNext();
+				while (store != null && store.getOpcode() < 0) store = store.getNext();
+				if (store != null && store.getOpcode() == Opcodes.ASTORE) suck.instructions.remove(store);
 			}
 		}
 		ClassWriter writer = new ClassWriter(0);
 		drifted.accept(writer);
 		byte[] bytes = writer.toByteArray();
 		assertSame(bytes, new HopperFabricStorageInjector().transform(HopperFabricStorageInjector.HOPPER, bytes, null));
-	}
-
-	private static FrameNode frameAfter(LabelNode label) {
-		for (AbstractInsnNode i = label; i != null; i = i.getNext()) if (i instanceof FrameNode f) return f;
-		throw new AssertionError("no frame");
-	}
-
-	private static FrameNode frameBefore(AbstractInsnNode insn) {
-		for (AbstractInsnNode i = insn; i != null; i = i.getPrevious()) if (i instanceof FrameNode f) return f;
-		throw new AssertionError("no frame");
 	}
 
 	private static MethodNode method(ClassNode node, String name) {

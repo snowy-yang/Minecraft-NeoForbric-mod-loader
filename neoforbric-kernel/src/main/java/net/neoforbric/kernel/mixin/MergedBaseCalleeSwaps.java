@@ -99,19 +99,11 @@ public final class MergedBaseCalleeSwaps {
 			String because) {
 	}
 
-	public static final List<Substitution> SUBSTITUTED = List.of(
-			new Substitution("net/minecraft/client/resources/model/ModelManager",
-					"lambda$loadBlockModels$2(Ljava/util/Map$Entry;)Lcom/mojang/datafixers/util/Pair;",
-					"Lnet/minecraft/client/resources/model/cuboid/CuboidModel;fromStream(Ljava/io/Reader;)"
-							+ "Lnet/minecraft/client/resources/model/cuboid/CuboidModel;",
-					"Lnet/neoforged/neoforge/client/model/UnbakedModelParser;parse(Ljava/io/Reader;)"
-							+ "Lnet/minecraft/client/resources/model/UnbakedModel;",
-					Set.of(Ecosystem.FABRIC),
-					"both calls turn the model file's Reader into the model, on the thread that loads it, and that is the "
-							+ "whole of what the lambda does with them; NeoForge's parse reads it through CuboidModel.GSON, "
-							+ "whose UnbakedModel adapter is NeoForge's loader dispatch, and a model it does not own reaches "
-							+ "the same vanilla CuboidModel$Deserializer fromStream used (ModelFormatFunnelInjector). So "
-							+ "BEFORE the call is still 'this model's file is about to be parsed'"));
+	// Empty on 1.21.1: the one row this carried substituted 26.x's CuboidModel.fromStream for NeoForge's
+	// UnbakedModelParser.parse inside ModelManager's loadBlockModels lambda — classes and call neither of which
+	// this base has. 1.21.1's ModelBakery keeps vanilla's loadBlockModel, so a Fabric mod's @At on it anchors
+	// where it always did.
+	public static final List<Substitution> SUBSTITUTED = List.of();
 
 	/**
 	 * A private vanilla method the surviving carrier REPLACED at its one call site with a method of its own that takes,

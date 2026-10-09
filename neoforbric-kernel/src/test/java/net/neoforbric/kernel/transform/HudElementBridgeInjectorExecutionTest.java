@@ -18,7 +18,7 @@ import net.fabricmc.api.EnvType;
 /**
  * {@link HudElementBridgeInjector}'s output, run: a layer added to NeoForge's {@code GuiLayerManager} is the one the
  * bridge hands back, inside the overload's {@code BooleanSupplier} gate, so a hidden vanilla layer hides the Fabric
- * elements attached to it too; and {@code initModdedLayers} hands the manager over once its own layers are in.
+ * elements attached to it too.
  *
  * <p>The bridge is a recording stand-in under {@code KernelHudBridge}'s name, defined child-first: the real one
  * resolves fabric-rendering-v1 and generates a class through the kernel's game loader. Its stand-in wraps every layer
@@ -86,7 +86,6 @@ class HudElementBridgeInjectorExecutionTest {
 					import java.util.ArrayList;
 					import java.util.List;
 					import net.neoforged.neoforge.client.gui.GuiLayer;
-					import net.neoforged.neoforge.client.gui.GuiLayerManager;
 
 					public final class KernelHudBridge {
 						public static final List<String> calls = new ArrayList<>();
@@ -98,10 +97,6 @@ class HudElementBridgeInjectorExecutionTest {
 								vanilla.render(drawn);
 								drawn.add("fabric elements on " + identifier);
 							};
-						}
-
-						public static void addForgeOverlayLayers(Object manager) {
-							calls.add("forge overlays after " + ((GuiLayerManager) manager).layers.size() + " layers");
 						}
 					}
 					""");
@@ -131,7 +126,7 @@ class HudElementBridgeInjectorExecutionTest {
 		return (List<String>) InjectorExecution.invoke(manager, "render");
 	}
 
-	@Test void addedLayersCarryTheBridgeInsideTheirGateAndTheOverlayStackGoesOnLast(@TempDir Path work) throws Throwable {
+	@Test void addedLayersCarryTheBridgeInsideTheirGate(@TempDir Path work) throws Throwable {
 		Map<String, byte[]> original = InjectorExecution.compile(work, STAND_INS);
 		String internal = MANAGER.replace('.', '/');
 		byte[] routed = InjectorExecution.transform(new HudElementBridgeInjector(), MANAGER, original.get(internal), EnvType.CLIENT);
@@ -143,9 +138,9 @@ class HudElementBridgeInjectorExecutionTest {
 		assertEquals(List.of("hotbar", "fabric elements on Identifier[path=hotbar]", "boss bar",
 				"fabric elements on Identifier[path=boss_bar]", "a NeoForge mod's layer"), hud(loader),
 				"a hidden layer (chat) hides the Fabric elements attached to it too");
-		assertEquals(List.of("wrap Identifier[path=hotbar]", "wrap Identifier[path=boss_bar]", "wrap Identifier[path=chat]",
-				"forge overlays after 4 layers"), InjectorExecution.getStatic(loader.loadClass(BRIDGE), "calls"),
-				"both GuiLayer overloads are routed, and the overlay stack is handed the manager after its own layers");
+		assertEquals(List.of("wrap Identifier[path=hotbar]", "wrap Identifier[path=boss_bar]", "wrap Identifier[path=chat]"),
+				InjectorExecution.getStatic(loader.loadClass(BRIDGE), "calls"),
+				"both GuiLayer overloads are routed through the bridge — the gate hides the Fabric elements with their layer");
 
 		ClassLoader merged = InjectorExecution.load(original);
 		assertEquals(List.of("hotbar", "boss bar", "a NeoForge mod's layer"), hud(merged),

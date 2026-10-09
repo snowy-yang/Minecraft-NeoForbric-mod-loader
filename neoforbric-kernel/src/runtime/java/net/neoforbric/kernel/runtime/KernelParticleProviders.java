@@ -26,13 +26,13 @@ import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.particles.ParticleType;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Makes {@code ParticleResources}' vanilla-typed {@code providers} map a live view of the NeoForge-typed one.
  *
  * <p>Vanilla 26.2 declares {@code providers} as {@code Int2ObjectMap<ParticleProvider<?>>} keyed by the particle
- * type's registry id. NeoForge 26.2.0.88 RE-TYPES that same field to {@code Map<Identifier, ParticleProvider<?>>}.
+ * type's registry id. NeoForge 26.2.0.88 RE-TYPES that same field to {@code Map<ResourceLocation, ParticleProvider<?>>}.
  * Same name, different descriptor is legal in the JVM, so the merged base carries BOTH — and the surviving
  * {@code <init>} writes only NeoForge's. The vanilla-typed one is null forever.
  *
@@ -44,7 +44,7 @@ import net.minecraft.resources.Identifier;
  *
  * <p>So the field is given a value, and the value has to be a VIEW rather than a second map: the two halves of the
  * mechanism have to stay one map. A write through the int-keyed side must be visible to
- * {@code ParticleEngine.makeParticle}, which reads the {@code Identifier}-keyed one, and vice versa. The key
+ * {@code ParticleEngine.makeParticle}, which reads the {@code ResourceLocation}-keyed one, and vice versa. The key
  * adaptation is the registry itself, which is the same thing each side already does — fabric-api spells
  * {@code getId(type)} and the merged {@code register} spells {@code getKey(type)}.
  *
@@ -58,7 +58,7 @@ public final class KernelParticleProviders {
 	}
 
 	/**
-	 * Wraps the {@code Identifier}-keyed provider map as an {@code Int2ObjectMap}.
+	 * Wraps the {@code ResourceLocation}-keyed provider map as an {@code Int2ObjectMap}.
 	 *
 	 * <p>Declared as {@code Object} on purpose. Every game-side seam in {@link net.neoforbric.kernel.runtime} is
 	 * expressed in JDK types so {@code KernelRuntimeClasses} can state its signature without the boot side
@@ -67,12 +67,12 @@ public final class KernelParticleProviders {
 	 */
 	public static Object intKeyedView(Map<?, ?> byName) {
 		@SuppressWarnings("unchecked")
-		Map<Identifier, Object> live = (Map<Identifier, Object>) byName;
+		Map<ResourceLocation, Object> live = (Map<ResourceLocation, Object>) byName;
 		return new IntKeyedView(live);
 	}
 
 	/**
-	 * An {@code Int2ObjectMap} face on an {@code Identifier}-keyed map, translating through the particle registry.
+	 * An {@code Int2ObjectMap} face on an {@code ResourceLocation}-keyed map, translating through the particle registry.
 	 *
 	 * <p>Deliberately not spelled with its nested name anywhere in {@code src/main}: the registry test scans for
 	 * {@code net.neoforbric.kernel.runtime.<Name>} and would then demand its own entry for this class.
@@ -80,7 +80,7 @@ public final class KernelParticleProviders {
 	static final class IntKeyedView extends AbstractInt2ObjectMap<Object> {
 		private static final long serialVersionUID = 1L;
 
-		private final Map<Identifier, Object> byName;
+		private final Map<ResourceLocation, Object> byName;
 		/**
 		 * Entries whose int key names no registered particle type. They cannot be translated, and dropping them
 		 * would lose a registration silently; they live here instead, readable through this face only.
@@ -88,24 +88,24 @@ public final class KernelParticleProviders {
 		private final Int2ObjectOpenHashMap<Object> untranslatable = new Int2ObjectOpenHashMap<>();
 		private boolean warned;
 
-		IntKeyedView(Map<Identifier, Object> byName) {
+		IntKeyedView(Map<ResourceLocation, Object> byName) {
 			this.byName = byName;
 		}
 
-		private Identifier key(int id) {
+		private ResourceLocation key(int id) {
 			ParticleType<?> type = BuiltInRegistries.PARTICLE_TYPE.byId(id);
 			return type == null ? null : BuiltInRegistries.PARTICLE_TYPE.getKey(type);
 		}
 
 		@Override
 		public Object get(int id) {
-			Identifier key = key(id);
+			ResourceLocation key = key(id);
 			return key == null ? untranslatable.get(id) : byName.get(key);
 		}
 
 		@Override
 		public Object put(int id, Object provider) {
-			Identifier key = key(id);
+			ResourceLocation key = key(id);
 			if (key == null) {
 				// byId answers null for an id no particle type holds. Keeping the entry beats losing it: the
 				// caller would see a successful put either way, and a lost provider is a particle that never
@@ -114,7 +114,7 @@ public final class KernelParticleProviders {
 					warned = true;
 					System.out.println("[NeoForbric/Particles] a provider was registered under particle id " + id
 							+ ", which no registered particle type holds — kept, but nothing reading the "
-							+ "Identifier-keyed map will see it");
+							+ "ResourceLocation-keyed map will see it");
 				}
 				return untranslatable.put(id, provider);
 			}
@@ -123,13 +123,13 @@ public final class KernelParticleProviders {
 
 		@Override
 		public boolean containsKey(int id) {
-			Identifier key = key(id);
+			ResourceLocation key = key(id);
 			return key == null ? untranslatable.containsKey(id) : byName.containsKey(key);
 		}
 
 		@Override
 		public Object remove(int id) {
-			Identifier key = key(id);
+			ResourceLocation key = key(id);
 			return key == null ? untranslatable.remove(id) : byName.remove(key);
 		}
 
@@ -141,13 +141,13 @@ public final class KernelParticleProviders {
 		/**
 		 * Iteration translates back the other way. Particle ids are assigned when the built-in registry freezes at
 		 * bootstrap, long before {@code Minecraft.<init>}, so the round trip is stable by the time anything here
-		 * runs; an entry whose {@code Identifier} is no longer registered is skipped rather than reported as id 0.
+		 * runs; an entry whose {@code ResourceLocation} is no longer registered is skipped rather than reported as id 0.
 		 */
 		@Override
 		public ObjectSet<Int2ObjectMap.Entry<Object>> int2ObjectEntrySet() {
 			ObjectSet<Int2ObjectMap.Entry<Object>> out = new ObjectOpenHashSet<>();
-			for (Map.Entry<Identifier, Object> e : byName.entrySet()) {
-				ParticleType<?> type = BuiltInRegistries.PARTICLE_TYPE.getValue(e.getKey());
+			for (Map.Entry<ResourceLocation, Object> e : byName.entrySet()) {
+				ParticleType<?> type = BuiltInRegistries.PARTICLE_TYPE.get(e.getKey());
 				if (type == null) continue;
 				out.add(new AbstractInt2ObjectMap.BasicEntry<>(
 						BuiltInRegistries.PARTICLE_TYPE.getId(type), e.getValue()));

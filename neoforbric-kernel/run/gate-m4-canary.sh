@@ -35,14 +35,14 @@ done
 seed_server_properties "$RUNDIR"
 echo "[kernel] staged: $(ls -1 "$RUNDIR/mods" | tr '\n' ' ')"
 
-step "boot all three ecosystems in one instance"
+step "boot both ecosystems in one instance"
 : > "$LOG"
 ( sleep 30; echo stop ) | RUNDIR="$RUNDIR" "$KERNEL/run/launch-kernel-server.sh" > "$LOG" 2>&1 &
 BOOTPID=$!
 record_server_pid "$RUNDIR" "$BOOTPID"
 await_server "$BOOTPID" "$LOG" 130
 
-step "all three ecosystems discovered + brought up in ONE instance (must PASS)"
+step "both ecosystems discovered + brought up in ONE instance (must PASS)"
 check "both Forge-family baselines"           "constructed NeoForge baseline mod" "$LOG"
 check "traditional-Forge baseline"            "constructed traditional-Forge baseline mod ForgeMod" "$LOG"
 check "NeoForge @Mod constructed"             "constructed @Mod neoforbricneolive" "$LOG"

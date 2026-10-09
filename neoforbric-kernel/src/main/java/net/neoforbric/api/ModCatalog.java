@@ -30,7 +30,7 @@ import java.util.Locale;
  * needs. A mod list is the other question: a player opening the Mods screen wants the whole set, with names,
  * versions and descriptions, and there was no place that held it. Each family's screen reads its own family's
  * registry — NeoForge's {@code ModListScreen} reads {@code ModList.get()}, Mod Menu reads Fabric's containers —
- * so on a NeoForbric instance running 16 jars across three ecosystems, NeoForge's screen listed three of them and
+ * so on a NeoForbric instance running 16 jars across both ecosystems, NeoForge's screen listed three of them and
  * Mod Menu listed the Fabric ones plus a row of question marks for everything it could only see as a bare id.
  *
  * <p>Neither screen is wrong. Each is complete for the loader it was written against, and no loader on a normal
@@ -48,7 +48,7 @@ import java.util.Locale;
  *
  * <h2>Publishing</h2>
  *
- * <p>Once, during boot, by whoever has all three ecosystems' mods in hand — which is exactly one place. Readers
+ * <p>Once, during boot, by whoever has both ecosystems' mods in hand — which is exactly one place. Readers
  * are game-side (the Mods screen), so this lives in {@code net.neoforbric.api}, which is parent-loaded: the screen
  * and the boot code that filled it see the same class and the same list.
  */

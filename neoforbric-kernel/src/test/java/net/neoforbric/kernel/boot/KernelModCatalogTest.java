@@ -38,7 +38,7 @@ import net.neoforbric.api.ModCatalog;
 
 /**
  * Covers the unified mod catalogue: the list a player's Mods screen is built from, which is the only list on a
- * NeoForbric instance that holds all three ecosystems. Each family's own screen lists its own family and is complete
+ * NeoForbric instance that holds both ecosystems. Each family's own screen lists its own family and is complete
  * for the loader it was written against — NeoForge's listed 3 of 16 jars on a real pack, and Mod Menu showed the
  * rest as bare ids it had no metadata for.
  */

@@ -24,7 +24,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -58,7 +58,7 @@ public final class KernelLootModifiers {
 	}
 
 	/** Whether {@code id} is a legacy index file — {@code <ns>:loot_modifiers/global_loot_modifiers.json}. */
-	static boolean isLegacyIndex(Identifier id) {
+	static boolean isLegacyIndex(ResourceLocation id) {
 		String path = id.getPath();
 		return path.endsWith(INDEX_SUFFIX) && path.startsWith(DIRECTORY + "/");
 	}
@@ -71,22 +71,22 @@ public final class KernelLootModifiers {
 		}
 
 		@Override
-		public List<Resource> getResourceStack(Identifier id) {
+		public List<Resource> getResourceStack(ResourceLocation id) {
 			return delegate.getResourceStack(id);
 		}
 
 		@Override
-		public Map<Identifier, Resource> listResources(String prefix, Predicate<Identifier> filter) {
-			List<Identifier> hidden = new ArrayList<>();
-			Map<Identifier, Resource> kept = delegate.listResources(prefix, hiding(filter, hidden));
+		public Map<ResourceLocation, Resource> listResources(String prefix, Predicate<ResourceLocation> filter) {
+			List<ResourceLocation> hidden = new ArrayList<>();
+			Map<ResourceLocation, Resource> kept = delegate.listResources(prefix, hiding(filter, hidden));
 			report(kept.size(), hidden);
 			return kept;
 		}
 
 		@Override
-		public Map<Identifier, List<Resource>> listResourceStacks(String prefix, Predicate<Identifier> filter) {
-			List<Identifier> hidden = new ArrayList<>();
-			Map<Identifier, List<Resource>> kept = delegate.listResourceStacks(prefix, hiding(filter, hidden));
+		public Map<ResourceLocation, List<Resource>> listResourceStacks(String prefix, Predicate<ResourceLocation> filter) {
+			List<ResourceLocation> hidden = new ArrayList<>();
+			Map<ResourceLocation, List<Resource>> kept = delegate.listResourceStacks(prefix, hiding(filter, hidden));
 			report(kept.size(), hidden);
 			return kept;
 		}
@@ -97,11 +97,11 @@ public final class KernelLootModifiers {
 		}
 
 		@Override
-		public Optional<Resource> getResource(Identifier id) {
+		public Optional<Resource> getResource(ResourceLocation id) {
 			return delegate.getResource(id);
 		}
 
-		private static Predicate<Identifier> hiding(Predicate<Identifier> filter, List<Identifier> hidden) {
+		private static Predicate<ResourceLocation> hiding(Predicate<ResourceLocation> filter, List<ResourceLocation> hidden) {
 			return id -> {
 				if (isLegacyIndex(id)) {
 					hidden.add(id);
@@ -111,7 +111,7 @@ public final class KernelLootModifiers {
 			};
 		}
 
-		private static void report(int kept, List<Identifier> hidden) {
+		private static void report(int kept, List<ResourceLocation> hidden) {
 			// Worded to never contain the game's own "Couldn't parse data file" phrase, which gates grep for.
 			NeoForbricLog.info("[NeoForbric/Loot] loot-modifier directory scan: %d file(s) kept, %d legacy index file(s) hidden %s — "
 					+ "NeoForge's manager has no list-file concept and used to log a parse error for each", kept, hidden.size(), hidden);

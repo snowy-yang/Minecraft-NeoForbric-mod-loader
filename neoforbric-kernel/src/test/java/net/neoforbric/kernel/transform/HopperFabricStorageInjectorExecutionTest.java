@@ -17,14 +17,15 @@ import net.fabricmc.api.EnvType;
 
 /**
  * {@link HopperFabricStorageInjector}'s output, run: NeoForge's hopper pushes into, and pulls from, a Fabric item storage
- * NeoForge's own lookup cannot see, where as merged it found nothing and did neither. A storage NeoForge sees still goes
+ * NeoForge's own hooks cannot see, where merged it found nothing and did neither. A storage NeoForge sees still goes
  * through NeoForge's hooks, and with no Fabric storage above, the hopper still picks up item entities.
  *
  * <p>The stand-in {@code HopperBlockEntity} keeps NeoForge's two bodies in the shape the edits key on: one
- * {@code ContainerOrHandler} lookup and one hook each, {@code ejectItems}' {@code isEmpty()} exit, and
- * {@code suckInItems}' {@code itemHandler()} check falling through to item pickup. The kernel's
- * {@code KernelFabricHopperStorage} reaches fabric-transfer-api's lookup, which is not on the test classpath; a stand-in
- * under its name answers from the level's Fabric storages, with the same {@code NOT_FOUND} contract for {@code extract}.
+ * {@code VanillaInventoryCodeHooks} call each — {@code insertHook} a plain boolean whose false jumps to the vanilla
+ * lookups, {@code extractHook} a nullable Boolean whose null does — and the vanilla lookups after them, exactly as
+ * 1.21.1 ships. The kernel's {@code KernelFabricHopperStorage} reaches fabric-transfer-api's lookup, which is not on the
+ * test classpath; a stand-in under its name answers from the level's Fabric storages, with the same {@code NOT_FOUND}
+ * contract for {@code extract}.
  */
 @ExecutesInjector(HopperFabricStorageInjector.class)
 @ResourceLock("system-properties")
@@ -73,38 +74,34 @@ class HopperFabricStorageInjectorExecutionTest {
 						java.util.List<String> contents();
 					}
 					""",
-			"net.neoforged.neoforge.transfer.item.ContainerOrHandler", """
-					package net.neoforged.neoforge.transfer.item;
+			"net.neoforged.neoforge.items.VanillaInventoryCodeHooks", """
+					package net.neoforged.neoforge.items;
 
 					import java.util.List;
-
-					public record ContainerOrHandler(List<String> container) {
-						public boolean isEmpty() {
-							return container == null;
-						}
-
-						public List<String> itemHandler() {
-							return container;
-						}
-					}
-					""",
-			"net.neoforged.neoforge.transfer.item.VanillaInventoryCodeHooks", """
-					package net.neoforged.neoforge.transfer.item;
-
 					import net.minecraft.world.level.Level;
 					import net.minecraft.world.level.block.entity.Hopper;
 					import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
+					/** 1.21.1's shape: a plain boolean, and a nullable Boolean. */
 					public class VanillaInventoryCodeHooks {
-						public static boolean insertHook(HopperBlockEntity hopper, ContainerOrHandler target) {
-							if (hopper.contents().isEmpty()) return false;
-							target.container().add(hopper.contents().remove(0) + " (via NeoForge)");
+						public static boolean insertHook(HopperBlockEntity hopper) {
+							return false; // NeoForge's handler pass found nothing to do in this world
+						}
+
+						public static Boolean extractHook(Level level, Hopper hopper) {
+							return null; // NeoForge's handler pass found nothing to do in this world
+						}
+
+						public static boolean insertHook(HopperBlockEntity hopper, List<String> target) {
+							if (hopper.contents().isEmpty() || target == null) return false;
+							target.add(hopper.contents().remove(0) + " (via NeoForge)");
 							return true;
 						}
 
-						public static boolean extractHook(Level level, Hopper hopper, ContainerOrHandler source) {
-							if (source.container().isEmpty()) return false;
-							hopper.contents().add(source.container().remove(0) + " (via NeoForge)");
+						public static Boolean extractHook(Level level, Hopper hopper, List<String> source) {
+							if (source == null) return null;
+							if (source.isEmpty()) return false;
+							hopper.contents().add(source.remove(0) + " (via NeoForge)");
 							return true;
 						}
 					}
@@ -167,19 +164,18 @@ class HopperFabricStorageInjectorExecutionTest {
 							return contents;
 						}
 
-						/** NeoForge's. */
+						/** NeoForge's, as 1.21.1 ships it: the hook first, the vanilla lookup after. */
 						public static boolean ejectItems(Level level, BlockPos pos, HopperBlockEntity hopper) {
-							ContainerOrHandler target = getContainerOrHandlerAt(level, pos.below());
-							if (target.isEmpty()) return false;
-							return VanillaInventoryCodeHooks.insertHook(hopper, target);
+							if (VanillaInventoryCodeHooks.insertHook(hopper)) return true;
+							return VanillaInventoryCodeHooks.insertHook(hopper, getAttachedContainer(level, pos.below()));
 						}
 
-						/** NeoForge's: a handler above is pulled from, else item entities are picked up. */
+						/** NeoForge's, as 1.21.1 ships it: the hook first, then the vanilla source or item pickup. */
 						public static boolean suckInItems(Level level, Hopper hopper) {
-							ContainerOrHandler source = getSourceContainerOrHandler(level, hopper);
-							if (source.itemHandler() != null) {
-								return VanillaInventoryCodeHooks.extractHook(level, hopper, source);
-							}
+							Boolean pulled = VanillaInventoryCodeHooks.extractHook(level, hopper);
+							if (pulled != null) return pulled;
+							Boolean fromContainer = VanillaInventoryCodeHooks.extractHook(level, hopper, getSourceContainer(level, hopper));
+							if (fromContainer != null) return fromContainer;
 							if (hopper.isGridAligned() && !level.itemEntities.isEmpty()) {
 								hopper.contents().add(level.itemEntities.remove(0) + " (picked up)");
 								return true;
@@ -187,12 +183,12 @@ class HopperFabricStorageInjectorExecutionTest {
 							return false;
 						}
 
-						private static ContainerOrHandler getContainerOrHandlerAt(Level level, BlockPos pos) {
-							return new ContainerOrHandler(level.neoForgeVisible.get(pos));
+						private static List<String> getAttachedContainer(Level level, BlockPos pos) {
+							return level.neoForgeVisible.get(pos);
 						}
 
-						private static ContainerOrHandler getSourceContainerOrHandler(Level level, Hopper hopper) {
-							return getContainerOrHandlerAt(level, hopper.position().above());
+						private static List<String> getSourceContainer(Level level, Hopper hopper) {
+							return level.neoForgeVisible.get(hopper.position().above());
 						}
 					}
 					""");
@@ -239,7 +235,7 @@ class HopperFabricStorageInjectorExecutionTest {
 		Map<String, byte[]> original = InjectorExecution.compile(work, STAND_INS);
 		String internal = HopperFabricStorageInjector.HOPPER_INTERNAL;
 		byte[] repaired = InjectorExecution.transform(new HopperFabricStorageInjector(), HOPPER, original.get(internal), EnvType.SERVER);
-		assertNotSame(original.get(internal), repaired, "NeoForge's two bodies were edited");
+		assertNotSame(original.get(internal), repaired, "NeoForge's two hook declines were widened");
 		Map<String, byte[]> classes = new HashMap<>(original);
 		classes.put(internal, repaired);
 		ClassLoader loader = InjectorExecution.load(classes);
@@ -257,12 +253,12 @@ class HopperFabricStorageInjectorExecutionTest {
 
 		assertEquals(List.of(false, true, List.of("cobblestone", "dropped seeds (picked up)")),
 				World.of(InjectorExecution.load(original), "fabricOnly").tick(),
-				"premise: as merged, the Fabric storages are invisible: nothing is pushed, and the iron stays above");
+				"premise: merged, the Fabric storages are invisible: the hook declines, nothing is pushed, the iron stays above");
 		assertSame(repaired, InjectorExecution.transform(new HopperFabricStorageInjector(), HOPPER, repaired, EnvType.SERVER),
 				"an edited hopper is left alone");
 	}
 
-	@Test void switchedOffTheHopperIsLeftAsMerged(@TempDir Path work) throws Exception {
+	@Test void switchedOffTheHopperIsLeftAsItShipped(@TempDir Path work) throws Exception {
 		byte[] bytes = InjectorExecution.compile(work, STAND_INS).get(HopperFabricStorageInjector.HOPPER_INTERNAL);
 		System.setProperty(HopperFabricStorageInjector.PROPERTY, "off");
 		assertSame(bytes, InjectorExecution.transform(new HopperFabricStorageInjector(), HOPPER, bytes, EnvType.SERVER));

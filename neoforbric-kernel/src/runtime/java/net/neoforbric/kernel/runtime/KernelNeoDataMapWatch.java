@@ -18,10 +18,10 @@ package net.neoforbric.kernel.runtime;
 
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
+import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.TagsUpdatedEvent;
+import net.neoforged.neoforge.registries.DataMapLoader;
 import net.neoforged.neoforge.registries.datamaps.DataMapsUpdatedEvent;
-import net.neoforged.neoforge.resource.NeoForgeReloadListeners;
 
 import net.neoforbric.kernel.util.NeoForbricLog;
 
@@ -39,25 +39,26 @@ public final class KernelNeoDataMapWatch {
 	private static final java.util.concurrent.atomic.AtomicInteger APPLIED_TOTAL = new java.util.concurrent.atomic.AtomicInteger();
 
 	/**
-	 * Watches NeoForge's OWN data-map path, which the merged base carries whole: the carrier's
-	 * {@code NeoForgeEventHandler.onResourceReload} registers a {@code DataMapLoader} on
-	 * {@code AddServerReloadListenersEvent} (the merged {@code ReloadableServerResources} posts it and injects the
-	 * live condition context), and {@code NeoForgeEventHandler.tagsUpdated} applies it on
-	 * {@code TagsUpdatedEvent.ServerDataLoad} — posted on the initial load and on every {@code /reload}. Three
+	 * Watches NeoForge's OWN data-map path, which this base carries whole: the carrier's
+	 * {@code NeoForgeEventHandler.onResourceReload} news a {@code DataMapLoader} and adds it through
+	 * {@code AddReloadListenerEvent} (the patched {@code ReloadableServerResources} posts it from
+	 * {@code loadResources}), and each registry's maps are applied on the reload that follows. Three
 	 * LOWEST-priority listeners count what that path does per reload generation and say so, and
 	 * {@link #beforeServerStart} stands its fallback down when the genuine path already applied.
 	 *
 	 * <p>LOWEST, through the four-argument overload: the shorter ones promote to NORMAL, which would run the
-	 * count line before {@code NeoForgeEventHandler.tagsUpdated} at NORMAL has applied anything.
+	 * count line before {@code NeoForgeEventHandler}'s own NORMAL-priority listener has applied anything.
+	 *
+	 * <p>The presence check reads the event's own listener list for a {@code DataMapLoader}: 21.1 has no
+	 * {@code NeoForgeReloadListeners} key registry, and the event is the one place the genuine path's
+	 * registration is visible from.
 	 */
 	public static void installDataMapWatch(Object neoBus) {
 		IEventBus bus = (IEventBus) neoBus;
-		bus.addListener(EventPriority.LOWEST, false, AddServerReloadListenersEvent.class, event -> {
+		bus.addListener(EventPriority.LOWEST, false, AddReloadListenerEvent.class, event -> {
 			int generation = GENERATION.incrementAndGet();
 			APPLIED_THIS_GENERATION.set(0);
-			try {
-				event.getServerResources().getListener(NeoForgeReloadListeners.DATA_MAPS_KEY);
-			} catch (IllegalArgumentException absent) {
+			if (event.getListeners().stream().noneMatch(DataMapLoader.class::isInstance)) {
 				NeoForbricLog.warn("[NeoForbric/Worldgen] reload #%d: NeoForge's DataMapLoader is NOT registered — "
 						+ "NeoForgeEventHandler.onResourceReload did not run on this bus; the kernel's about-to-start "
 						+ "fallback will load the data maps", generation);
@@ -69,7 +70,8 @@ public final class KernelNeoDataMapWatch {
 				APPLIED_TOTAL.incrementAndGet();
 			}
 		});
-		bus.addListener(EventPriority.LOWEST, false, TagsUpdatedEvent.ServerDataLoad.class, event -> {
+		bus.addListener(EventPriority.LOWEST, false, TagsUpdatedEvent.class, event -> {
+			if (event.getUpdateCause() != TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD) return;
 			int applied = APPLIED_THIS_GENERATION.get();
 			if (applied > 0) {
 				NeoForbricLog.info("[NeoForbric/Worldgen] reload #%d: NeoForge's own reload path applied data maps for %d "

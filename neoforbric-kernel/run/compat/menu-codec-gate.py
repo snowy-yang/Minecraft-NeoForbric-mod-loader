@@ -15,9 +15,9 @@ import zipfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--farmers-delight', type=Path, required=True,
-                        help="Unmodified FarmersDelight-26.2-3.6.26+refabricated.jar (the Fabric build)")
+                        help="Unmodified FarmersDelight-1.21.1-3.3.6.jar (the Fabric build for 1.21.1)")
     parser.add_argument('--fabric-api', type=Path,
-                        help='fabric-api-0.155.2+26.2.jar (default: tools/dev.py prepare\'s, else the compatibility pack\'s)')
+                        help='fabric-api-0.116.17+1.21.1.jar (default: tools/dev.py prepare\'s, else the compatibility pack\'s)')
     parser.add_argument('--staged-root', type=Path, help='The staged run/ directory (default: NEOFORBRIC_OLD, .dev/staged, neoforbric-loader)')
     parser.add_argument('--output', type=Path, help='A new directory for logs, worlds and reports')
     args = parser.parse_args()
@@ -30,31 +30,30 @@ def main():
     mc = Path(os.environ.get('MC_DIR') or (dev / 'minecraft' if (dev / 'minecraft/versions/1.21.1/1.21.1.json').is_file()
                                          else Path.home() / 'Library/Application Support/minecraft')).resolve()
     delight = args.farmers_delight.resolve()
-    api = args.fabric_api or next((path for path in (dev / 'api/fabric-api-0.155.2+26.2.jar',
-                                                     kernel / 'run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar')
-                                   if path.is_file()), kernel / 'run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar')
+    api = args.fabric_api or next((path for path in (dev / 'api/fabric-api-0.116.17+1.21.1.jar',
+                                                     kernel / 'run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar')
+                                   if path.is_file()), kernel / 'run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar')
     api = api.resolve()
     with zipfile.ZipFile(delight) as jar:
         metadata = json.loads(jar.read('fabric.mod.json'))
-        if metadata.get('id') != 'farmersdelight' or metadata.get('version') != '26.2-3.6.26+refabricated':
-            parser.error("This gate targets Farmer's Delight 26.2-3.6.26+refabricated")
+        if metadata.get('id') != 'farmersdelight' or metadata.get('version') != '1.21.1-3.3.6':
+            parser.error("This gate targets Farmer's Delight Refabricated 1.21.1-3.3.6 (the 1.21.1-era build)")
     with zipfile.ZipFile(api) as jar:
-        if json.loads(jar.read('fabric.mod.json')).get('version') != '0.155.2+26.2':
-            parser.error('This gate targets Fabric API 0.155.2+26.2')
+        if json.loads(jar.read('fabric.mod.json')).get('version') != '0.116.17+1.21.1':
+            parser.error('This gate targets Fabric API 0.116.17+1.21.1 (the pinned reference)')
     output = (args.output or kernel / 'build/verification' / ('menu-codec-' + datetime.now().strftime('%Y%m%d-%H%M%S'))).resolve()
     output.mkdir(parents=True, exist_ok=False)
     root = kernel / 'canary/menu-codec'
-    game = stage / 'merged-base/patched-mc-merged-1.21.1.jar'
-    forge = stage / 'merged-base/forge-runtime-interop.jar'
+    game = stage / 'neoforge-base/patched-mc-neoforge-1.21.1.jar'
     neo = stage / 'neoforge-runtime/neoforge-runtime.jar'
     # The kernel's boot jar carries Fabric Loader's API (ModInitializer); launch-kernel-server.sh rebuilds it below.
     loader = kernel / 'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
-    for path in (game, forge, neo, loader, delight, api):
+    for path in (game, neo, loader, delight, api):
         if not path.is_file():
             parser.error(f'Missing prerequisite: {path}')
     with tempfile.TemporaryDirectory(prefix='menu-probe-', dir=output) as temp:
         temp = Path(temp)
-        cp = [game, forge, neo, loader, delight]
+        cp = [game, neo, loader, delight]
         with zipfile.ZipFile(api) as jar:
             for name in jar.namelist():
                 if name.startswith('META-INF/jars/') and name.endswith('.jar'):

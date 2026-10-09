@@ -49,11 +49,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * reload HEAD, the on-load model and block-state modifiers, the thread-local dispatcher around collect and bake,
  * extra-model resolution and the post-upload capture — anchor on instructions the merged {@code ModelManager}
  * still has. Removing the pair from the mixin's bytes lets Mixin apply the rest as written, while NeoForge's
- * parser keeps the call site, so NeoForge {@code "loader"} models keep working too. What the pair did —
- * dispatch Fabric's {@code fabric:type} custom model formats ({@code UnbakedModelDeserializer}) — is done by
- * {@link ModelFormatFunnelInjector} inside NeoForge's own deserializer, so nothing is recorded for them while it is
- * on. With it off, each removed injector is a confirmed finding naming that loss: Traveler's Backpack's backpacks
- * are {@code fabric:type} models, and without the funnel every one of them fails to bake.
+ * parser keeps the call site, so NeoForge {@code "loader"} models keep working too.
  *
  * <p>NeoForge's substitution at that site is a census-pinned row of
  * {@link net.neoforbric.kernel.mixin.MergedBaseCalleeSwaps#SUBSTITUTED}. MixinRetarget moves an {@code @Inject} along it
@@ -62,22 +58,19 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  *
  * <p>Guest mixin classes reach the transform chain through {@code NeoForbricClassLoader.getPreMixinClassBytes},
  * which is also what {@link net.neoforbric.kernel.mixin.MixinFit} and Mixin itself read, so the pruned bytes are
- * the only bytes anyone judges or applies. Both methods must be present, each carrying an injector annotation
- * whose {@code method} list names {@code lambda$loadBlockModels$2}; a fabric-api that reshapes either leaves the
- * class untouched, with a warning, and the whole mixin then reads PARTIAL as it did before this class existed.
+ * the only bytes anyone judges or applies. A tabulated entry must have every named method present, each
+ * carrying the injector annotation it is listed with; a guest jar that reshapes one leaves the class
+ * untouched, with a warning, and the whole mixin then reads PARTIAL as it did before this class existed.
  *
  * <p>{@code -Dneoforbric.guestInjectorPruner=off} restores the previous behaviour EXACTLY: the pruner stands down and
  * {@code MergedBaseMixinCompat.SUPPRESSED_UNLESS_PRUNED} puts the whole-mixin pin back — never the half-applied
  * state.
  *
- * <p>The second entry is fabric-item-api-v1's {@code ItemStackMixin}. Its five tooltip injectors thread one
- * {@code @Share("index")} through vanilla's {@code addDetailsToTooltip}, which NeoForge turned into a dispatcher over
- * its own appender lists: three bound in a renamed body nothing calls, one drew every Fabric line at once above the
- * item id in advanced tooltips, one bound nowhere. The kernel draws Fabric's component tooltips from NeoForge's
- * appenders instead ({@code KernelNeoTooltips}), so the five go — only while that bridge is on, or they would draw
- * the same lines twice — and {@code hookDamage} (custom damage handlers) applies as written. Nothing is recorded for
- * them: the bridge does their job, and {@code FabricApiModuleLossAudit} names a mod's use of the registry when it
- * is off.
+ * <p>On 1.21.1 the only tabulated entry is the model pair. The tooltip entry this table used to carry —
+ * fabric-item-api-v1's {@code ItemStackMixin}, whose five injectors threaded one shared index through a
+ * {@code addDetailsToTooltip} that 26.x's NeoForge had turned into a dispatcher over appender lists — is gone with
+ * that world: 1.21.1's NeoForge keeps vanilla's tooltip body, fabric-item-api hooks it as on Fabric, and there is
+ * nothing to prune or replace.
  *
  * <p>The table names injectors the kernel replaces. The other kind of entry is found, not listed: an {@code @Inject}
  * that Mixin will reject outright ({@link net.neoforbric.kernel.mixin.MixinFit.Rejection} -- the one method its name binds
@@ -101,12 +94,10 @@ public final class GuestInjectorPruner implements ClassTransformer {
 
 	static final String MODEL_MANAGER_MIXIN = "net.fabricmc.fabric.mixin.client.model.loading.ModelManagerMixin";
 	static final String MODEL_LAMBDA = "lambda$loadBlockModels$2";
-	static final String ITEM_STACK_MIXIN = "net.fabricmc.fabric.mixin.item.ItemStackMixin";
-	private static final String SHARED_INDEX = "Lcom/llamalad7/mixinextras/sugar/ref/LocalIntRef;";
 
 	/**
 	 * One injector method to remove, and the target-method selector its annotation must carry: a prefix, or with
-	 * {@code exact} the whole selector — {@code addDetailsToTooltip} is also the prefix of the two renamed bodies.
+	 * {@code exact} the whole selector — the method a carrier renamed is also the prefix of the body it kept.
 	 */
 	record Prune(String name, String desc, String selectorPrefix, boolean exact) {
 		Prune(String name, String desc, String selectorPrefix) {
@@ -122,85 +113,34 @@ public final class GuestInjectorPruner implements ClassTransformer {
 			new Prune("cancelVanillaDeserialize",
 					"(Ljava/io/Reader;)Lnet/minecraft/client/resources/model/cuboid/CuboidModel;", MODEL_LAMBDA),
 			new Prune("actuallyDeserializeModel",
-					"(Ljava/lang/Object;Ljava/io/Reader;)Ljava/lang/Object;", MODEL_LAMBDA)),
-			ITEM_STACK_MIXIN, List.of(
-			new Prune("preAppendComponentTooltip", "(Lnet/minecraft/core/component/DataComponentType;Lnet/minecraft/world/item/Item$TooltipContext;"
-					+ "Lnet/minecraft/world/item/component/TooltipDisplay;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;"
-					+ SHARED_INDEX + ")Lnet/minecraft/core/component/DataComponentType;", "addDetailsToTooltip", true),
-			new Prune("preShouldDisplay", "(Lnet/minecraft/core/component/DataComponentType;Lnet/minecraft/world/item/Item$TooltipContext;"
-					+ "Lnet/minecraft/world/item/component/TooltipDisplay;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;"
-					+ SHARED_INDEX + ")Lnet/minecraft/core/component/DataComponentType;", "addDetailsToTooltip", true),
-			new Prune("preAttributeModifiers", "(Lnet/minecraft/world/item/Item$TooltipContext;Lnet/minecraft/world/item/component/TooltipDisplay;"
-					+ "Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;"
-					+ "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;" + SHARED_INDEX + ")V", "addDetailsToTooltip", true),
-			new Prune("postTooltipsAdvanced", "(Lnet/minecraft/world/item/Item$TooltipContext;Lnet/minecraft/world/item/component/TooltipDisplay;"
-					+ "Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;"
-					+ "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;" + SHARED_INDEX + ")V", "addDetailsToTooltip", true),
-			new Prune("postTooltipsNonAdvanced", "(ZLnet/minecraft/world/item/Item$TooltipContext;Lnet/minecraft/world/item/component/TooltipDisplay;"
-					+ "Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/TooltipFlag;Ljava/util/function/Consumer;"
-					+ SHARED_INDEX + ")Z", "addDetailsToTooltip", true)));
+					"(Ljava/lang/Object;Ljava/io/Reader;)Ljava/lang/Object;", MODEL_LAMBDA)));
 
 	/** The mixin config each entry is declared in, which names the owning mod on the finding. */
-	static final Map<String, String> CONFIGS = Map.of(MODEL_MANAGER_MIXIN, "fabric-model-loading-api-v1.mixins.json",
-			ITEM_STACK_MIXIN, "fabric-item-api-v1.mixins.json");
+	static final Map<String, String> CONFIGS = Map.of(MODEL_MANAGER_MIXIN, "fabric-model-loading-api-v1.mixins.json");
 
 	/** Whether an entry applies on this boot, beyond the pruner's own switch. */
-	private static final Map<String, BooleanSupplier> ACTIVE = Map.of(MODEL_MANAGER_MIXIN, () -> true,
-			ITEM_STACK_MIXIN, GuestInjectorPruner::fabricTooltipBridgeOn);
+	private static final Map<String, BooleanSupplier> ACTIVE = Map.of(MODEL_MANAGER_MIXIN, () -> true);
 
 	/** What is lost when an entry's class loads and is not pruned. */
 	private static final Map<String, String> COSTS = Map.of(MODEL_MANAGER_MIXIN,
 			"the whole mixin stays pinned, so every Fabric ModelLoadingPlugin -- block-state resolvers, extra "
-					+ "models, model modifiers -- is registered and never called",
-			ITEM_STACK_MIXIN, "fabric-item-api's tooltip injectors stay in addDetailsToTooltip, where NeoForge's dispatcher "
-					+ "makes none of the calls they anchor on (R3 moves none of them: they share an index), so they bind nowhere, "
-					+ "the kernel's tooltip bridge stands down, and a Fabric mod's component tooltips are drawn nowhere");
+					+ "models, model modifiers -- is registered and never called");
 
 	/** Why an entry's injectors cannot stay, for the log line. */
 	private static final Map<String, String> REASONS = Map.of(MODEL_MANAGER_MIXIN,
 			"NeoForge replaced CuboidModel.fromStream with UnbakedModelParser.parse at that site, so fabric's @Redirect "
-					+ "could not bind while its @ModifyArg did and re-read a consumed Reader (every block model missingno)",
-			ITEM_STACK_MIXIN, "NeoForge's ItemStack draws tooltips from its appender lists, where the kernel draws "
-					+ "Fabric's component tooltip providers now; these would have drawn them a second time, or nowhere");
+					+ "could not bind while its @ModifyArg did and re-read a consumed Reader (every block model missingno)");
 
 	/** What happens to an entry's mixin when a reshaped fabric-api leaves it untouched. */
 	private static final Map<String, String> DRIFT = Map.of(MODEL_MANAGER_MIXIN, "it will read PARTIAL and apply half — the state that made every block "
-					+ "model missingno",
-			ITEM_STACK_MIXIN, "its tooltip injectors bind nowhere on NeoForge's dispatcher and the kernel's tooltip bridge "
-					+ "stands down; Fabric component tooltip providers are drawn nowhere");
+					+ "model missingno");
 
 	/** The finding a removed injector records, or none when a kernel repair does its job. */
-	private static final Map<String, String> LOSSES = Map.of(MODEL_MANAGER_MIXIN,
-			"the kernel removed this injector: NeoForge's UnbakedModelParser now reads block models at its call site, so "
-					+ "Fabric's fabric:type custom model formats (UnbakedModelDeserializer) are not consulted — the "
-					+ "kernel's own dispatch of them is off (-D" + ModelFormatFunnelInjector.PROPERTY + "=off)");
+		private static final Map<String, String> LOSSES = Map.of();
 
-	/**
-	 * The finding an entry's removed injectors record on this boot, or null when something does their job:
-	 * the model pair's {@code fabric:type} dispatch is {@link ModelFormatFunnelInjector}'s while it is on.
-	 */
+	/** The finding an entry's removed injectors record on this boot, or null when something does their job. */
 	static String lossOf(String mixin) {
-		if (MODEL_MANAGER_MIXIN.equals(mixin) && ModelFormatFunnelInjector.enabled()) return null;
 		return LOSSES.get(mixin);
-	}
-
-	private static volatile boolean fabricTooltipsPruned;
-
-	/**
-	 * fabric-item-api's tooltip injectors go only while the kernel draws Fabric's providers from NeoForge's appenders:
-	 * NeoForge's appenders built, and the bridge on.
-	 */
-	public static boolean fabricTooltipBridgeOn() {
-		return !"off".equalsIgnoreCase(System.getProperty("neoforbric.neoTooltipAppenders", "on"))
-				&& !"off".equalsIgnoreCase(System.getProperty(FABRIC_TOOLTIP_BRIDGE, "on"));
-	}
-
-	/** {@code -Dneoforbric.fabricTooltipBridge=off} leaves fabric-item-api's tooltip injectors where they were. */
-	public static final String FABRIC_TOOLTIP_BRIDGE = "neoforbric.fabricTooltipBridge";
-
-	/** Whether fabric-item-api's five tooltip injectors were removed on this boot — the bridge draws only then. */
-	public static boolean fabricTooltipInjectorsPruned() {
-		return fabricTooltipsPruned;
 	}
 
 	/** Every annotation that makes a mixin method an injector: Mixin's own and MixinExtras'. */
@@ -260,7 +200,6 @@ public final class GuestInjectorPruner implements ClassTransformer {
 			if (found == null) {
 				// Absent on a second pass is what idempotence looks like; absent on the first is drift.
 				if (alreadyPruned(node, prunes)) {
-					if (ITEM_STACK_MIXIN.equals(className)) fabricTooltipsPruned = true;
 					return classBytes;
 				}
 				NeoForbricLog.warn("[NeoForbric/GuestInjectorPruner] %s has no %s%s — fabric-api reshaped the mixin, leaving "
@@ -277,7 +216,6 @@ public final class GuestInjectorPruner implements ClassTransformer {
 
 		node.methods.removeAll(victims);
 		pruned += victims.size();
-		if (ITEM_STACK_MIXIN.equals(className)) fabricTooltipsPruned = true;
 		// Removed, so never run: a confirmed finding for each where nothing does its job, naming what is not
 		// covered. The log line below is not the report.
 		String loss = lossOf(className);

@@ -31,7 +31,7 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.MapCodec;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.conditions.ICondition;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
@@ -130,7 +130,7 @@ public final class KernelNeoConditions {
 	/** Whether a condition type id is registered; substitutable so a unit test never initialises the registry. */
 	private static volatile java.util.function.Predicate<String> known = id -> {
 		// An id that does not even parse is "known": the strict codec then fails it exactly as before.
-		Identifier parsed = Identifier.tryParse(id);
+		ResourceLocation parsed = ResourceLocation.tryParse(id);
 		return parsed == null || NeoForgeRegistries.CONDITION_SERIALIZERS.containsKey(parsed);
 	};
 

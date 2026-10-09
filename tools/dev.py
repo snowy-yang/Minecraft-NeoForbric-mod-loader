@@ -27,8 +27,17 @@ API_PINS = (
     ('fabric-api-0.116.17+1.21.1.jar',
      'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.116.17+1.21.1/fabric-api-0.116.17+1.21.1.jar',
      '79ac44b40780acbd884b34c50be1e39af682847e5f5cb3b1fddeeaa768dce800'),
-    ('energy-5.0.0.jar', 'https://maven.modmuss50.me/teamreborn/energy/5.0.0/energy-5.0.0.jar',
-     '889afc438d3e4add5cfdac76517da7987a2c495e4731690a56f2c5dee775db59'),
+    # Team Reborn Energy 4.2.0, not 5.0.0: the maven 5.0.0 artifact was rebuilt with Java 25 bytecode (class
+    # file 69) and a Java 21 build can no longer compile against it; 4.2.0 carries the identical energy API
+    # (SIDED, insert/extract, getAmount/getCapacity, supports*) as intermediary names, and the build remaps
+    # it into the base's Mojmap namespace exactly as it does the fabric-api modules.
+    ('energy-4.2.0.jar', 'https://maven.modmuss50.me/teamreborn/energy/4.2.0/energy-4.2.0.jar',
+     '072cd9fad2ec00c3b11b5862f34bb12f0554f727958ad685ac7b81b4fd79eac3'),
+    # The Fabric intermediary mappings for this game version (mappings/mappings.tiny inside). Real 1.21.1
+    # Fabric mods ship intermediary-named, so the build (and, through the loader, the runtime) joins this
+    # with Mojang's own client mappings to translate them into the Mojmap namespace the base runs in.
+    ('intermediary-1.21.1.jar', 'https://maven.fabricmc.net/net/fabricmc/intermediary/1.21.1/intermediary-1.21.1.jar',
+     '6059157dfb4a536ec151697004f74f6004b7d346b289c2f89849e0e585aa36fa'),
 )
 STAGED_FILES = ('neoforge-base/patched-mc-neoforge-1.21.1.jar', 'neoforge-runtime/neoforge-runtime.jar',
                 # Not launched, but the bytecode tests read the pins that tie the NeoForge side to this base,

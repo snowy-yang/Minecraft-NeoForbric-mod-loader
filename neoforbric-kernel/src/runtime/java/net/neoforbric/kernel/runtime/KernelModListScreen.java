@@ -25,7 +25,7 @@ import net.neoforbric.api.CompatibilityFindings;
 import net.neoforbric.api.Ecosystem;
 import net.neoforbric.api.ModCatalog;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.ObjectSelectionList;
@@ -156,44 +156,46 @@ public final class KernelModListScreen extends Screen {
 	}
 
 	/**
-	 * The two panels, drawn BEFORE the widgets.
+	 * The two panels, painted before the widgets.
 	 *
-	 * <p>{@code extractRenderState} runs after the widget pass, so a wash painted there would cover the list it is
-	 * supposed to sit behind. This screen is opened over a live world and the mod names are the whole point of it.
+	 * <p>1.21.1 draws a screen in one {@code render} pass — background, then widgets — so the washes go down in
+	 * {@code renderBackground} where they sit behind the list, and the header band and the detail pane after the
+	 * widget pass in {@link #render}. This screen is opened over a live world and the mod names are the whole
+	 * point of it.
 	 */
 	@Override
-	public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-		super.extractBackground(g, mouseX, mouseY, partialTick);
+	public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+		super.renderBackground(g, mouseX, mouseY, partialTick);
 		if (this.list == null) return;
 		g.fill(0, 0, this.list.getWidth(), this.height, PANEL);
 		g.fill(this.list.getWidth() + 1, 0, this.width, this.height, PANEL);
 	}
 
 	@Override
-	public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
-		super.extractRenderState(g, mouseX, mouseY, partialTick);
+	public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+		super.render(g, mouseX, mouseY, partialTick);
 		framesDrawn++;
-		g.text(this.font, this.title.copy().append(Component.literal(" (" + ModCatalog.all().size() + ")")),
+		g.drawString(this.font, this.title.copy().append(Component.literal(" (" + ModCatalog.all().size() + ")")),
 				PAD, 8, BRIGHT);
-		g.text(this.font, Component.literal(summary()), PAD, 20, DIM);
+		g.drawString(this.font, Component.literal(summary()), PAD, 20, DIM);
 		ModCatalog.Entry selected = this.list == null || this.list.getSelected() == null
 				? null : this.list.getSelected().entry;
 		if (selected != null) detail(g, selected);
 	}
 
 	/** The right-hand pane. Word-wrapped so a long description does not run off the edge of the screen. */
-	private void detail(GuiGraphicsExtractor g, ModCatalog.Entry e) {
+	private void detail(GuiGraphics g, ModCatalog.Entry e) {
 		int x = this.list.getWidth() + 12;
 		int wrap = Math.max(80, this.width - x - 10);
 		// Below the header band, not level with it: the counts line is as wide as it needs to be and runs past
 		// the list column, and the first measurement of this screen had it drawn straight through the mod's name.
 		int y = LIST_TOP - 8;
-		g.text(this.font, Component.literal(e.name()), x, y, BRIGHT);
+		g.drawString(this.font, Component.literal(e.name()), x, y, BRIGHT);
 		y += 12;
-		g.text(this.font, Component.literal(e.modId() + (e.version().isEmpty() ? "" : "  " + e.version())),
+		g.drawString(this.font, Component.literal(e.modId() + (e.version().isEmpty() ? "" : "  " + e.version())),
 				x, y, DIM);
 		y += 12;
-		g.text(this.font, Component.literal(label(e.ecosystem())), x, y, tag(e.ecosystem()));
+		g.drawString(this.font, Component.literal(label(e.ecosystem())), x, y, tag(e.ecosystem()));
 		y += 14;
 		if (e.status() != ModCatalog.Status.OK) {
 			// The wording is the careful part. A withdrawn mod's classes are loaded and its mixins applied, so
@@ -202,9 +204,9 @@ public final class KernelModListScreen extends Screen {
 					? "This mod did not finish loading"
 					: "Part of this mod did not run";
 			String detail = e.statusDetail().isEmpty() ? "" : " \u2014 " + e.statusDetail();
-			g.textWithWordWrap(this.font, FormattedText.of(what + detail), x, y, wrap, BROKEN);
+			g.drawWordWrap(this.font, FormattedText.of(what + detail), x, y, wrap, BROKEN);
 			y += 12 * (1 + this.font.split(FormattedText.of(what + detail), wrap).size());
-			g.text(this.font, Component.literal("see .neoforbric-kernel/load-report.txt"), x, y, DIM);
+			g.drawString(this.font, Component.literal("see .neoforbric-kernel/load-report.txt"), x, y, DIM);
 			y += 14;
 		}
 		// Suspicions about this mod, dimmed and said to be unconfirmed: they change no status, and a player
@@ -216,25 +218,25 @@ public final class KernelModListScreen extends Screen {
 		for (int i = 0; i < Math.min(notes.size(), SUSPECTED_NOTES); i++) {
 			CompatibilityFinding f = notes.get(i);
 			String note = "possibly (not confirmed): " + f.feature() + " \u2014 " + f.detail();
-			g.textWithWordWrap(this.font, FormattedText.of(note), x, y, wrap, DIM);
+			g.drawWordWrap(this.font, FormattedText.of(note), x, y, wrap, DIM);
 			y += 12 * this.font.split(FormattedText.of(note), wrap).size() + 2;
 		}
 		if (notes.size() > SUSPECTED_NOTES) {
-			g.text(this.font, Component.literal("and " + (notes.size() - SUSPECTED_NOTES)
+			g.drawString(this.font, Component.literal("and " + (notes.size() - SUSPECTED_NOTES)
 					+ " more in .neoforbric-kernel/compatibility-report.json"), x, y, DIM);
 			y += 12;
 		}
 		if (!notes.isEmpty()) y += 4;
 		if (!e.authors().isEmpty()) {
-			g.text(this.font, Component.literal("by " + String.join(", ", e.authors())), x, y, DIM);
+			g.drawString(this.font, Component.literal("by " + String.join(", ", e.authors())), x, y, DIM);
 			y += 12;
 		}
 		if (!e.jar().isEmpty()) {
-			g.text(this.font, Component.literal(e.jar()), x, y, DIM);
+			g.drawString(this.font, Component.literal(e.jar()), x, y, DIM);
 			y += 14;
 		}
 		if (!e.description().isEmpty()) {
-			g.textWithWordWrap(this.font, FormattedText.of(e.description()), x, y, wrap, BRIGHT);
+			g.drawWordWrap(this.font, FormattedText.of(e.description()), x, y, wrap, BRIGHT);
 			y += 12 * (1 + this.font.split(FormattedText.of(e.description()), wrap).size());
 		}
 		// What this jar carries inside itself. Not listed as mods of their own -- they are not what anyone
@@ -242,12 +244,12 @@ public final class KernelModListScreen extends Screen {
 		// brought it, not have it missing from the screen entirely.
 		int bundled = ModCatalog.bundledBy(e.modId()).size();
 		if (bundled > 0) {
-			g.text(this.font, Component.literal("bundles " + bundled + " jar(s)"), x, y + 4, DIM);
+			g.drawString(this.font, Component.literal("bundles " + bundled + " jar(s)"), x, y + 4, DIM);
 		}
 		// Said on the screen rather than left to be discovered: a double click that does something is only a
 		// shortcut if someone knows it is there.
 		if (this.config != null && this.config.visible) {
-			g.text(this.font, Component.literal("double-click to configure"), x, this.height - 44, DIM);
+			g.drawString(this.font, Component.literal("double-click to configure"), x, this.height - 44, DIM);
 		}
 	}
 
@@ -269,7 +271,7 @@ public final class KernelModListScreen extends Screen {
 		Screen screen = KernelModConfigScreens.open(row.entry, this);
 		// Null here means the factory changed its mind between the probe and the press, or threw. Staying put is
 		// the only sane answer: setScreen(null) would drop the player into the world with the menu gone.
-		if (screen != null) this.minecraft.gui.setScreen(screen);
+		if (screen != null) this.minecraft.setScreen(screen);
 	}
 
 	private static String summary() {
@@ -304,13 +306,19 @@ public final class KernelModListScreen extends Screen {
 
 	@Override
 	public void onClose() {
-		this.minecraft.gui.setScreen(this.parent);
+		this.minecraft.setScreen(this.parent);
 	}
 
 	/** The scrolling list. Vanilla's widget, so scrolling, selection and keyboard navigation are not reinvented. */
 	private static final class ModList extends ObjectSelectionList<Row> {
 		ModList(Minecraft minecraft, int width, int height, int y, int entryHeight) {
 			super(minecraft, width, height, y, entryHeight);
+		}
+
+		/** {@code replaceEntries} is protected on 1.21.1; the screen rebuilds the list on every keystroke. */
+		@Override
+		public void replaceEntries(java.util.Collection<Row> rows) {
+			super.replaceEntries(rows);
 		}
 
 		/**
@@ -333,17 +341,15 @@ public final class KernelModListScreen extends Screen {
 		}
 
 		@Override
-		public void extractContent(GuiGraphicsExtractor g, int mouseX, int mouseY, boolean hovered,
-				float partialTick) {
-			int x = getContentX();
-			int y = getContentY();
+		public void render(GuiGraphics g, int index, int x, int y, int width, int height, int mouseX, int mouseY,
+				boolean hovered, float partialTick) {
 			if (KernelModListScreen.this.list.getSelected() == this) {
-				g.fill(x - 2, y - 2, x + getContentWidth() + 2, y + getContentHeight() + 1, SELECTED);
+				g.fill(x - 2, y - 2, x + width + 2, y + height - 8, SELECTED);
 			}
 			boolean broken = this.entry.status() != ModCatalog.Status.OK;
 			String name = broken ? BROKEN_MARK + this.entry.name() : this.entry.name();
-			g.text(KernelModListScreen.this.font, trim(name, getContentWidth()), x, y, broken ? BROKEN : BRIGHT);
-			g.text(KernelModListScreen.this.font, label(this.entry.ecosystem()), x, y + 11,
+			g.drawString(KernelModListScreen.this.font, trim(name, width), x, y, broken ? BROKEN : BRIGHT);
+			g.drawString(KernelModListScreen.this.font, label(this.entry.ecosystem()), x, y + 11,
 					tag(this.entry.ecosystem()));
 		}
 
@@ -368,11 +374,16 @@ public final class KernelModListScreen extends Screen {
 		 * with no settings to change is the ordinary case, not an error worth reporting.
 		 */
 		@Override
-		public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubled) {
+		public boolean mouseClicked(double x, double y, int button) {
+			// 26.x handed entries a MouseButtonEvent plus a double-click flag; 1.21.1 hands plain coordinates,
+			// so the shortcut detects its own double click the way vanilla's server list does.
 			KernelModListScreen.this.list.setSelected(this);
 			KernelModListScreen.this.selectionChanged();
-			if (doubled) KernelModListScreen.this.openConfig();
+			long now = System.currentTimeMillis();
+			if (button == 0 && now - lastClick < 250 && x == lastClickX && y == lastClickY) KernelModListScreen.this.openConfig();
+			lastClick = now; lastClickX = x; lastClickY = y;
 			return true;
 		}
+		private long lastClick; private double lastClickX, lastClickY;
 	}
 }

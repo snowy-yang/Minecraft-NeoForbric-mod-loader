@@ -88,16 +88,12 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  *       modifies, or the receiver and arguments of the call it replaces or wraps — is a capture of the stub's LEADING
  *       arguments that the stub passes to the delegate at the same positions. Mixin lets any of these kinds take a
  *       prefix of the target's arguments after its own, and the rule used to read every one of them as part of the
- *       call: torrential's {@code @ModifyReturnValue} on {@code FuelValues.vanillaBurnTimes(Provider, FeatureFlagSet,
- *       int)} captures all three, the stub feeds the first two into a {@code Builder}, and moving it to
- *       {@code (Builder, int)} made MixinExtras reject the handler and the whole required mixin with it. It now
+ *       call: a handler capturing all of a stub's arguments while the stub feeds only the first two into its
+ *       delegate cannot move without MixinExtras rejecting the handler and the whole required mixin with it. It
  *       stays on the stub, where it binds, and is reported SUSPECTED: it then runs only where something calls the
- *       stub. The merged dedicated server builds its fuel without calling it; the kernel's fuel bridge
- *       ({@code KernelFabricFuel.throughVanillaReturnHooks}) now calls it there, so this one runs on both sides unless
- *       {@code -Dneoforbric.fabricFuel.returnHooks=off} ({@code -Dneoforbric.mixinStubRebind.stubFinding=off} drops the
- *       finding); puzzleslib's {@code getDestroySpeed(float, BlockState)} still moves,
- *       because the stub passes its {@code BlockState} straight through as the delegate's first argument. When the
- *       contract's size cannot be told, nothing moves;</li>
+ *       stub ({@code -Dneoforbric.mixinStubRebind.stubFinding=off} drops the finding). A stub that forwards its
+ *       {@code BlockState} argument straight through as the delegate's first argument still lets the handler move,
+ *       because the capture maps one-to-one. When the contract's size cannot be told, nothing moves;</li>
  *   <li>a {@code @ModifyVariable} only by one {@code name} (never {@code ordinal}/{@code index}, which count locals by
  *       type across a body the carrier widened), at {@code LOAD}/{@code STORE} with no slice, when the stub has no
  *       local of that name and the delegate's table has it in one slot of the handler's type, accessed while live more
@@ -616,13 +612,11 @@ public final class MixinStubRebind {
 	 * stub's arguments it captures.
 	 *
 	 * <p>It binds there -- that is why it stays -- but it now runs only where something calls the stub. The game's own
-	 * code can call the body directly, and then the handler silently never runs: torrential's
-	 * {@code FuelValuesMixin} stays on {@code FuelValues.vanillaBurnTimes(Provider, FeatureFlagSet, int)}; the client
-	 * reaches it through {@code ClientPacketListener}, the dedicated server builds its fuel through NeoForge's
-	 * {@code DataMapHooks.populateFuelValues} and never did. That one case is bridged -- the kernel now hands the
-	 * server's table through the stub ({@code KernelFabricFuel.throughVanillaReturnHooks}, off with
-	 * {@code -Dneoforbric.fabricFuel.returnHooks=off}) -- but the finding is about the stub, and says so for every handler
-	 * it keeps. The old outcome was a visible "did not finish loading"; this keeps the quiet one from being silent.
+	 * code can call the body directly, and then the handler silently never runs: a hook that stays on a
+	 * forwarding stub runs on the client, whose packet listener still calls the stub's signature, while a
+	 * dedicated server that reaches the delegate through the carrier's own plumbing never did. The finding is
+	 * about the stub, and says so for every handler it keeps. The old outcome was a visible "did not finish
+	 * loading"; this keeps the quiet one from being silent.
 	 */
 	private static void staysOnStub(ClassNode mixin, MethodNode handler, ClassNode target, MethodNode stub,
 			MethodNode delegate) {
@@ -630,7 +624,7 @@ public final class MixinStubRebind {
 		String config = CONFIGS.get(mixin.name);
 		String dotted = mixin.name.replace('/', '.');
 		String owner = target.name.replace('/', '.');
-		String detail = handler.name + " stays on " + owner + "." + stub.name + stub.desc + ", a stub the merged base "
+		String detail = handler.name + " stays on " + owner + "." + stub.name + stub.desc + ", a stub the carrier "
 				+ "added that only forwards to " + delegate.name + delegate.desc + ": the handler captures stub "
 				+ "arguments the body is not handed, so it cannot move. It runs only where the game calls the stub; "
 				+ "code that calls the body directly skips it (a side that never calls the stub never runs it)";

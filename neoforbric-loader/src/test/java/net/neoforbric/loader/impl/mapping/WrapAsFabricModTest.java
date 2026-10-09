@@ -62,8 +62,8 @@ class WrapAsFabricModTest {
 		assertTrue(json.contains("examplemod.client.mixins.json"), json);
 		assertTrue(json.contains("\"neoforbric:forgeClass\": \"com.example.ModA\""), json);
 		assertTrue(json.contains("com.example.ModB"), json);
-		// Family stamp: legacy overloads default to the traditional-Forge family (wrap7 format).
-		assertTrue(json.contains("\"neoforbric:ecosystem\": \"forge\""), json);
+		// Family stamp: with Forge gone the family id is NeoForge's alone, whatever overload wrapped it.
+		assertTrue(json.contains("\"neoforbric:ecosystem\": \"neoforge\""), json);
 	}
 
 	@Test
@@ -135,7 +135,9 @@ class WrapAsFabricModTest {
 		assertTrue(json.contains("\"jei\": \">=15.0.0\""), json);
 		assertTrue(json.contains("\"recommends\":"), json);
 		assertTrue(json.contains("\"cloth_config\": \">=11.0.0\""), json);
-		assertTrue(!json.contains("neoforge"), "platform dep neoforge must be skipped: " + json);
-		assertTrue(!json.contains("\"minecraft\""), "platform dep minecraft must be skipped: " + json);
+		// The ecosystem stamp also spells "neoforge", so the platform skip is judged on the depends maps alone:
+		// neither platform id may appear as a dependency KEY, and the depends maps must be exactly jei+cloth.
+		assertTrue(!json.contains("\"depends\": { \"neoforge\"") && !json.contains("\"neoforge\": "), "platform dep neoforge must be skipped: " + json);
+		assertTrue(!json.contains("\"depends\": { \"minecraft\"") && !json.contains("\"minecraft\": "), "platform dep minecraft must be skipped: " + json);
 	}
 }

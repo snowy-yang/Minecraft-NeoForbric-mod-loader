@@ -27,7 +27,7 @@ import net.neoforbric.kernel.runtime.transfer.TransferPrecedence.Answer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -36,10 +36,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.BlockCapability;
 import net.neoforged.neoforge.capabilities.ICapabilityInvalidationListener;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
-import net.neoforged.neoforge.transfer.fluid.FluidResource;
-import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.energy.IEnergyStorage;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 /**
  * Fallbacks for loaded server block entities only. Native providers always get the first answer. Face (including
@@ -52,6 +51,9 @@ import net.neoforged.neoforge.transfer.item.ItemResource;
  * recursion guard. The Fabric side of energy is Team Reborn Energy, an ordinary mod that may be absent, so this
  * class never names a Reborn type: RebornEnergyBridge supplies {@link FabricEnergy} when, and only when, the boot
  * seam found Reborn installed.
+ *
+ * <p>1.21.1's NeoForge capabilities are immediate with simulate flags; the adapters this bridge hands out run a
+ * simulation inside the consumer's Fabric transaction and replay the real call when it commits (and only then).
  */
 public final class BlockTransferBridge {
 	private BlockTransferBridge() { }
@@ -72,7 +74,7 @@ public final class BlockTransferBridge {
 		/** Reborn's store for this block: its whole lookup when generic, otherwise only providers for exactly this block. */
 		Object find(Level level, BlockPos pos, BlockState state, BlockEntity entity, Direction face, boolean generic);
 		/** A NeoForge view of whichever store {@code storage} resolves to at each operation. */
-		EnergyHandler view(Supplier<Object> storage, BooleanSupplier valid, LongSupplier generation);
+		IEnergyStorage view(Supplier<Object> storage, BooleanSupplier valid, LongSupplier generation);
 	}
 	private static volatile FabricEnergy fabricEnergy;
 	private static final ThreadLocal<Set<Query>> LOOKUPS = ThreadLocal.withInitial(HashSet::new);
@@ -80,7 +82,6 @@ public final class BlockTransferBridge {
 	/** After the mod registration window; only invoke when the selected Fabric transfer and NeoForge APIs exist. */
 	public static void install() {
 		if ("off".equalsIgnoreCase(System.getProperty("neoforbric.transferBridge", "on"))) return;
-		PairedTransactions.checkHooks();
 		try { BlockCapability.class.getDeclaredMethod("neoforbric$transferFallback"); }
 		catch (NoSuchMethodException drift) { throw new IllegalStateException("NeoForge transfer capability fallback hook is missing", drift); }
 		if (!INSTALLED.compareAndSet(false, true)) return;
@@ -119,47 +120,24 @@ public final class BlockTransferBridge {
 	private static Storage<FluidVariant> fluidsAfterGeneric(Level level, BlockPos pos, BlockState state, BlockEntity entity, Direction face) {
 		return entity != null && !TransferPrecedence.fabricAsksBeforeGeneric(owner(entity)) ? fabricFluids(level, pos, entity, face) : null;
 	}
+	// A Fabric consumer's own ecosystem found nothing, so the only source that can answer is NeoForge's
+	// capability: a Fabric Storage view of the live NeoForge handler. The adapters take the endpoint's
+	// resolution rules directly; no intermediate live wrapper is needed.
 	private static Storage<ItemVariant> fabricItems(Level level, BlockPos pos, BlockEntity entity, Direction face) {
 		Endpoint endpoint = endpoint(level, pos, entity, face, Kind.ITEM);
-		Answer answer = endpoint == null ? null : TransferPrecedence.answer(Ecosystem.FABRIC, endpoint);
-		return answer == null ? null : NativeTransferAdapters.fabric(itemView(endpoint, answer), TransferResources.ITEMS);
+		return endpoint == null || TransferPrecedence.answer(Ecosystem.FABRIC, endpoint) == null ? null
+				: NativeTransferAdapters.fabric(endpoint::neoItems, endpoint::valid, endpoint::generation, TransferResources.ITEMS);
 	}
 	private static Storage<FluidVariant> fabricFluids(Level level, BlockPos pos, BlockEntity entity, Direction face) {
 		Endpoint endpoint = endpoint(level, pos, entity, face, Kind.FLUID);
-		Answer answer = endpoint == null ? null : TransferPrecedence.answer(Ecosystem.FABRIC, endpoint);
-		return answer == null ? null : NativeTransferAdapters.fabric(fluidView(endpoint, answer), TransferResources.FLUIDS);
-	}
-	/** A NeoForge-typed live view of whichever source answered; every operation resolves that source again. */
-	private static ResourceHandler<ItemResource> itemView(Endpoint endpoint, Answer answer) {
-		return switch (answer) {
-			case NEOFORGE -> LiveTransferEndpoints.neo(endpoint::neoItems, endpoint::valid, endpoint::generation, ItemResource.EMPTY);
-			case FABRIC, FABRIC_EXPLICIT -> {
-				boolean generic = answer == Answer.FABRIC;
-				yield NativeTransferAdapters.neo(LiveTransferEndpoints.fabric(() -> endpoint.fabricItems(generic), endpoint::valid, endpoint::generation, ItemVariant.blank()), TransferResources.ITEMS);
-			}
-		};
-	}
-	private static ResourceHandler<FluidResource> fluidView(Endpoint endpoint, Answer answer) {
-		return switch (answer) {
-			case NEOFORGE -> LiveTransferEndpoints.neo(endpoint::neoFluids, endpoint::valid, endpoint::generation, FluidResource.EMPTY);
-			case FABRIC, FABRIC_EXPLICIT -> {
-				boolean generic = answer == Answer.FABRIC;
-				yield NativeTransferAdapters.neo(LiveTransferEndpoints.fabric(() -> endpoint.fabricFluids(generic), endpoint::valid, endpoint::generation, FluidVariant.blank()), TransferResources.FLUIDS);
-			}
-		};
+		return endpoint == null || TransferPrecedence.answer(Ecosystem.FABRIC, endpoint) == null ? null
+				: NativeTransferAdapters.fabricFluids(endpoint::neoFluids, endpoint::valid, endpoint::generation, TransferResources.FLUIDS);
 	}
 
 	/** Energy, the same way: every operation resolves the answering source again. */
-	private static EnergyHandler energyView(Endpoint endpoint, Answer answer) {
-		return switch (answer) {
-			case NEOFORGE -> LiveTransferEndpoints.energy(endpoint::neoEnergy, endpoint::valid, endpoint::generation);
-			case FABRIC, FABRIC_EXPLICIT -> {
-				boolean generic = answer == Answer.FABRIC;
-				FabricEnergy side = fabricEnergy;
-				if (side == null) throw new IllegalStateException("Fabric answered an energy query without Team Reborn Energy");
-				yield side.view(() -> endpoint.fabricEnergy(generic), endpoint::valid, endpoint::generation);
-			}
-		};
+	/** The live NeoForge energy store itself; RebornEnergyBridge adapts it, keeping Reborn types out of this class. */
+	private static IEnergyStorage energyForFabricConsumer(Endpoint endpoint) {
+		return LiveTransferEndpoints.energy(endpoint::neoEnergy, endpoint::valid, endpoint::generation);
 	}
 	/** RebornEnergyBridge installs itself here, after install(); a second call replaces nothing. */
 	static void fabricEnergy(FabricEnergy side) { if (fabricEnergy == null) fabricEnergy = java.util.Objects.requireNonNull(side); }
@@ -167,13 +145,14 @@ public final class BlockTransferBridge {
 	static boolean installed() { return enabled; }
 	/**
 	 * A Fabric (Reborn) consumer's energy query, from RebornEnergyBridge's two fallbacks: before Fabric's own
-	 * fallbacks for a NeoForge owner, after them for everything else, exactly as items and fluids.
+	 * fallbacks for a NeoForge owner, after them for everything else, exactly as items and fluids. A Fabric
+	 * consumer's own ecosystem found nothing, so the answering source is NeoForge's energy capability.
 	 */
-	static EnergyHandler energyForFabric(Level level, BlockPos pos, BlockEntity entity, Direction face, boolean beforeGeneric) {
+	static IEnergyStorage energyForFabric(Level level, BlockPos pos, BlockEntity entity, Direction face, boolean beforeGeneric) {
 		if (entity == null || TransferPrecedence.fabricAsksBeforeGeneric(owner(entity)) != beforeGeneric) return null;
 		Endpoint endpoint = endpoint(level, pos, entity, face, Kind.ENERGY);
-		Answer answer = endpoint == null ? null : TransferPrecedence.answer(Ecosystem.FABRIC, endpoint);
-		return answer == null ? null : energyView(endpoint, answer);
+		return endpoint == null || TransferPrecedence.answer(Ecosystem.FABRIC, endpoint) == null ? null
+				: energyForFabricConsumer(endpoint);
 	}
 
 	/** The single null-result seam in BlockCapability.getCapability, after all native providers declined. */
@@ -181,21 +160,30 @@ public final class BlockTransferBridge {
 		if (!enabled || !(rawLevel instanceof Level level) || !(rawPos instanceof BlockPos pos)
 				|| !(rawEntity instanceof BlockEntity entity) || (context != null && !(context instanceof Direction))) return null;
 		Kind kind;
-		if (capability == Capabilities.Item.BLOCK) kind = Kind.ITEM;
-		else if (capability == Capabilities.Fluid.BLOCK) kind = Kind.FLUID;
-		else if (capability == Capabilities.Energy.BLOCK) kind = Kind.ENERGY;
+		if (capability == Capabilities.ItemHandler.BLOCK) kind = Kind.ITEM;
+		else if (capability == Capabilities.FluidHandler.BLOCK) kind = Kind.FLUID;
+		else if (capability == Capabilities.EnergyStorage.BLOCK) kind = Kind.ENERGY;
 		else return null;
 		Endpoint endpoint = endpoint(level, pos, entity, (Direction) context, kind);
-		// A NeoForge owner: its own capability first, and only Fabric's explicit providers after it. Fabric's generic
-		// Container wrapper would expose every slot on every face as a write bridge whose rollback runs the mod's own
-		// setItem.
+		// A NeoForge consumer's own capability found nothing, so the answering source is Fabric's storage — the
+		// whole lookup when its owner allows the generic fallbacks, otherwise only Fabric's providers for this
+		// block. A NeoForge owner is never answered by Fabric's generic Container wrapper: it would expose every
+		// slot on every face as a write bridge whose rollback runs the mod's own setItem.
 		Answer answer = endpoint == null ? null : TransferPrecedence.answer(Ecosystem.NEOFORGE, endpoint);
 		if (answer == null) return null;
+		boolean generic = answer == Answer.FABRIC;
 		return switch (kind) {
-			case ITEM -> itemView(endpoint, answer);
-			case FLUID -> fluidView(endpoint, answer);
-			case ENERGY -> energyView(endpoint, answer);
+			case ITEM -> NativeTransferAdapters.neo(() -> endpoint.fabricItems(generic), endpoint::valid, endpoint::generation, TransferResources.ITEMS);
+			case FLUID -> NativeTransferAdapters.neoFluids(() -> endpoint.fabricFluids(generic), endpoint::valid, endpoint::generation, TransferResources.FLUIDS);
+			case ENERGY -> energyForNeoConsumer(endpoint, generic);
 		};
+	}
+
+	/** A NeoForge-typed live view of the Reborn store that answered; supplied only when Reborn is installed. */
+	private static IEnergyStorage energyForNeoConsumer(Endpoint endpoint, boolean generic) {
+		FabricEnergy side = fabricEnergy;
+		if (side == null) throw new IllegalStateException("Fabric answered an energy query without Team Reborn Energy");
+		return side.view(() -> endpoint.fabricEnergy(generic), endpoint::valid, endpoint::generation);
 	}
 
 	private static Endpoint endpoint(Level level, BlockPos pos, BlockEntity entity, Direction face, Kind kind) {
@@ -207,7 +195,7 @@ public final class BlockTransferBridge {
 		BlockEntityType<?> type = entity.getType();
 		Optional<Ecosystem> known = OWNERS.get(type);
 		if (known == null) {
-			Identifier key = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type);
+			ResourceLocation key = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type);
 			if (key == null) return null; // not registered (yet): decide again next time rather than caching a guess
 			known = Optional.ofNullable(TransferPrecedence.ownerOf(key.getNamespace(), ModCatalog.everything()));
 			OWNERS.put(type, known);
@@ -256,14 +244,15 @@ public final class BlockTransferBridge {
 				case ENERGY -> fabricEnergy(generic) != null;
 			};
 		}
-		ResourceHandler<ItemResource> neoItems() {
-			return lookup(() -> level.get().getCapability(Capabilities.Item.BLOCK, pos, entity.get().getBlockState(), entity.get(), face));
+		IItemHandler neoItems() {
+			// 1.21.1 queries the token, not the level: BlockCapability.getCapability(level, pos, state, entity, context).
+			return lookup(() -> Capabilities.ItemHandler.BLOCK.getCapability(level.get(), pos, entity.get().getBlockState(), entity.get(), face));
 		}
-		ResourceHandler<FluidResource> neoFluids() {
-			return lookup(() -> level.get().getCapability(Capabilities.Fluid.BLOCK, pos, entity.get().getBlockState(), entity.get(), face));
+		IFluidHandler neoFluids() {
+			return lookup(() -> Capabilities.FluidHandler.BLOCK.getCapability(level.get(), pos, entity.get().getBlockState(), entity.get(), face));
 		}
-		EnergyHandler neoEnergy() {
-			return lookup(() -> level.get().getCapability(Capabilities.Energy.BLOCK, pos, entity.get().getBlockState(), entity.get(), face));
+		IEnergyStorage neoEnergy() {
+			return lookup(() -> Capabilities.EnergyStorage.BLOCK.getCapability(level.get(), pos, entity.get().getBlockState(), entity.get(), face));
 		}
 		/** Reborn's store on this face, as an opaque object; null without Team Reborn Energy. */
 		Object fabricEnergy(boolean generic) {

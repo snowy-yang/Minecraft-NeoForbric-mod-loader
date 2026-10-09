@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import net.neoforbric.kernel.util.NeoForbricLog;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.material.Fluid;
@@ -90,7 +90,7 @@ public final class KernelFluidTypes {
 
 	/** Whether NeoForge's getVanillaFluidType knows this fluid: vanilla's own, and NeoForge's milk. */
 	static boolean isNative(Fluid fluid) {
-		Identifier id = BuiltInRegistries.FLUID.getKey(fluid);
+		ResourceLocation id = BuiltInRegistries.FLUID.getKey(fluid);
 		if (id != null && "minecraft".equals(id.getNamespace())) return true;
 		return NeoForgeMod.MILK.asOptional().filter(milk -> milk == fluid).isPresent()
 				|| NeoForgeMod.FLOWING_MILK.asOptional().filter(milk -> milk == fluid).isPresent();

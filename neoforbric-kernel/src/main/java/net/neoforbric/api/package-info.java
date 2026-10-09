@@ -15,7 +15,7 @@
  */
 
 /**
- * The unified NeoForbric API: the vocabulary and services the kernel and all three compatibility layers align to,
+ * The unified NeoForbric API: the vocabulary and services the kernel and both compatibility layers align to,
  * instead of accommodating each other pairwise.
  *
  * <p>It is an INTERNAL spine today — nothing is published and no stability is promised — but it is written to the

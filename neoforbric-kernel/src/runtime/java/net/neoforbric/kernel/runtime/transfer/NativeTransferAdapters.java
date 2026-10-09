@@ -3,93 +3,281 @@ package net.neoforbric.kernel.runtime.transfer;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
+import net.fabricmc.fabric.api.transfer.v1.fluid.FluidVariant;
+import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.storage.SlottedStorage;
 import net.fabricmc.fabric.api.transfer.v1.storage.StorageView;
 import net.fabricmc.fabric.api.transfer.v1.storage.base.SingleSlotStorage;
 import net.fabricmc.fabric.api.transfer.v1.transaction.Transaction;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
-import net.neoforged.neoforge.transfer.ResourceHandler;
-import net.neoforged.neoforge.transfer.resource.Resource;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
+import net.neoforged.neoforge.items.IItemHandler;
 
 /**
- * Slot-preserving item/fluid adapters. Amounts are never rounded after mutation: a sub-quantum Fabric result is
- * rolled back, then retried once with an exactly representable maximum. Native providers keep their validation,
- * limits and transaction journals. An arbitrary unslotted Fabric Storage cannot implement indexed insertion and
- * is intentionally not accepted. Introspection is conservative: Fabric has no per-resource isValid method.
+ * Slot-preserving item/fluid adapters between Fabric's transactional Storage and 1.21.1's immediate
+ * NeoForge capabilities.
+ *
+ * <p>26.x paired live transaction objects across the two engines through a NeoForge transaction framework;
+ * 1.21.1 has none, and its capabilities are immediate with {@code simulate}/{@code execute} flags instead.
+ * The pairing is replaced by two half-bridges, each honestly weaker than a real transaction, in the same
+ * direction as the vanilla hopper that simulates a move before performing it:
+ * <ul>
+ * <li><b>Fabric consumer, NeoForge store</b> ({@link #fabric}): inside an open Fabric transaction every
+ * operation runs the NeoForge call with {@code simulate=true} and answers with what the simulation returned;
+ * a close callback replays the same call with {@code simulate=false} when the Fabric transaction commits, and
+ * does nothing when it aborts. Between simulation and replay another actor may change the store, so the
+ * replay may move less than the simulation said — the price of bridging an immediate API into a
+ * transactional one. The amount reported to the Fabric caller describes the simulated outcome.</li>
+ * <li><b>NeoForge consumer, Fabric store</b> ({@link #neo}): each operation joins the Fabric transaction
+ * already open on the thread, or opens a root of its own; {@code simulate=true} performs in a nested scope
+ * and aborts it, {@code execute} commits. A Fabric store therefore keeps its own rollback, and a simulation
+ * leaves it exactly as it found it.</li>
+ * </ul>
+ *
+ * <p>Amounts are never rounded after a mutation: a sub-quantum Fabric result is rolled back, then retried
+ * once with an exactly representable maximum. An arbitrary unslotted Fabric Storage cannot implement indexed
+ * insertion and is intentionally not accepted. Introspection is conservative: Fabric has no per-resource
+ * validity query. Fluids: {@code fill}/{@code drain} choose their own tank, so a slot-indexed Fabric view of
+ * a fluid handler is read-accurate while its mutations land wherever the handler puts them — the same answer
+ * the whole-storage operation would have given.
  */
 public final class NativeTransferAdapters {
 	private NativeTransferAdapters() { }
 
-	@SuppressWarnings("unchecked")
-	public static <F, N extends Resource> SlottedStorage<F> fabric(ResourceHandler<N> nativeHandler, TransferCodec<F, N> codec) {
-		Objects.requireNonNull(nativeHandler); check(codec);
-		if (nativeHandler instanceof FromFabric<?, ?> own && own.codec == codec) return (SlottedStorage<F>) own.storage;
-		return new FromNeo<>(nativeHandler, codec);
+	// ---- Public per-kind entries: NeoForge handler -> Fabric SlottedStorage ----
+
+	/** A fixed NeoForge item handler as Fabric sees it; our own view of a Fabric storage unwraps to it. */
+	public static SlottedStorage<ItemVariant> fabric(IItemHandler handler, TransferCodec<ItemVariant, ItemStack> codec) {
+		Objects.requireNonNull(handler);
+		check(codec);
+		if (handler instanceof ItemNeoView own && own.codec == codec) return own.storage();
+		return fabricCore(ItemOps.INSTANCE, () -> handler, null, null, codec);
 	}
-	@SuppressWarnings("unchecked")
-	public static <F, N extends Resource> ResourceHandler<N> neo(SlottedStorage<F> nativeStorage, TransferCodec<F, N> codec) {
-		Objects.requireNonNull(nativeStorage); check(codec);
-		if (nativeStorage instanceof FromNeo<?, ?> own && own.codec == codec) return (ResourceHandler<N>) own.handler;
-		return new FromFabric<>(nativeStorage, codec);
+
+	/** A fixed NeoForge fluid handler as Fabric sees it; our own view of a Fabric storage unwraps to it. */
+	public static SlottedStorage<FluidVariant> fabricFluids(IFluidHandler handler, TransferCodec<FluidVariant, FluidStack> codec) {
+		Objects.requireNonNull(handler);
+		check(codec);
+		if (handler instanceof FluidNeoView own && own.codec == codec) return own.storage();
+		return fabricCore(FluidOps.INSTANCE, () -> handler, null, null, codec);
 	}
+
+	/** A live-resolved NeoForge item handler as Fabric sees it: every operation asks the endpoint again. */
+	public static SlottedStorage<ItemVariant> fabric(Supplier<IItemHandler> lookup, BooleanSupplier valid, LongSupplier generation,
+			TransferCodec<ItemVariant, ItemStack> codec) {
+		Objects.requireNonNull(lookup);
+		check(codec);
+		return fabricCore(ItemOps.INSTANCE, lookup, valid, generation, codec);
+	}
+
+	/** A live-resolved NeoForge fluid handler as Fabric sees it: every operation asks the endpoint again. */
+	public static SlottedStorage<FluidVariant> fabricFluids(Supplier<IFluidHandler> lookup, BooleanSupplier valid, LongSupplier generation,
+			TransferCodec<FluidVariant, FluidStack> codec) {
+		Objects.requireNonNull(lookup);
+		check(codec);
+		return fabricCore(FluidOps.INSTANCE, lookup, valid, generation, codec);
+	}
+
+	// ---- Public per-kind entries: Fabric SlottedStorage -> NeoForge handler ----
+
+	/** A fixed Fabric slotted item storage as NeoForge sees it; our own view of a NeoForge handler unwraps to it. */
+	public static IItemHandler neo(SlottedStorage<ItemVariant> storage, TransferCodec<ItemVariant, ItemStack> codec) {
+		Objects.requireNonNull(storage);
+		check(codec);
+		if (storage instanceof FabricEngine<?, ?> engine && engine.codec == codec && engine.ops == ItemOps.INSTANCE)
+			return ((FabricEngine<ItemVariant, IItemHandler>) engine).original();
+		return new ItemNeoView(new NeoEngine<>(storage, codec), codec);
+	}
+
+	/** A fixed Fabric slotted fluid storage as NeoForge sees it; our own view of a NeoForge handler unwraps to it. */
+	public static IFluidHandler neoFluids(SlottedStorage<FluidVariant> storage, TransferCodec<FluidVariant, FluidStack> codec) {
+		Objects.requireNonNull(storage);
+		check(codec);
+		if (storage instanceof FabricEngine<?, ?> engine && engine.codec == codec && engine.ops == FluidOps.INSTANCE)
+			return ((FabricEngine<FluidVariant, IFluidHandler>) engine).original();
+		return new FluidNeoView(new NeoEngine<>(storage, codec), codec);
+	}
+
+	/** A live-resolved Fabric item storage as NeoForge sees it: every operation asks the endpoint again. */
+	public static IItemHandler neo(Supplier<SlottedStorage<ItemVariant>> lookup, BooleanSupplier valid, LongSupplier generation,
+			TransferCodec<ItemVariant, ItemStack> codec) {
+		Objects.requireNonNull(lookup);
+		check(codec);
+		return new ItemNeoView(new NeoEngine<>(LiveTransferEndpoints.fabric(lookup, valid, generation, ItemVariant.blank()), codec), codec);
+	}
+
+	/** A live-resolved Fabric fluid storage as NeoForge sees it: every operation asks the endpoint again. */
+	public static IFluidHandler neoFluids(Supplier<SlottedStorage<FluidVariant>> lookup, BooleanSupplier valid, LongSupplier generation,
+			TransferCodec<FluidVariant, FluidStack> codec) {
+		Objects.requireNonNull(lookup);
+		check(codec);
+		return new FluidNeoView(new NeoEngine<>(LiveTransferEndpoints.fabric(lookup, valid, generation, FluidVariant.blank()), codec), codec);
+	}
+
+	// ---- Package-private engine entries (the transfer scenario suite drives these directly) ----
+
+	/**
+	 * How to drive one kind of NeoForge handler: read its slots, and move with a {@code simulate} flag —
+	 * the whole of 1.21.1's transaction surface. {@code slot < 0} means "the handler's choice", which for
+	 * items iterates and for fluids is what {@code fill}/{@code drain} already do.
+	 */
+	interface NativeOps<F, H> {
+		int slotCount(H handler);
+		/** The identity at {@code slot}, in Fabric terms; null when the slot has none this codec converts. */
+		F resource(H handler, int slot);
+		/** The amount at {@code slot}, in native units. */
+		long amount(H handler, int slot);
+		/** The capacity at {@code slot}, in native units, regardless of resource. */
+		long capacity(H handler, int slot);
+		/** Whether the slot can ever accept; NeoForge has no per-resource validity query on this path. */
+		boolean acceptable(H handler, int slot);
+		/** How many native units moved; never mutates when {@code simulate}. */
+		long insert(H handler, int slot, F resource, long maximum, boolean simulate);
+		/** How many native units of {@code resource} moved; never mutates when {@code simulate}. */
+		long extract(H handler, int slot, F resource, long maximum, boolean simulate);
+	}
+
+	/** The Fabric view of a NeoForge handler, fixed or live-resolved; the scenario suite drives this directly. */
+	static <F, H> SlottedStorage<F> fabricCore(NativeOps<F, H> ops, Supplier<H> lookup, BooleanSupplier valid, LongSupplier generation,
+			TransferCodec<F, ?> codec) {
+		Objects.requireNonNull(ops);
+		Objects.requireNonNull(lookup);
+		check(codec);
+		return new FabricEngine<>(ops, lookup, valid, generation, codec);
+	}
+
+	/** The mutation surface the NeoForge facades (and the scenario suite) drive on a Fabric storage. */
+	interface NeoMoves<F> {
+		/**
+		 * Moves {@code nativeAmount} native units of {@code resource}, at {@code slot} when {@code slot >= 0},
+		 * through the Fabric transaction already open (or a root of our own). A simulation aborts its scope; an
+		 * execute commits it. Returns the native units moved.
+		 */
+		long move(int slot, F resource, long nativeAmount, boolean execute);
+	}
+
+	/** The NeoForge-side semantics core, parameterized for the tests; production reaches it through the facades. */
+	static <F> NeoMoves<F> neoCore(SlottedStorage<F> storage, TransferCodec<F, ?> codec) {
+		Objects.requireNonNull(storage);
+		check(codec);
+		return new NeoEngine<>(storage, codec);
+	}
+
+	// ---- Shared helpers ----
+
 	private static void check(TransferCodec<?, ?> codec) {
 		Objects.requireNonNull(codec);
 		if (codec.fabricUnits() <= 0) throw new IllegalArgumentException("A transfer unit must be positive");
 	}
+
 	private static void amount(long amount) {
 		if (amount < 0) throw new IllegalArgumentException("Negative transfer amount");
 	}
+
 	private static long validResult(long moved, long maximum) {
 		if (moved < 0 || moved > maximum) throw new IllegalStateException("Provider returned an invalid transfer amount: " + moved + "/" + maximum);
 		return moved;
 	}
-	static void requireSuccessfulRollback(LiveTransferEndpoints.Unavailable failure, Object provider) {
-		// try-with-resources suppresses a close/rollback failure onto the original invalidation exception.
-		// Returning zero in that case would assert a rollback the native participant failed to perform.
-		if (failure.getSuppressed().length != 0) {
-			TransferIssues.report("ROLLBACK_FAILED", provider, "Endpoint invalidated and its native rollback failed; resource state is unknown");
-			throw new IllegalStateException("Cross-API rollback failed; resource state is unknown", failure);
-		}
-	}
+
 	private static long multiply(long nativeAmount, long units) {
-		// Saturating the read-only advertised capacity is safe; a transfer itself is bounded to an int request.
 		if (nativeAmount < 0) throw new IllegalStateException("Provider returned a negative amount/capacity");
 		return nativeAmount > Long.MAX_VALUE / units ? Long.MAX_VALUE : nativeAmount * units;
 	}
 
-	private static final class FromNeo<F, N extends Resource> implements SlottedStorage<F> {
-		final ResourceHandler<N> handler;
-		final TransferCodec<F, N> codec;
-		FromNeo(ResourceHandler<N> handler, TransferCodec<F, N> codec) { this.handler = handler; this.codec = codec; }
-		public int getSlotCount() { return handler.size(); }
+	static void requireSuccessfulRollback(LiveTransferEndpoints.Unavailable failure, Object provider) {
+		// An abort whose close failed leaves the Fabric participant in an unknown state; reporting zero in
+		// that case would assert a rollback the participant itself failed to perform.
+		if (failure.getSuppressed().length != 0) {
+			TransferIssues.report("ROLLBACK_FAILED", provider, "Endpoint invalidated and the Fabric rollback failed; resource state is unknown");
+			throw new IllegalStateException("Cross-API rollback failed; resource state is unknown", failure);
+		}
+	}
+
+	// ---- Fabric -> NeoForge: a SlottedStorage view of an immediate handler ----
+
+	/**
+	 * Every operation simulates on the NeoForge side and registers the real call as a Fabric close callback.
+	 * The simulation promises what the replay will attempt, not what it will achieve: another actor may change
+	 * the store between the two, and the replay runs with the simulated amount as its cap. A replay that
+	 * cannot run (endpoint gone) or fails is reported and re-thrown, aborting the Fabric transaction — the
+	 * same all-or-nothing the 26.x pairing gave, at the cost of never committing a promise we could not keep.
+	 */
+	private static final class FabricEngine<F, H> implements SlottedStorage<F> {
+		private final NativeOps<F, H> ops;
+		private final Supplier<H> lookup;
+		private final BooleanSupplier valid;
+		private final LongSupplier generation;
+		private final TransferCodec<F, ?> codec;
+
+		FabricEngine(NativeOps<F, H> ops, Supplier<H> lookup, BooleanSupplier valid, LongSupplier generation, TransferCodec<F, ?> codec) {
+			this.ops = ops;
+			this.lookup = lookup;
+			this.valid = valid;
+			this.generation = generation;
+			this.codec = codec;
+		}
+
+		/** The handler this view was built over, for the {@code neo()} unwrap. */
+		H original() { return lookup.get(); }
+
+		private H current() {
+			if (valid != null && !valid.getAsBoolean()) return null;
+			return lookup.get();
+		}
+
+		public int getSlotCount() {
+			H handler = current();
+			return handler == null ? 0 : ops.slotCount(handler);
+		}
+
 		public SingleSlotStorage<F> getSlot(int slot) {
 			Objects.checkIndex(slot, getSlotCount());
 			return new Slot(slot);
 		}
+
 		public long insert(F resource, long maximum, TransactionContext transaction) { return move(-1, resource, maximum, transaction, true); }
 		public long extract(F resource, long maximum, TransactionContext transaction) { return move(-1, resource, maximum, transaction, false); }
+
 		long move(int slot, F resource, long maximum, TransactionContext context, boolean insert) {
 			amount(maximum);
 			if (maximum == 0 || codec.isFabricBlank(resource)) return 0;
-			N nativeResource = codec.toNeo(resource);
-			if (nativeResource == null) return 0;
-			int request = (int) Math.min(Integer.MAX_VALUE, maximum / codec.fabricUnits());
+			H handler = current();
+			if (handler == null) return 0;
+			long before = generation == null ? 0 : generation.getAsLong();
+			long request = Math.min(maximum / codec.fabricUnits(), Integer.MAX_VALUE);
 			if (request == 0) return 0;
-			var parent = PairedTransactions.neo(context);
-			try (var transaction = net.neoforged.neoforge.transfer.transaction.Transaction.open(parent)) {
-				int moved;
-				if (slot < 0) moved = insert ? handler.insert(nativeResource, request, transaction) : handler.extract(nativeResource, request, transaction);
-				else moved = insert ? handler.insert(slot, nativeResource, request, transaction) : handler.extract(slot, nativeResource, request, transaction);
-				validResult(moved, request);
-				transaction.commit();
-				return moved * codec.fabricUnits();
+			long simulated;
+			try {
+				simulated = validResult(insert ? ops.insert(handler, slot, resource, request, true) : ops.extract(handler, slot, resource, request, true), request);
+				LiveTransferEndpoints.stillValid(valid);
+				LiveTransferEndpoints.unchanged(before, generation);
 			} catch (LiveTransferEndpoints.Unavailable invalidated) {
 				requireSuccessfulRollback(invalidated, handler);
-				TransferIssues.report("ENDPOINT_INVALIDATED", handler, invalidated.getMessage() + "; the nested operation was rolled back");
+				TransferIssues.report("ENDPOINT_INVALIDATED", handler, invalidated.getMessage() + "; nothing moved and no replay was promised");
 				return 0;
 			}
+			if (simulated == 0) return 0;
+			// The replay re-resolves and re-checks: the endpoint may die between the simulation and the commit.
+			context.addCloseCallback((closed, result) -> {
+				H live = current();
+				if (live == null) {
+					TransferIssues.report("ENDPOINT_INVALIDATED", lookup, "the endpoint died before the simulated move could be performed");
+					throw new LiveTransferEndpoints.Unavailable("Transfer endpoint invalidated before the simulated move replayed");
+				}
+				long moved = insert ? ops.insert(live, slot, resource, simulated, false) : ops.extract(live, slot, resource, simulated, false);
+				if (moved != simulated) TransferIssues.report("REPLAY_MISMATCH", live,
+						"the real move transferred " + moved + " of the promised " + simulated + "; another actor changed the store between simulate and commit");
+			});
+			return simulated * codec.fabricUnits();
 		}
+
 		public Iterator<StorageView<F>> iterator() {
 			return new Iterator<>() {
 				int next;
@@ -97,51 +285,48 @@ public final class NativeTransferAdapters {
 				public StorageView<F> next() { if (!hasNext()) throw new NoSuchElementException(); return getSlot(next++); }
 			};
 		}
+
 		private final class Slot implements SingleSlotStorage<F> {
 			final int index;
 			Slot(int index) { this.index = index; }
-			public boolean isResourceBlank() { return codec.isFabricBlank(getResource()); }
-			public F getResource() { return codec.toFabric(handler.getResource(index)); }
-			public long getAmount() { return multiply(handler.getAmountAsLong(index), codec.fabricUnits()); }
-			public long getCapacity() { return multiply(handler.getCapacityAsLong(index, handler.getResource(index)), codec.fabricUnits()); }
+			public boolean isResourceBlank() { H h = current(); return h == null || ops.resource(h, index) == null || codec.isFabricBlank(ops.resource(h, index)); }
+			public F getResource() { H h = current(); return h == null ? null : ops.resource(h, index); }
+			public long getAmount() { H h = current(); return h == null ? 0 : multiply(ops.amount(h, index), codec.fabricUnits()); }
+			public long getCapacity() { H h = current(); return h == null ? 0 : multiply(ops.capacity(h, index), codec.fabricUnits()); }
+			public boolean supportsInsertion() { H h = current(); return h != null && ops.acceptable(h, index); }
+			public boolean supportsExtraction() { H h = current(); return h != null; }
 			public long insert(F resource, long maximum, TransactionContext context) { return move(index, resource, maximum, context, true); }
 			public long extract(F resource, long maximum, TransactionContext context) { return move(index, resource, maximum, context, false); }
 		}
 	}
 
-	private static final class FromFabric<F, N extends Resource> implements ResourceHandler<N> {
-		final SlottedStorage<F> storage;
-		final TransferCodec<F, N> codec;
-		FromFabric(SlottedStorage<F> storage, TransferCodec<F, N> codec) { this.storage = storage; this.codec = codec; }
-		public int size() { return storage.getSlotCount(); }
-		public N getResource(int index) { return codec.toNeo(storage.getSlot(index).getResource()); }
-		public long getAmountAsLong(int index) { return storage.getSlot(index).getAmount() / codec.fabricUnits(); }
-		public long getCapacityAsLong(int index, N resource) { return storage.getSlot(index).getCapacity() / codec.fabricUnits(); }
-		// Fabric cannot answer resource-specific validity without attempting a transaction. Avoid a false negative
-		// when the storage is merely full; insert still delegates to its real filter and may return zero.
-		public boolean isValid(int index, N resource) { return codec.toFabric(resource) != null && storage.getSlot(index).supportsInsertion(); }
-		public int insert(int index, N resource, int maximum, net.neoforged.neoforge.transfer.transaction.TransactionContext context) {
-			return move(index, resource, maximum, context, true);
-		}
-		public int extract(int index, N resource, int maximum, net.neoforged.neoforge.transfer.transaction.TransactionContext context) {
-			return move(index, resource, maximum, context, false);
-		}
-		int move(int index, N resource, int maximum, net.neoforged.neoforge.transfer.transaction.TransactionContext context, boolean insert) {
-			amount(maximum);
-			if (maximum == 0) return 0;
-			F converted = codec.toFabric(resource);
-			if (converted == null || codec.isFabricBlank(converted)) return 0;
-			SingleSlotStorage<F> slot = storage.getSlot(index);
-			long request = Math.multiplyExact((long) maximum, codec.fabricUnits());
-			TransactionContext parent = PairedTransactions.fabric(context);
-			// A provider may accept less than requested, including a fraction of one mB. Every unsuccessful trial
-			// is aborted in its OWN nested scope; no rounded amount is ever returned for an unrounded mutation.
+	// ---- NeoForge -> Fabric: an immediate handler view of a transactional storage ----
+
+	/**
+	 * NeoForge's callers arrive without a Fabric transaction, so every operation opens one: joined to the
+	 * thread's open transaction when there is one (a mod may call us from inside a Fabric callback), else a
+	 * root that closes before the answer returns. A simulation always aborts its own scope, so it leaves the
+	 * Fabric store exactly as it found it — the one direction that still has a real rollback on this line.
+	 */
+	private record NeoEngine<F>(SlottedStorage<F> storage, TransferCodec<F, ?> codec) implements NeoMoves<F> {
+		public long move(int slot, F resource, long nativeAmount, boolean execute) {
+			amount(nativeAmount);
+			if (nativeAmount == 0 || resource == null || codec.isFabricBlank(resource)) return 0;
+			// A provider may accept less than requested, including a fraction of one mB. Every unsuccessful
+			// trial is aborted in its OWN nested scope; no rounded amount is ever returned for an unrounded
+			// mutation. The first trial offers everything; the second offers only what the first proved
+			// representable.
+			long request = Math.multiplyExact(nativeAmount, codec.fabricUnits());
 			for (int attempt = 0; attempt < 2 && request > 0; attempt++) {
-				try (Transaction transaction = parent.openNested()) {
-					long moved = validResult(insert ? slot.insert(converted, request, transaction) : slot.extract(converted, request, transaction), request);
+				// Join the thread's open transaction when a Fabric callback called us; else open a root.
+				TransactionContext joined = Transaction.getCurrentUnsafe();
+				try (Transaction nested = Transaction.openNested(joined)) {
+					long moved = validResult(slot < 0
+							? (execute ? storage.insert(resource, request, nested) : storage.extract(resource, request, nested))
+							: slotOperation(slot, resource, request, nested, execute), request);
 					if (moved % codec.fabricUnits() == 0) {
-						transaction.commit();
-						return Math.toIntExact(moved / codec.fabricUnits());
+						if (execute) nested.commit();
+						return moved / codec.fabricUnits();
 					}
 					request = moved / codec.fabricUnits() * codec.fabricUnits();
 				} catch (LiveTransferEndpoints.Unavailable invalidated) {
@@ -151,6 +336,140 @@ public final class NativeTransferAdapters {
 				}
 			}
 			return 0;
+		}
+
+		private long slotOperation(int slot, F resource, long request, Transaction nested, boolean execute) {
+			SingleSlotStorage<F> at = storage.getSlot(slot);
+			return execute ? at.insert(resource, request, nested) : at.extract(resource, request, nested);
+		}
+	}
+
+	// ---- The NeoForge facades ----
+
+	/** An {@link IItemHandler} over a Fabric slotted storage. Unwraps to the storage it came from. */
+	private record ItemNeoView(NeoEngine<ItemVariant> engine, TransferCodec<ItemVariant, ItemStack> codec) implements IItemHandler {
+		SlottedStorage<ItemVariant> storage() { return engine.storage(); }
+		public int getSlots() { return engine.storage().getSlotCount(); }
+		public ItemStack getStackInSlot(int slot) {
+			SingleSlotStorage<ItemVariant> at = engine.storage().getSlot(slot);
+			return codec.toNeo(at.getResource(), at.getAmount());
+		}
+		public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
+			amount(stack.getCount());
+			if (stack.isEmpty()) return stack;
+			ItemVariant variant = codec.toFabric(stack);
+			long moved = engine.move(slot, variant, stack.getCount(), !simulate);
+			return moved == 0 ? stack : moved >= stack.getCount() ? ItemStack.EMPTY : stack.copyWithCount((int) (stack.getCount() - moved));
+		}
+		public ItemStack extractItem(int slot, int amount, boolean simulate) {
+			amount(amount);
+			if (amount == 0) return ItemStack.EMPTY;
+			SingleSlotStorage<ItemVariant> at = engine.storage().getSlot(slot);
+			ItemVariant there = at.getResource();
+			if (there == null || codec.isFabricBlank(there)) return ItemStack.EMPTY;
+			long moved = engine.move(slot, there, amount, !simulate);
+			return moved == 0 ? ItemStack.EMPTY : codec.toNeo(there, moved);
+		}
+		public int getSlotLimit(int slot) { return (int) Math.min(engine.storage().getSlot(slot).getCapacity(), Integer.MAX_VALUE); }
+		// Fabric cannot answer resource-specific validity without attempting a transaction. Avoid a false
+		// negative when the storage is merely full; insert still delegates to its real filter.
+		public boolean isItemValid(int slot, ItemStack stack) { return !stack.isEmpty() && engine.storage().getSlot(slot).supportsInsertion(); }
+	}
+
+	/** An {@link IFluidHandler} over a Fabric slotted storage. Unwraps to the storage it came from. */
+	private record FluidNeoView(NeoEngine<FluidVariant> engine, TransferCodec<FluidVariant, FluidStack> codec) implements IFluidHandler {
+		SlottedStorage<FluidVariant> storage() { return engine.storage(); }
+		public int getTanks() { return engine.storage().getSlotCount(); }
+		public FluidStack getFluidInTank(int tank) {
+			SingleSlotStorage<FluidVariant> at = engine.storage().getSlot(tank);
+			return codec.toNeo(at.getResource(), at.getAmount() / codec.fabricUnits());
+		}
+		public int getTankCapacity(int tank) { return (int) Math.min(engine.storage().getSlot(tank).getCapacity() / codec.fabricUnits(), Integer.MAX_VALUE); }
+		public boolean isFluidValid(int tank, FluidStack stack) { return !stack.isEmpty() && engine.storage().getSlot(tank).supportsInsertion(); }
+		public int fill(FluidStack resource, FluidAction action) {
+			amount(resource.getAmount());
+			if (resource.isEmpty()) return 0;
+			return (int) engine.move(-1, codec.toFabric(resource), resource.getAmount(), action.execute());
+		}
+		public FluidStack drain(FluidStack resource, FluidAction action) {
+			amount(resource.getAmount());
+			if (resource.isEmpty()) return FluidStack.EMPTY;
+			long moved = engine.move(-1, codec.toFabric(resource), resource.getAmount(), action.execute());
+			return moved == 0 ? FluidStack.EMPTY : codec.toNeo(codec.toFabric(resource), moved);
+		}
+		public FluidStack drain(int maxAmount, FluidAction action) {
+			amount(maxAmount);
+			if (maxAmount == 0) return FluidStack.EMPTY;
+			for (StorageView<FluidVariant> view : engine.storage()) {
+				FluidVariant there = view.getResource();
+				if (there == null || codec.isFabricBlank(there)) continue;
+				long moved = engine.move(-1, there, maxAmount, action.execute());
+				return moved == 0 ? FluidStack.EMPTY : codec.toNeo(there, moved);
+			}
+			return FluidStack.EMPTY;
+		}
+	}
+
+	// ---- The per-kind native strategies ----
+
+	/** 1.21.1 item handlers: slot-indexed {@code insertItem}/{@code extractItem} with a simulate flag. */
+	private enum ItemOps implements NativeOps<ItemVariant, IItemHandler> {
+		INSTANCE;
+		private final TransferCodec<ItemVariant, ItemStack> codec = TransferResources.ITEMS;
+		public int slotCount(IItemHandler handler) { return handler.getSlots(); }
+		public ItemVariant resource(IItemHandler handler, int slot) { return codec.toFabric(handler.getStackInSlot(slot)); }
+		public long amount(IItemHandler handler, int slot) { return codec.neoAmount(handler.getStackInSlot(slot)); }
+		public long capacity(IItemHandler handler, int slot) { return handler.getSlotLimit(slot); }
+		public boolean acceptable(IItemHandler handler, int slot) { return true; }
+		public long insert(IItemHandler handler, int slot, ItemVariant resource, long maximum, boolean simulate) {
+			ItemStack offered = codec.toNeo(resource, maximum);
+			if (offered.isEmpty()) return 0;
+			// slot < 0: the handler's own choice, exactly as a vanilla hopper's loop.
+			if (slot < 0) {
+				long moved = 0;
+				for (int i = 0; i < handler.getSlots() && moved < maximum; i++) {
+					ItemStack remainder = handler.insertItem(i, offered.copyWithCount((int) (maximum - moved)), simulate);
+					long took = (maximum - moved) - remainder.getCount();
+					if (took > 0) { moved += took; offered = codec.toNeo(resource, maximum - moved); }
+					if (offered.isEmpty()) break;
+				}
+				return moved;
+			}
+			ItemStack remainder = handler.insertItem(slot, offered, simulate);
+			return maximum - remainder.getCount();
+		}
+		public long extract(IItemHandler handler, int slot, ItemVariant resource, long maximum, boolean simulate) {
+			if (slot < 0) {
+				long moved = 0;
+				for (int i = 0; i < handler.getSlots() && moved < maximum; i++) {
+					ItemStack there = handler.getStackInSlot(i);
+					if (there.isEmpty() || !resource.matches(there)) continue;
+					ItemStack took = handler.extractItem(i, (int) Math.min(maximum - moved, there.getCount()), simulate);
+					moved += took.getCount();
+				}
+				return moved;
+			}
+			ItemStack there = handler.getStackInSlot(slot);
+			if (there.isEmpty() || !resource.matches(there)) return 0;
+			return handler.extractItem(slot, (int) Math.min(maximum, there.getCount()), simulate).getCount();
+		}
+	}
+
+	/** 1.21.1 fluid handlers: whole-tank {@code fill}/{@code drain} with a FluidAction, which is the simulate flag. */
+	private enum FluidOps implements NativeOps<FluidVariant, IFluidHandler> {
+		INSTANCE;
+		private final TransferCodec<FluidVariant, FluidStack> codec = TransferResources.FLUIDS;
+		public int slotCount(IFluidHandler handler) { return handler.getTanks(); }
+		public FluidVariant resource(IFluidHandler handler, int tank) { return codec.toFabric(handler.getFluidInTank(tank)); }
+		public long amount(IFluidHandler handler, int tank) { return codec.neoAmount(handler.getFluidInTank(tank)); }
+		public long capacity(IFluidHandler handler, int tank) { return handler.getTankCapacity(tank); }
+		public boolean acceptable(IFluidHandler handler, int tank) { return true; }
+		public long insert(IFluidHandler handler, int tank, FluidVariant resource, long maximum, boolean simulate) {
+			// fill chooses its tank; the slot index is advisory, as documented on the class.
+			return handler.fill(codec.toNeo(resource, maximum), simulate ? FluidAction.SIMULATE : FluidAction.EXECUTE);
+		}
+		public long extract(IFluidHandler handler, int tank, FluidVariant resource, long maximum, boolean simulate) {
+			return handler.drain(codec.toNeo(resource, maximum), simulate ? FluidAction.SIMULATE : FluidAction.EXECUTE).getAmount();
 		}
 	}
 }

@@ -2,7 +2,7 @@
 package net.neoforbric.kernel.runtime;
 
 import net.minecraft.world.DifficultyInstance;
-import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.SpawnGroupData;
 import net.minecraft.world.level.ServerLevelAccessor;
@@ -20,13 +20,13 @@ public final class KernelFinalizeSpawn {
 
 	/** The redirect target of every {@code Mob.finalizeSpawn} call in NeoForge's listed classes. */
 	public static SpawnGroupData finalizeMobSpawn(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
-			EntitySpawnReason reason, SpawnGroupData data) {
+			MobSpawnType reason, SpawnGroupData data) {
 		return EventHooks.finalizeMobSpawn(mob, level, difficulty, reason, data);
 	}
 
 	/** TrialSpawner's call, routed to NeoForge's spawner hook with its own initialize flag. */
 	public static FinalizeSpawnEvent finalizeTrialSpawner(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
-			EntitySpawnReason reason, SpawnGroupData data, IOwnedSpawner spawner, boolean initialize) {
+			MobSpawnType reason, SpawnGroupData data, IOwnedSpawner spawner, boolean initialize) {
 		return EventHooks.finalizeMobSpawnSpawner(mob, level, difficulty, reason, data, spawner, initialize);
 	}
 }

@@ -19,7 +19,7 @@ package net.neoforbric.api;
 /**
  * NeoForbric's one version vocabulary: compare two versions, and evaluate a Fabric-style predicate against one.
  *
- * <p>The three ecosystems write version requirements in two dialects — Fabric's predicate strings
+ * <p>The ecosystems write version requirements in two dialects — Fabric's predicate strings
  * ({@code ">=0.15.0"}, {@code ">=47 <48"}, {@code "~1.2.3"}) and the Forge families' Maven ranges
  * ({@code "[47,48)"}). {@link UnifiedDependency} normalises to the Fabric dialect because that is the one that can
  * express everything the other can; this evaluates it. Maven ranges are parsed by

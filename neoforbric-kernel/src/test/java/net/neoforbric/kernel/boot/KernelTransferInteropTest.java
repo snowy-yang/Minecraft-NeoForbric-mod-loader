@@ -36,7 +36,7 @@ class KernelTransferInteropTest {
 	}
 	@Test void missingKernelComponentCannotBreakOtherwiseNativeTransactions() throws Exception {
 		try (var loader = loader(true, false)) {
-			assertFalse(KernelTransferInterop.configure(loader), "do not install calls into absent PairedTransactions");
+			assertFalse(KernelTransferInterop.configure(loader), "do not install calls into an absent bridge class");
 			assertEquals("transfer-component", CompatibilityFindings.confirmedRequired().getFirst().id());
 		}
 	}
@@ -44,7 +44,7 @@ class KernelTransferInteropTest {
 		try (var loader = loader(true, true)) {
 			assertTrue(KernelTransferInterop.configure(loader));
 			assertTrue(KernelRuntimeClasses.compiled().containsAll(List.of(KernelTransferInterop.BRIDGE,
-					KernelTransferInterop.ISSUES, KernelTransferInterop.TRANSACTIONS)));
+					KernelTransferInterop.ISSUES)));
 			assertTrue(CompatibilityFindings.confirmedRequired().isEmpty());
 		}
 	}
@@ -65,7 +65,7 @@ class KernelTransferInteropTest {
 		Path classes = Path.of("build/classes/java/runtime");
 		boolean gameSide = Files.isRegularFile(classes.resolve("net/neoforbric/kernel/runtime/KernelGameLookupHelper.class"));
 		TestFixtures.require(Fixture.GAME_SIDE, gameSide, "no staged game jars, so no game side was built");
-		for (String name : List.of(KernelTransferInterop.BRIDGE, KernelTransferInterop.ISSUES, KernelTransferInterop.TRANSACTIONS,
+		for (String name : List.of(KernelTransferInterop.BRIDGE, KernelTransferInterop.ISSUES,
 				KernelTransferInterop.ENERGY, KernelTransferInterop.HOPPER)) {
 			assertTrue(Files.isRegularFile(classes.resolve(name.replace('.', '/') + ".class")), name + " was left out of the game side");
 		}
@@ -174,7 +174,7 @@ class KernelTransferInteropTest {
 	private NeoForbricClassLoader hopperLoader(boolean fabric, boolean runtime) throws Exception {
 		Path jar = directory.resolve("hopper.jar");
 		try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
-			add(out, "net/neoforged/neoforge/transfer/item/ContainerOrHandler");
+			add(out, "net/neoforged/neoforge/items/VanillaInventoryCodeHooks");
 			if (fabric) add(out, "net/fabricmc/fabric/api/transfer/v1/item/ItemStorage");
 			if (runtime) add(out, KernelTransferInterop.HOPPER.replace('.', '/'));
 		}
@@ -185,9 +185,8 @@ class KernelTransferInteropTest {
 		Path jar = directory.resolve("fixture.jar");
 		try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
 			if (apis) for (String name : List.of("net/fabricmc/fabric/api/transfer/v1/storage/Storage",
-					"net/neoforged/neoforge/transfer/ResourceHandler")) add(out, name);
-			if (runtime) for (String name : List.of(KernelTransferInterop.BRIDGE, KernelTransferInterop.ISSUES,
-					KernelTransferInterop.TRANSACTIONS)) add(out, name.replace('.', '/'));
+					"net/neoforged/neoforge/items/IItemHandler")) add(out, name);
+			if (runtime) for (String name : List.of(KernelTransferInterop.BRIDGE, KernelTransferInterop.ISSUES)) add(out, name.replace('.', '/'));
 			if (reborn) add(out, KernelTransferInterop.REBORN_API.substring(0, KernelTransferInterop.REBORN_API.length() - ".class".length()));
 			if (energyRuntime) add(out, KernelTransferInterop.ENERGY.replace('.', '/'));
 		}

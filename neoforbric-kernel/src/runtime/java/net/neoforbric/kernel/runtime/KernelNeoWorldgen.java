@@ -31,7 +31,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.util.profiling.InactiveProfiler;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntityType;
 import net.neoforged.neoforge.common.conditions.ICondition;
 import net.neoforged.neoforge.common.MonsterRoomHooks;
 import net.neoforged.neoforge.registries.DataMapLoader;
@@ -81,7 +81,7 @@ public final class KernelNeoWorldgen {
 	 * Vanilla's own monster-room set, in vanilla's own proportions — {@code ZOMBIE} twice, as the array has it.
 	 */
 	private static final EntityType<?>[] VANILLA_MONSTER_ROOM_MOBS = {
-			EntityTypes.SKELETON, EntityTypes.ZOMBIE, EntityTypes.ZOMBIE, EntityTypes.SPIDER,
+			EntityType.SKELETON, EntityType.ZOMBIE, EntityType.ZOMBIE, EntityType.SPIDER,
 	};
 
 	/**
@@ -90,7 +90,7 @@ public final class KernelNeoWorldgen {
 	 * <p>Read as a question, not as a table: while the live map still says exactly this, nobody has changed it.
 	 */
 	private static final Map<EntityType<?>, Integer> NEOFORGE_SHIPPED_MONSTER_ROOM_MOBS = Map.of(
-			EntityTypes.SKELETON, 100, EntityTypes.SPIDER, 100, EntityTypes.ZOMBIE, 200);
+			EntityType.SKELETON, 100, EntityType.SPIDER, 100, EntityType.ZOMBIE, 200);
 
 	private static volatile boolean reportedFallback;
 	private static volatile boolean reportedVanillaDraw;
@@ -195,7 +195,9 @@ public final class KernelNeoWorldgen {
 	 */
 	private static void loadDataMaps(MinecraftServer server) {
 		try {
-			DataMapLoader loader = new DataMapLoader();
+			// 1.21.1: the loader takes the registry access in its constructor and the condition context through
+			// the same injectContext as every ContextAwareReloadListener (context + registry LOOKUP, not access).
+			DataMapLoader loader = new DataMapLoader(server.registryAccess());
 			ICondition.IContext context;
 			try {
 				context = server.getServerResources().managers().getConditionContext();
@@ -204,21 +206,20 @@ public final class KernelNeoWorldgen {
 			}
 			loader.injectContext(context, server.registryAccess());
 			ResourceManager resources = server.getResourceManager();
-			// Both members are private, and both have to be reached: the synchronous `load` overload is the only
-			// one that does not hand back a CompletableFuture wired into a reload barrier this kernel does not
-			// have, and `apply` reads what it produced out of the field rather than taking it as an argument.
+			// The synchronous `load` overload is the only one that does not hand back a CompletableFuture wired
+			// into a reload barrier this kernel does not have; `apply` reads what load produced out of the field.
 			Method load = DataMapLoader.class.getDeclaredMethod("load", ResourceManager.class, ProfilerFiller.class);
 			load.setAccessible(true);
 			Object results = load.invoke(loader, resources, InactiveProfiler.INSTANCE);
 			java.lang.reflect.Field resultsField = DataMapLoader.class.getDeclaredField("results");
 			resultsField.setAccessible(true);
 			resultsField.set(loader, results);
-			loader.apply(server.registryAccess());
+			loader.apply();
 			int loaded = results instanceof Map<?, ?> map ? map.size() : -1;
 
 			if (!reportedDataMaps) {
 				reportedDataMaps = true;
-				Registry<EntityType<?>> entityTypes = server.registryAccess().lookupOrThrow(Registries.ENTITY_TYPE);
+				Registry<EntityType<?>> entityTypes = server.registryAccess().registryOrThrow(Registries.ENTITY_TYPE);
 				int monsterRoom = entityTypes
 						.getDataMap(net.neoforged.neoforge.registries.datamaps.builtin.NeoForgeDataMaps
 								.MONSTER_ROOM_MOBS)
@@ -280,7 +281,7 @@ public final class KernelNeoWorldgen {
 
 	private static int countOrMinusOne(MinecraftServer server, ResourceKey<? extends Registry<?>> key) {
 		try {
-			return server.registryAccess().lookupOrThrow(key).size();
+			return server.registryAccess().registryOrThrow(key).size();
 		} catch (Throwable t) {
 			return -1;
 		}

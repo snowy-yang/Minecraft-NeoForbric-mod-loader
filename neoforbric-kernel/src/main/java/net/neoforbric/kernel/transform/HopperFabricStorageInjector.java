@@ -20,30 +20,31 @@ import org.objectweb.asm.tree.VarInsnNode;
  * NeoForge's hopper asks Fabric's item storage lookup where its own found nothing.
  *
  * <p>fabric-transfer-api-v1's {@code HopperBlockEntityMixin} anchors after vanilla's {@code getAttachedContainer} and
- * {@code getSourceContainer}; the merged hopper is NeoForge's, which looks up a {@code ContainerOrHandler} instead and
- * calls neither, so a Fabric storage NeoForge cannot see (unslotted, on a block without a block entity, or any with
- * the transfer bridge off) never saw a hopper. Two edits, both on NeoForge's "found nothing" branches:
+ * {@code getSourceContainer}; 1.21.1's NeoForge hopper still calls both — but before them it asks
+ * {@code VanillaInventoryCodeHooks.insertHook}/{@code extractHook} and, when those answer handled, never reaches the
+ * vanilla lookups where Fabric's mixin sits. A Fabric storage NeoForge's item capability cannot see answers the hook
+ * empty, so the vanilla path runs — and there Fabric's own mixin binds, which covers blocks WITH a Fabric inventory
+ * container. What stays unseen either way: unslotted Fabric storages, storages on blocks without a block entity, and
+ * every storage when the transfer bridge is off. Two edits, both at the hooks' "declined" jumps:
  * <ul>
- * <li>{@code ejectItems}: the {@code iconst_0} it returns when the {@code ContainerOrHandler} is empty becomes
- * {@code KernelFabricHopperStorage.insert(level, pos, hopper)} — false unless a Fabric storage took an item;</li>
- * <li>{@code suckInItems}: where it falls through from an empty {@code ContainerOrHandler} to picking up item
- * entities, {@code KernelFabricHopperStorage.extract(level, hopper)} is asked first; a Fabric storage's answer is
- * returned, {@code NOT_FOUND} continues as before.</li>
+ * <li>{@code ejectItems}: {@code insertHook}'s {@code IFEQ} to the vanilla path first asks
+ * {@code KernelFabricHopperStorage.insert(level, pos, hopper)}; a Fabric storage's answer is returned, false falls to
+ * vanilla as before;</li>
+ * <li>{@code suckInItems}: {@code extractHook}'s {@code IFNULL} to the vanilla path first asks
+ * {@code KernelFabricHopperStorage.extract(level, hopper)}; 1 or 0 is returned as the hopper's answer — so it does not
+ * pick up item entities, as natively — and {@code NOT_FOUND} falls to vanilla as before.</li>
  * </ul>
- * No local, field read, or call to a hopper or {@code ContainerOrHandler} method is added, so INVOKE and FIELD anchors
- * on those, and their ordinals, are unchanged (lithium's among them). Other kinds do move: {@code ejectItems} loses its
- * first {@code intValue=0} constant and gains argument loads, and {@code suckInItems} gains one {@code IRETURN} and one
- * jump before its item pickup, so RETURN/JUMP/LOAD ordinals from there on shift by one — no mod in any pack uses them
- * here. Both edits or neither; a vanilla or MinecraftForge body, where Fabric's own mixin applies, is left alone.
- * {@code -Dneoforbric.hopperFabricStorage=off}.
+ * No local, field read, or call to a hopper method is added, so INVOKE and FIELD anchors on those, and their ordinals,
+ * are unchanged (lithium's among them). RETURN/JUMP/LOAD ordinals after each hook shift by a few — no mod in any pack
+ * uses them here. Both edits or neither; a body without both hooks (vanilla's, or a carrier's where Fabric's own mixin
+ * applies) is left alone. {@code -Dneoforbric.hopperFabricStorage=off}.
  */
 public final class HopperFabricStorageInjector implements ClassTransformer {
 	public static final String PROPERTY = "neoforbric.hopperFabricStorage";
 	static final String HOPPER = "net.minecraft.world.level.block.entity.HopperBlockEntity";
 	static final String HOPPER_INTERNAL = "net/minecraft/world/level/block/entity/HopperBlockEntity";
 	static final String RUNTIME = "net/neoforbric/kernel/runtime/transfer/KernelFabricHopperStorage";
-	static final String CONTAINER_OR_HANDLER = "net/neoforged/neoforge/transfer/item/ContainerOrHandler";
-	static final String HOOKS = "net/neoforged/neoforge/transfer/item/VanillaInventoryCodeHooks";
+	static final String HOOKS = "net/neoforged/neoforge/items/VanillaInventoryCodeHooks";
 
 	static boolean enabled() {
 		return !"off".equalsIgnoreCase(System.getProperty(PROPERTY, "on"));
@@ -52,7 +53,7 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 	@Override public String name() { return "neoforbric:hopper-fabric-storage"; }
 
 	@Override public AnchorSet anchors() {
-		if (!enabled()) return AnchorSet.scanned("hoppers left as merged with -D" + PROPERTY + "=off");
+		if (!enabled()) return AnchorSet.scanned("hoppers left as NeoForge ships them with -D" + PROPERTY + "=off");
 		return AnchorSet.of(new AnchorSet.Anchor(HOPPER, AnchorSet.Severity.REQUIRED,
 				"hoppers ignore Fabric item storages NeoForge cannot see — unslotted, block-only, or all of them with the "
 						+ "transfer bridge off"));
@@ -65,16 +66,16 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 		String declined = repair(node);
 		if (declined != null) {
 			if (!declined.isEmpty()) {
-				NeoForbricLog.warn("[NeoForbric/Hopper] left HopperBlockEntity as merged: %s — hoppers ignore Fabric storages "
+				NeoForbricLog.warn("[NeoForbric/Hopper] left HopperBlockEntity as NeoForge ships it: %s — hoppers ignore Fabric storages "
 						+ "NeoForge cannot see", declined);
 			}
 			return bytes;
 		}
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
-		NeoForbricLog.info("[NeoForbric/Hopper] HopperBlockEntity.ejectItems and suckInItems ask Fabric's item storage lookup "
-				+ "where NeoForge's found nothing (fabric-transfer-api-v1's HopperBlockEntityMixin cannot attach to "
-				+ "NeoForge's body)");
+		NeoForbricLog.info("[NeoForbric/Hopper] HopperBlockEntity's two VanillaInventoryCodeHooks declines now ask Fabric's "
+				+ "item storage lookup first (a Fabric storage NeoForge's item capability cannot see never reached "
+				+ "fabric-transfer-api-v1's HopperBlockEntityMixin)");
 		return writer.toByteArray();
 	}
 
@@ -84,66 +85,64 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 		MethodNode suck = method(hopper, "suckInItems", "(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/level/block/entity/Hopper;)Z");
 		if (eject == null || suck == null) return "no ejectItems/suckInItems";
 		if (calls(eject, RUNTIME, null) + calls(suck, RUNTIME, null) > 0) return "";
-		if (calls(eject, HOPPER_INTERNAL, "getAttachedContainer") > 0 || calls(suck, HOPPER_INTERNAL, "getSourceContainer") > 0) return "";
-		if (calls(eject, HOPPER_INTERNAL, "getContainerOrHandlerAt") != 1 || calls(eject, HOOKS, "insertHook") != 1) {
-			return "ejectItems is not NeoForge's one lookup and one insert hook";
-		}
-		if (calls(suck, HOPPER_INTERNAL, "getSourceContainerOrHandler") != 1 || calls(suck, HOOKS, "extractHook") != 1) {
-			return "suckInItems is not NeoForge's one lookup and one extract hook";
-		}
-		// ejectItems: isEmpty(); ifeq L; iconst_0; ireturn — the one found-nothing exit.
-		AbstractInsnNode nothing = null;
+		if (calls(eject, HOOKS, "insertHook") != 1) return "ejectItems does not ask NeoForge's insert hook exactly once";
+		if (calls(suck, HOOKS, "extractHook") != 1) return "suckInItems does not ask NeoForge's extract hook exactly once";
+		// ejectItems: aload hopper; insertHook; IFEQ vanilla; iconst_1; ireturn — false ("not handled") jumps to the
+		// vanilla lookups. The fabric ask takes that jump: it is asked only when NeoForge's hook declined, and its own
+		// false answer falls to the vanilla lookups exactly where the original jump went.
+		JumpInsnNode insertDeclined = null;
 		for (AbstractInsnNode insn : eject.instructions) {
-			if (!(insn instanceof MethodInsnNode call) || !call.owner.equals(CONTAINER_OR_HANDLER) || !call.name.equals("isEmpty")) continue;
-			AbstractInsnNode branch = next(call), zero = next(branch), exit = next(zero);
-			if (branch == null || branch.getOpcode() != Opcodes.IFEQ || zero == null || zero.getOpcode() != Opcodes.ICONST_0
-					|| exit == null || exit.getOpcode() != Opcodes.IRETURN) continue;
-			if (nothing != null) return "ejectItems has two found-nothing exits";
-			nothing = zero;
+			if (!(insn instanceof MethodInsnNode call) || !call.owner.equals(HOOKS) || !call.name.equals("insertHook")) continue;
+			if (!(next(call) instanceof JumpInsnNode jump) || jump.getOpcode() != Opcodes.IFEQ) continue;
+			if (insertDeclined != null) return "ejectItems has two insert-hook declines";
+			insertDeclined = jump;
 		}
-		if (nothing == null) return "ejectItems has no found-nothing exit";
-		// suckInItems: itemHandler(); ifnull L … L: frame; aload_1; invokeinterface Hopper.isGridAligned — the fall
-		// through to picking up item entities.
-		JumpInsnNode noHandler = null;
+		if (insertDeclined == null) return "ejectItems has no insert-hook decline";
+
+		LabelNode insertVanilla = insertDeclined.label;
+		LabelNode insertAsk = new LabelNode();
+		InsnList ask = new InsnList();
+		ask.add(insertAsk);
+		ask.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+		ask.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		ask.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		ask.add(new VarInsnNode(Opcodes.ALOAD, 2));
+		ask.add(new MethodInsnNode(Opcodes.INVOKESTATIC, RUNTIME, "insert", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Z", false));
+		ask.add(new JumpInsnNode(Opcodes.IFEQ, insertVanilla));
+		ask.add(new InsnNode(Opcodes.ICONST_1));
+		ask.add(new InsnNode(Opcodes.IRETURN));
+		eject.instructions.insert(insertDeclined, ask);
+		insertDeclined.label = insertAsk;
+
+		// suckInItems: extractHook; astore; aload; ifnull vanilla — null ("not handled") jumps to the vanilla
+		// lookups. The fabric ask takes that jump the same way: NOT_FOUND (-1) falls to vanilla, and 1 or 0 is the
+		// hopper's whole answer, so a Fabric storage that has nothing still stops the item-entity pickup, as the
+		// native hook's answer would have.
+		JumpInsnNode extractDeclined = null;
 		for (AbstractInsnNode insn : suck.instructions) {
-			if (!(insn instanceof MethodInsnNode call) || !call.owner.equals(CONTAINER_OR_HANDLER) || !call.name.equals("itemHandler")) continue;
-			if (!(next(call) instanceof JumpInsnNode jump) || jump.getOpcode() != Opcodes.IFNULL) continue;
-			if (noHandler != null) return "suckInItems has two handler checks";
-			noHandler = jump;
+			if (!(insn instanceof MethodInsnNode call) || !call.owner.equals(HOOKS) || !call.name.equals("extractHook")) continue;
+			AbstractInsnNode store = next(call);
+			AbstractInsnNode load = store == null ? null : next(store);
+			if (store == null || store.getOpcode() != Opcodes.ASTORE || load == null || load.getOpcode() != Opcodes.ALOAD) continue;
+			if (!(next(load) instanceof JumpInsnNode jump) || jump.getOpcode() != Opcodes.IFNULL) continue;
+			if (extractDeclined != null) return "suckInItems has two extract-hook declines";
+			extractDeclined = jump;
 		}
-		if (noHandler == null) return "suckInItems has no handler check";
-		LabelNode target = noHandler.label;
-		FrameNode frame = null;
-		AbstractInsnNode scan = target.getNext();
-		while (scan != null && scan.getOpcode() < 0) {
-			if (scan instanceof FrameNode f) frame = f;
-			scan = scan.getNext();
-		}
-		if (frame == null || !(scan instanceof VarInsnNode load) || load.getOpcode() != Opcodes.ALOAD || load.var != 1
-				|| !(next(scan) instanceof MethodInsnNode aligned) || !aligned.name.equals("isGridAligned")) {
-			return "suckInItems does not fall through to picking up items after its handler check";
-		}
+		if (extractDeclined == null) return "suckInItems has no extract-hook decline";
 
-		InsnList insert = new InsnList();
-		insert.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		insert.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		insert.add(new VarInsnNode(Opcodes.ALOAD, 2));
-		insert.add(new MethodInsnNode(Opcodes.INVOKESTATIC, RUNTIME, "insert", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Z", false));
-		eject.instructions.insertBefore(nothing, insert);
-		eject.instructions.remove(nothing);
-
-		LabelNode carryOn = new LabelNode();
-		InsnList extract = new InsnList();
-		extract.add(new VarInsnNode(Opcodes.ALOAD, 0));
-		extract.add(new VarInsnNode(Opcodes.ALOAD, 1));
-		extract.add(new MethodInsnNode(Opcodes.INVOKESTATIC, RUNTIME, "extract", "(Ljava/lang/Object;Ljava/lang/Object;)I", false));
-		extract.add(new InsnNode(Opcodes.DUP));
-		extract.add(new JumpInsnNode(Opcodes.IFLT, carryOn));
-		extract.add(new InsnNode(Opcodes.IRETURN));
-		extract.add(carryOn);
-		extract.add(new FrameNode(Opcodes.F_SAME1, 0, null, 1, new Object[] {Opcodes.INTEGER}));
-		extract.add(new InsnNode(Opcodes.POP));
-		suck.instructions.insert(frame, extract);
+		LabelNode extractVanilla = extractDeclined.label;
+		LabelNode extractAsk = new LabelNode();
+		InsnList ask2 = new InsnList();
+		ask2.add(extractAsk);
+		ask2.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
+		ask2.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		ask2.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		ask2.add(new MethodInsnNode(Opcodes.INVOKESTATIC, RUNTIME, "extract", "(Ljava/lang/Object;Ljava/lang/Object;)I", false));
+		ask2.add(new InsnNode(Opcodes.DUP));
+		ask2.add(new JumpInsnNode(Opcodes.IFLT, extractVanilla));
+		ask2.add(new InsnNode(Opcodes.IRETURN));
+		suck.instructions.insert(extractDeclined, ask2);
+		extractDeclined.label = extractAsk;
 		return null;
 	}
 

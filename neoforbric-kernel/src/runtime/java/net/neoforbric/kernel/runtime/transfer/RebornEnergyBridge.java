@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.fabricmc.fabric.api.lookup.v1.block.BlockApiLookup;
 import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
-import net.neoforged.neoforge.transfer.energy.EnergyHandler;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 import team.reborn.energy.api.EnergyStorage;
 
 /**
@@ -21,10 +21,10 @@ import team.reborn.energy.api.EnergyStorage;
  *
  * <p>Invoked by the boot seam only when Team Reborn Energy is installed, after BlockTransferBridge.install and only if
  * that connected the bridge. It registers two fallbacks on the public lookup, exactly as the item and fluid lookups
- * get theirs: one in front of every other fallback, answering only for a Forge or NeoForge owner (so the owner's own
+ * get theirs: one in front of every other fallback, answering only for a NeoForge owner (so the owner's own
  * provider is found before any generic Fabric view), and one appended after them for everything else. Native Fabric
  * providers registered for a block or block entity type always answer before either. It also hands BlockTransferBridge
- * the Reborn lookup, so NeoForge and Forge consumers reach Fabric stores through the same endpoints.
+ * the Reborn lookup, so NeoForge consumers reach Fabric stores through the same endpoints.
  *
  * <p>Scope: placed block entities. Item energy (batteries in inventories, EnergyStorage.ITEM) is not bridged.
  */
@@ -67,7 +67,7 @@ public final class RebornEnergyBridge {
 	private static EnergyStorage afterGeneric(Level level, BlockPos pos, BlockState state, BlockEntity entity, Direction face) {
 		return fabric(BlockTransferBridge.energyForFabric(level, pos, entity, face, false));
 	}
-	private static EnergyStorage fabric(EnergyHandler view) { return view == null ? null : RebornEnergyAdapters.fabric(view); }
+	private static EnergyStorage fabric(IEnergyStorage view) { return view == null ? null : RebornEnergyAdapters.fabric(view); }
 
 	private static final class Side implements BlockTransferBridge.FabricEnergy {
 		public Object find(Level level, BlockPos pos, BlockState state, BlockEntity entity, Direction face, boolean generic) {
@@ -75,7 +75,7 @@ public final class RebornEnergyBridge {
 			var provider = EnergyStorage.SIDED.getProvider(state.getBlock());
 			return provider == null ? null : provider.find(level, pos, state, entity, face);
 		}
-		public EnergyHandler view(Supplier<Object> storage, BooleanSupplier valid, LongSupplier generation) {
+		public IEnergyStorage view(Supplier<Object> storage, BooleanSupplier valid, LongSupplier generation) {
 			return RebornEnergyAdapters.neo(RebornEnergyAdapters.live(() -> (EnergyStorage) storage.get(), valid, generation));
 		}
 	}

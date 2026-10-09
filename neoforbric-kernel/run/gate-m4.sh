@@ -14,7 +14,7 @@
 #                    fabric.mod.json + mods.toml + neoforge.mods.toml and one glue class per family). All three
 #                    loaders are live here, so MultiLoaderArbiter claims each jar for exactly ONE family — NeoForge
 #                    by default — and suppresses the other two. Without it the same mod initialised THREE times.
-#                    So all three families run real third-party mod code, none of it synthetic, none of it twice.
+#                    So both families run real third-party mod code, none of it synthetic, none of it twice.
 #
 # `collective` is the reason guest-config relaxation had to be generalised: its Forge jar ALSO ships a Fabric mixin
 # config (collective_fabric.mixins.json) whose PlayerMixin descriptor no longer matches the merged base. While the
@@ -58,7 +58,7 @@ done
 seed_server_properties "$RUNDIR"
 echo "[kernel] staged: $(ls -1 "$RUNDIR/mods" | tr '\n' ' ')"
 
-step "boot all three ecosystems in one instance, run until both families have ticked 20×"
+step "boot both ecosystems in one instance, run until both families have ticked 20×"
 : > "$LOG"
 # Stop as soon as the 1:1 tick proof lands (real mods boot slower than the old canaries, so a fixed timer would
 # either cut ticking short or waste minutes); fall back to a hard cap so a stuck boot fails loudly instead of hanging.
@@ -75,7 +75,7 @@ BOOTPID=$!
 record_server_pid "$RUNDIR" "$BOOTPID"
 await_server "$BOOTPID" "$LOG" 200
 
-step "one list holds all three ecosystems' mods (must PASS)"
+step "one list holds both ecosystems' mods (must PASS)"
 # Every family's own Mods screen reads its own family's registry and is complete for the loader it was written
 # against -- which on this instance is never the whole answer. Assert the NUMBERS, not the sentence: the line
 # would still print with a zero in it, and a zero for a family is exactly the regression.
@@ -93,7 +93,7 @@ else
   echo "[kernel] FAIL the unified mod catalogue was never published"; FAIL=1
 fi
 
-step "all three ecosystems' REAL mods brought up in ONE instance (must PASS)"
+step "both ecosystems' REAL mods brought up in ONE instance (must PASS)"
 check "both Forge-family baselines"            "constructed NeoForge baseline mod" "$LOG"
 check "traditional-Forge baseline"             "constructed traditional-Forge baseline mod ForgeMod" "$LOG"
 check "all 5 Forge-only real @Mods"            "constructed @Mod [a-z_]+ \(traditional-Forge," "$LOG" 5

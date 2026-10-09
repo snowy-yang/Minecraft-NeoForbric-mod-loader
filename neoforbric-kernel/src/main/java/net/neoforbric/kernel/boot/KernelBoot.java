@@ -66,7 +66,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
 /**
  * The shared boot flow behind {@link KernelServerLaunch} and {@code KernelClientLaunch}: build the one sovereign
  * {@link NeoForbricClassLoader} over the merged base + ecosystem carriers + all mods + MC libraries, install the
- * transform pipeline (access wideners → lifecycle redirect → concessions → Mixin), discover all three ecosystems,
+ * transform pipeline (access wideners → lifecycle redirect → concessions → Mixin), discover both ecosystems,
  * bring up Mixin + Fabric, and hand off to the merged base's {@code Main.main} — which now runs plain vanilla boot
  * with the genuine loader trigger redirected to the kernel's own native registration window.
  *
@@ -456,14 +456,10 @@ public final class KernelBoot {
 					net.neoforbric.kernel.transform.WidenedFieldTwinInjector.PROPERTY);
 		}
 
-		// Both sides: vanilla's tooltip component order copied to the head of ItemStack.addDetailsToTooltip from the
-		// merge's own renamed body, so fabric-item-api-v1's bytecode scrape of it finds what it scrapes on Fabric.
-		if (net.neoforbric.kernel.transform.TooltipOrderScrapeInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.TooltipOrderScrapeInjector());
-		} else {
-			NeoForbricLog.warn("[NeoForbric/TooltipOrder] -D%s=off — fabric-item-api's tooltip-order registry throws on first "
-					+ "touch (\"Found no component types\")", net.neoforbric.kernel.transform.TooltipOrderScrapeInjector.PROPERTY);
-		}
+		// No tooltip-order scrape on this line: it existed to copy vanilla's component order into the head of the
+		// merge's renamed addDetailsToTooltip, which fabric-item-api's registry scraped at class-init. 1.21.1's
+		// NeoForge kept vanilla's tooltip body, so fabric-item-api's own mixin reads the order where it always did
+		// and there is nothing to copy or repair.
 
 		// Client only: route RenderPipeline$Builder.buildSnippet through the vanilla-shaped 11-arg Snippet
 		// constructor (NeoForge's stencil test carried by a kernel scope) so fabric-rendering-v1's
@@ -499,11 +495,10 @@ public final class KernelBoot {
 		// Polymer's ingredient codec does for every recipe — got null and the recipe packet failed to encode.
 		chain.register(TransformPhase.COREMOD,
 				new net.neoforbric.kernel.transform.SplitterPacketContextInjector());
-		// NeoForge syncs recipes by type, so one recipe whose serializer cannot encode it (Enchant Craft's) used to
-		// disconnect every player on join once any mod asked for crafting recipes; it is left out with a warning.
-		if (net.neoforbric.kernel.transform.RecipeSyncFailSoftInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.RecipeSyncFailSoftInjector());
-		}
+		// No recipe-sync fail-soft on this line: 26.x's NeoForge synced recipes by type through its own payload
+		// (CommonHooks.sendRecipes), where one recipe whose serializer could not encode it disconnected every
+		// player on join. 1.21.1 syncs through vanilla's ClientboundUpdateRecipesPacket, which has no NeoForge
+		// seam to repair — a throwing serializer is vanilla's own behaviour, on both ecosystems alike.
 		// The merged ServerStatus keeps both families' constructors, and vanilla's (NeoForge's) left MinecraftForge's
 		// Optional forgeData null: a mod rebuilding the status with it (LPLM) stopped the server tick loop on encode.
 		if (net.neoforbric.kernel.transform.MergedRecordOptionalDefaults.enabled()) {
@@ -522,7 +517,9 @@ public final class KernelBoot {
 		// leaves ModList.modFiles empty, so NeoForge's own mod-pack finder walks an empty list and adds nothing.
 		chain.register(TransformPhase.COREMOD, new DataPackHookInjector());
 
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.ServerReloadListenerNamesInjector());
+		// No reload-listener naming repair on this line: 26.x's NeoForge sorted reload listeners in a
+		// name-keyed graph and refused to run one it could not name; 1.21.1 sorts them the way vanilla always
+		// did, so a Fabric mixin adding a listener needs nothing lent to it.
 
 		// A Fabric mod's registry reads its data where native Fabric reads it. The merged Registries body is
 		// NeoForge's, which prefixes the namespace itself; Fabric prefixes in a return-value mixin instead, and
@@ -580,8 +577,10 @@ public final class KernelBoot {
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.EventChainAuditInjector());
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CompatibilityPromptTickInjector());
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.PortalSpawnInjector());
-		// After merged-base compatibility: upgrade its owner-only redirect with the proven spawn input.
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.SpawnerFinalizeInjector());
+		// No spawner-input repair on this line: 26.x's BaseSpawner loaded its entity through a ValueInput the
+		// kernel threaded into finalization so a Forge listener could read the spawn NBT. 1.21.1's BaseSpawner
+		// builds its entity from the SpawnData directly and NeoForge's own hook is in the base already; there is
+		// no input to thread.
 		// After it, so the finalize repair reads NeoForge's serverTick shape: vanilla's spawn-position calls go back
 		// into the spawner, natural and summon paths, for Fabric mixins that redirect them (architectury).
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.SpawnPositionCallsInjector(path -> {
@@ -630,8 +629,11 @@ public final class KernelBoot {
 						net.neoforbric.kernel.transform.CreativePagerBridgeInjector.PROPERTY);
 			}
 		}
-		// The merged game builds its fuels from NeoForge's data map; Fabric's fuel events run on that builder too.
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.FabricFuelValuesInjector());
+		// No fuel bridge on this line: 1.21.1 keeps vanilla's fuel path (AbstractFurnaceBlockEntity's own
+		// buildFuels/isFuel/getBurnDuration, ItemStack's burn-time component), which is exactly what
+		// fabric-content-registries' AbstractFurnaceBlockEntityMixin anchors to — its fuel registry binds
+		// natively. The 26.x bridge targeted NeoForge's DataMapHooks.populateFuelValues, a seam this base
+		// does not have.
 		// NeoForge's "Missing FluidModel" check runs inside the bake Fabric wraps, before Fabric adds its fluid models.
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.FabricFluidModelsInjector());
 		// The merged composter reads only NeoForge's compostables data map; on a miss it asks vanilla's map too (what a
@@ -689,18 +691,10 @@ public final class KernelBoot {
 					net.neoforbric.kernel.transform.GuestInjectorPruner.PROPERTY);
 		}
 
-		// Client only: NeoForge's model deserializer throws "Unknown loader" for every loader it did not register,
-		// BEFORE the vanilla cuboid deserializer that MinecraftForge's geometry loaders and fusion's model hook read,
-		// and it never reads Fabric's fabric:type at all (the two injectors that dispatched it are the pair pruned
-		// above). One call ahead of NeoForge's dispatch lets each format's owner parse it. Matches only
-		// UnbakedModelParser$Deserializer, which a dedicated server never loads.
-		if (net.neoforbric.kernel.transform.ModelFormatFunnelInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.ModelFormatFunnelInjector());
-		} else {
-			NeoForbricLog.warn("[NeoForbric/ModelFormats] -D%s=off — Fabric fabric:type model formats parse as plain models, "
-					+ "and a MinecraftForge geometry loader or fusion model fails as \"Unknown loader\"",
-					net.neoforbric.kernel.transform.ModelFormatFunnelInjector.PROPERTY);
-		}
+		// No model-format funnel on this line: it existed to sit ahead of 26.x's UnbakedModelParser dispatch,
+		// which threw "Unknown loader" before the vanilla deserializer and never read fabric:type. 1.21.1 reads
+		// block models through vanilla's own path, where fabric-model-loading's mixins bind as written and each
+		// ecosystem's loaders are consulted where they always were.
 
 		// Client only: fire the Fabric client entrypoints from inside Minecraft.<init> (before Options), the window
 		// Fabric uses — so a client entrypoint touching Minecraft.getInstance() (keymapping registration etc.) sees a

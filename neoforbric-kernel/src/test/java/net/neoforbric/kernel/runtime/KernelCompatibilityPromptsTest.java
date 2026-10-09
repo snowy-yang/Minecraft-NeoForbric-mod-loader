@@ -144,12 +144,12 @@ class KernelCompatibilityPromptsTest {
 		}
 	}
 
-	/** A spawner's call site the upgrade could not prove, recorded on the integrated server thread during play. */
+	/** A call site the upgrade could not prove, recorded on the integrated server thread during play. */
 	private static void loseSpawnerInput() {
-		CompatibilityFindings.record(new CompatibilityFinding("spawner-finalize-input", "neoforbric", "Spawner finalization",
-				"KernelSpawnerFinalize", CompatibilityFinding.Confidence.CONFIRMED, true,
-				"The spawner call site did not supply its ValueInput; Forge finalization was not dispatched.",
-				List.of("BaseSpawner.serverTick")));
+		CompatibilityFindings.record(new CompatibilityFinding("call-site-unproven", "neoforbric", "A repair the kernel no longer makes",
+				"KernelCompatibilityPrompts", CompatibilityFinding.Confidence.CONFIRMED, true,
+				"A call site the kernel used to repair was not proven this boot; the repair was not dispatched.",
+				List.of("an.example.Callsite#site")));
 	}
 
 	@Test void aLossRecordedDuringPlayIsInTheReportsThePromptAndTheModsScreenPointAt() throws Exception {

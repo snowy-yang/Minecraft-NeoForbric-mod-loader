@@ -35,7 +35,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.flag.FeatureFlagRegistry;
 
 import net.neoforbric.api.Ecosystem;
@@ -122,7 +122,7 @@ public final class KernelFeatureFlags {
 				if (array == null) return List.of();
 				for (JsonElement element : array) {
 					String name = element.isJsonObject() ? element.getAsJsonObject().get("flag").getAsString() : element.getAsString();
-					Identifier flag = Identifier.parse(name);
+					ResourceLocation flag = ResourceLocation.parse(name);
 					if (!modIds.contains(flag.getNamespace())) {
 						NeoForbricLog.warn("[NeoForbric/FeatureFlags] %s declares flag %s in a namespace no mod in that jar owns (%s) — skipped, "
 								+ "as NeoForge would refuse it", jar.getFileName(), name, modIds);

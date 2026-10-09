@@ -174,7 +174,7 @@ public final class ClientSoakController {
 		}
 		int point = -1; String dimension = "none"; double x = 0, z = 0;
 		if (player != null) {
-			dimension = player.level().dimension().identifier().toString(); x = player.getX(); z = player.getZ();
+			dimension = player.level().dimension().location().toString(); x = player.getX(); z = player.getZ();
 			for (int i = 0; i < 6; i++) if (player.level() == level(server, i / 2) && Math.abs(x - COORDINATES[i] - .5) < 2 && Math.abs(z - COORDINATES[i] - .5) < 2) point = i;
 		}
 		return new Observation(new Sample(System.nanoTime(), id, server.getTickCount(), server.overworld().getGameTime(),
@@ -199,12 +199,12 @@ public final class ClientSoakController {
 						if (players.size() != 1) throw new IllegalStateException("soak requires exactly one actual connected player");
 						ServerPlayer player = players.get(0);
 						preparePlayer(player);
-						if (!player.teleportTo(level(server, point / 2), COORDINATES[point] + .5, 160, COORDINATES[point] + .5,
-								Set.of(), 0, 0, true)) throw new IllegalStateException("native dimension teleport refused point " + point);
+						player.teleportTo(level(server, point / 2), COORDINATES[point] + .5, 160, COORDINATES[point] + .5,
+								Set.of(), 0, 0);
 					} catch (Throwable failure) { asynchronousFailure.set("movement failed: " + failure); }
 				});
 			}
-			case DISCONNECT -> { write("save-and-disconnect", fields("server", serial)); blocking("native save-and-disconnect", () -> minecraft.disconnectWithSavingScreen()); }
+			case DISCONNECT -> { write("save-and-disconnect", fields("server", serial)); blocking("native save-and-disconnect", () -> minecraft.disconnect()); }
 			case OPEN_WORLD -> {
 				owner(world.resolve(".neoforbric-soak-world")); write("open", fields("world", worldName));
 				blocking("native world open", () -> minecraft.createWorldOpenFlows().openWorld(worldName,
@@ -223,7 +223,7 @@ public final class ClientSoakController {
 	private void finish(Minecraft minecraft) throws Exception {
 		if (finished) return;
 		finished = true;
-		if (current != null && ownershipChecked) { blocking("native save-and-disconnect while finishing", () -> minecraft.disconnectWithSavingScreen()); current = null; }
+		if (current != null && ownershipChecked) { blocking("native save-and-disconnect while finishing", () -> minecraft.disconnect()); current = null; }
 		List<Map<String, Object>> weak = weakEvidence();
 		boolean completed = machine.state() == State.FINISHED && machine.activityComplete();
 		List<Map<String, Object>> released = List.of(), after = weak;

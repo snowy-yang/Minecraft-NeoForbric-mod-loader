@@ -79,7 +79,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  *
  * <h2>Which classes: only those from a jar arbitrated to Fabric</h2>
  *
- * <p>Fabric's own scope is "everything Knot loads except Minecraft". In one process holding three ecosystems that
+ * <p>Fabric's own scope is "everything Knot loads except Minecraft". In one process holding both ecosystems that
  * translates to the jars {@code MultiLoaderArbiter} gave to Fabric. The merged base, the runtime carriers, the MC
  * libraries and the kernel's own jars are Minecraft's side of that line (Fabric strips Minecraft only in a
  * development environment). A jar arbitrated to MinecraftForge or NeoForge is left alone even when it also ships a

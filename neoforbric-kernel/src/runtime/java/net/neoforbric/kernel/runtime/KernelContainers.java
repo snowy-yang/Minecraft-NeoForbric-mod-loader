@@ -25,9 +25,9 @@ import net.neoforbric.kernel.util.NeoForbricLog;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.javafmlmod.FMLModContainer;
-import net.neoforged.fml.unsafe.UnsafeHacks;
 import net.neoforged.fml.mclanguageprovider.MinecraftModContainer;
 import net.neoforged.neoforgespi.language.IModInfo;
+import sun.misc.Unsafe;
 
 /**
  * The game side of the kernel's mod-container factory — the one entry point the boot side calls by name.
@@ -40,7 +40,8 @@ import net.neoforged.neoforgespi.language.IModInfo;
  * <h2>What is still reflective, and why that is not a shortfall</h2>
  *
  * <p>{@link #genuineFmlContainer} still reads fields by name. That is irreducible: it allocates a
- * {@code FMLModContainer} WITHOUT running a constructor (its only one is the loader-facing 4-arg form, which
+ * {@code FMLModContainer} WITHOUT running a constructor (its only one is the loader-facing 4-arg form on this
+code line, which
  * would run genuine FancyModLoader mod-class discovery) and then writes {@code final} fields directly. Naming a
  * final field to write it is reflection by definition. What the game side buys here is that every TYPE is
  * checked — a renamed class is now a build failure — while only the field names remain strings.
@@ -122,7 +123,7 @@ public final class KernelContainers {
 	 */
 	private static ModContainer genuineFmlContainer(String modId, IModInfo modInfo, IEventBus bus) {
 		try {
-			FMLModContainer container = UnsafeHacks.newInstance(FMLModContainer.class);
+			FMLModContainer container = (FMLModContainer) UNSAFE.allocateInstance(FMLModContainer.class);
 			set(FMLModContainer.class, "eventBus", container, bus);
 			set(ModContainer.class, "modId", container, modId);
 			set(ModContainer.class, "namespace", container, modId);
@@ -140,6 +141,24 @@ public final class KernelContainers {
 
 	private static void set(Class<?> owner, String name, Object target, Object value) throws Exception {
 		Field field = owner.getDeclaredField(name);
-		UnsafeHacks.setField(field, target, value);
+		long offset = UNSAFE.objectFieldOffset(field);
+		UNSAFE.putObject(target, offset, value);
+	}
+
+	/**
+	 * 21.1's FancyModLoader has no {@code UnsafeHacks} — that helper arrived with the 26.x interface split. The
+	 * two calls it answered for here (allocate a class with no constructor, write a private final field) are what
+	 * {@code sun.misc.Unsafe} has always done underneath it, and the same trick FML itself uses on this line.
+	 */
+	private static final Unsafe UNSAFE = unsafe();
+
+	private static Unsafe unsafe() {
+		try {
+			Field field = Unsafe.class.getDeclaredField("theUnsafe");
+			field.setAccessible(true);
+			return (Unsafe) field.get(null);
+		} catch (Throwable no) {
+			return null;
+		}
 	}
 }

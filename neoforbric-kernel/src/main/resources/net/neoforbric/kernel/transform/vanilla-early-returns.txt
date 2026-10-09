@@ -2853,7 +2853,6 @@ net/minecraft/world/level/block/entity/CreakingHeartBlockEntity#emitParticles(Ln
 net/minecraft/world/level/block/entity/CreakingHeartBlockEntity#serverTick(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/entity/CreakingHeartBlockEntity;)V 2e1b97cb=5 702d4301=0 810d0408=3 a4dae477=3 bcb8fff1=3 db5ec135=4 e4ac436a=5 f67b6516=1
 net/minecraft/world/level/block/entity/DecoratedPotBlockEntity#wobble(Lnet/minecraft/world/level/block/entity/DecoratedPotBlockEntity$WobbleStyle;)V 2097f9cd=0 ddcdea77=0
 net/minecraft/world/level/block/entity/EnchantingTableBlockEntity#getName()Lnet/minecraft/network/chat/Component; cb79247d=0
-net/minecraft/world/level/block/entity/FuelValues#burnDuration(Lnet/minecraft/world/item/ItemStack;)I 00287d54=0
 net/minecraft/world/level/block/entity/HopperBlockEntity#canPlaceItemInContainer(Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;ILnet/minecraft/core/Direction;)Z 00287d54=0@3:f813e13b,T@3:7fd47dfd
 net/minecraft/world/level/block/entity/HopperBlockEntity#canTakeItemFromContainer(Lnet/minecraft/world/Container;Lnet/minecraft/world/Container;Lnet/minecraft/world/item/ItemStack;ILnet/minecraft/core/Direction;)Z 00287d54=0@3:be8d6060,T@3:8c888635
 net/minecraft/world/level/block/entity/HopperBlockEntity#getEntityContainer(Lnet/minecraft/world/level/Level;DDD)Lnet/minecraft/world/Container; fd2acf28=0

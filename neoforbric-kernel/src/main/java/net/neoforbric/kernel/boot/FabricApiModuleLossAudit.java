@@ -35,7 +35,6 @@ import net.neoforbric.kernel.mixin.MergedBaseMixinCompat;
 import net.neoforbric.kernel.transform.CreativePagerBridgeInjector;
 import net.neoforbric.kernel.transform.GuestInjectorPruner;
 import net.neoforbric.kernel.transform.LootTableEventBridgeInjector;
-import net.neoforbric.kernel.transform.ModelFormatFunnelInjector;
 import net.neoforbric.kernel.util.ByteScan;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
@@ -83,12 +82,10 @@ public final class FabricApiModuleLossAudit {
 			new Loss("fabric-loot-api-v3", "net/fabricmc/fabric/api/loot/v3/LootTableEvents", null,
 					"LootTableEvents.REPLACE, MODIFY and ALL_LOADED never fire",
 					() -> !LootTableEventBridgeInjector.enabled()),
-			new Loss("fabric-model-loading-api-v1", "net/fabricmc/fabric/api/client/model/loading/v1/", Side.CLIENT,
-					"ModelLoadingPlugin is never invoked",
-					() -> !GuestInjectorPruner.enabled()),
-			new Loss("fabric-model-loading-api-v1", "net/fabricmc/fabric/api/client/model/loading/v1/UnbakedModelDeserializer",
-					Side.CLIENT, "fabric:type model formats are parsed by NeoForge's loader instead",
-					() -> !ModelFormatFunnelInjector.enabled()),
+			// No fabric-model-loading-api-v1 rows on 1.21.1: both were about 26.x's model-loading rework —
+			// ModelLoadingPlugin lost to a pruned ModelManagerMixin whose lambda this base does not have, and
+			// fabric:type formats read by a deserializer registry 0.116.17 does not ship. This base keeps
+			// vanilla's ModelBakery and fabric's mixins bind as written.
 			// Not a ClassCastException, which is what this row used to say: fabric-api's class tweaker injects the
 			// interface into the screen whatever the kernel pins, so the cast works and the call is the interface's
 			// own default. owo-lib implements it, from a mixin — the pinned-contract closure leaves that mixin out.
@@ -104,10 +101,10 @@ public final class FabricApiModuleLossAudit {
 			// The CLASS, not the package: lithostitched names DynamicRegistries in the same package, which works.
 			new Loss("fabric-registry-sync-v0", "net/fabricmc/fabric/api/event/registry/DynamicRegistrySetupCallback", null,
 					"DynamicRegistrySetupCallback never fires (RegistryDataLoaderMixin is pinned)",
-					() -> MergedBaseMixinCompat.pinInForce(net.neoforbric.kernel.mixin.FabricRegistryLoaderMixinAdapter.PIN)),
-			new Loss("fabric-item-api-v1", "net/fabricmc/fabric/api/item/v1/ItemComponentTooltipProviderRegistry", null,
-					"a component tooltip provider is drawn nowhere in normal tooltips and bunched above the item id in advanced ones",
-					() -> !GuestInjectorPruner.enabled() || !GuestInjectorPruner.fabricTooltipBridgeOn()));
+					() -> MergedBaseMixinCompat.pinInForce(net.neoforbric.kernel.mixin.FabricRegistryLoaderMixinAdapter.PIN)));
+	// No fabric-item-api-v1 entry on 1.21.1: the tooltip loss this table used to carry was about 26.x's
+	// ItemComponentTooltipProviderRegistry, a surface 0.116.17 does not have — its tooltip API is the
+	// ItemTooltipCallback of vanilla's own tooltip body, which this base kept.
 
 	private static final byte[][] NEEDLES = needles();
 	private static final Map<Loss, Set<String>> USERS = new LinkedHashMap<>();

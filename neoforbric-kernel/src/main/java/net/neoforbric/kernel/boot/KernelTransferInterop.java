@@ -21,7 +21,6 @@ import net.neoforbric.kernel.util.NeoForbricLog;
 public final class KernelTransferInterop {
 	static final String BRIDGE = "net.neoforbric.kernel.runtime.transfer.BlockTransferBridge";
 	static final String ISSUES = "net.neoforbric.kernel.runtime.transfer.TransferIssues";
-	static final String TRANSACTIONS = "net.neoforbric.kernel.runtime.transfer.PairedTransactions";
 	static final String ENERGY = "net.neoforbric.kernel.runtime.transfer.RebornEnergyBridge";
 	/** A hopper against Fabric storages NeoForge's cannot see; independent of the bridge switch, like Fabric's own mixin. */
 	static final String HOPPER = "net.neoforbric.kernel.runtime.transfer.KernelFabricHopperStorage";
@@ -35,23 +34,29 @@ public final class KernelTransferInterop {
 
 	public static synchronized boolean configure(NeoForbricClassLoader loader) {
 		installed = false;
+		// 1.21.1's NeoForge has no transfer framework (that arrived with 26.x's ResourceHandler world); its
+		// capability tokens are the presence marker now, and the adapters the bridge installs speak
+		// IItemHandler/IFluidHandler/IEnergyStorage. 26.x's paired live transactions went with the framework
+		// — 21.1 capabilities are immediate with simulate booleans — so there is no TRANSACTIONS class to
+		// require and no class to lose.
 		boolean requested = !"off".equalsIgnoreCase(System.getProperty("neoforbric.transferBridge", "on"))
 				&& present(loader, "net/fabricmc/fabric/api/transfer/v1/storage/Storage.class")
-				&& present(loader, "net/neoforged/neoforge/transfer/ResourceHandler.class");
+				&& present(loader, "net/neoforged/neoforge/items/IItemHandler.class");
 		active = requested && present(loader, BRIDGE.replace('.', '/') + ".class")
-				&& present(loader, ISSUES.replace('.', '/') + ".class")
-				&& present(loader, TRANSACTIONS.replace('.', '/') + ".class");
+				&& present(loader, ISSUES.replace('.', '/') + ".class");
 		if (requested && !active) {
 			CompatibilityFindings.record(new CompatibilityFinding("transfer-component", "neoforbric",
 					"Cross-ecosystem item and fluid transfer", "KernelTransferInterop", CompatibilityFinding.Confidence.CONFIRMED,
 					true, "This kernel build is missing its transfer component; native transactions remain unchanged.",
 					List.of("transfer APIs present", "kernel transfer runtime classes absent")));
 		}
-		// NeoForge's hopper body (ContainerOrHandler) is what fabric-transfer's hopper mixin cannot attach to; a carrier
-		// without it runs Fabric's mixin as written.
+		// 1.21.1's hopper gap: VanillaInventoryCodeHooks.insertHook answers empty (false) for a Fabric storage
+		// NeoForge's item capability cannot see, and the vanilla path after it never consults Fabric's lookup —
+		// the extract hook already falls back to vanilla where fabric-transfer's mixin binds. A carrier without
+		// those hooks runs Fabric's mixin as written.
 		boolean hopperWanted = !"off".equalsIgnoreCase(System.getProperty("neoforbric.hopperFabricStorage", "on"))
 				&& present(loader, "net/fabricmc/fabric/api/transfer/v1/item/ItemStorage.class")
-				&& present(loader, "net/neoforged/neoforge/transfer/item/ContainerOrHandler.class");
+				&& present(loader, "net/neoforbric/neoforge/items/VanillaInventoryCodeHooks.class");
 		hopper = hopperWanted && present(loader, HOPPER.replace('.', '/') + ".class");
 		if (hopperWanted && !hopper) {
 			CompatibilityFindings.record(new CompatibilityFinding("transfer-hopper-component", "neoforbric",
@@ -77,7 +82,7 @@ public final class KernelTransferInterop {
 	/** Whether hoppers ask Fabric's item storage lookup where NeoForge's found nothing (HopperFabricStorageInjector). */
 	public static boolean hopperActive() { return hopper; }
 	static boolean ownsOptionalRuntime(String name) {
-		return BRIDGE.equals(name) || ISSUES.equals(name) || TRANSACTIONS.equals(name) || ENERGY.equals(name) || HOPPER.equals(name);
+		return BRIDGE.equals(name) || ISSUES.equals(name) || ENERGY.equals(name) || HOPPER.equals(name);
 	}
 	/** For an optional runtime class: whether this boot needs it. */
 	static boolean optionalRuntimeActive(String name) { return ENERGY.equals(name) ? energy : HOPPER.equals(name) ? hopper : active; }

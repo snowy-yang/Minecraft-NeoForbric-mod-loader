@@ -333,7 +333,6 @@ public final class NeoForbricMixinService
 		FabricSoundMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		FabricFluidFlowMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		FabricSectionCompilerMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
-		FabricBlockStateCodecMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		// …and an @Inject anchored on a call the merged body makes through a subtype of the same method
 		// (Decoder.parse → Codec.parse: lithostitched's Fabric load predicates) moves to that one call.
 		MixinSubtypeOwnerRetarget.adapt(node, this::mergedBaseNodeWithCode);

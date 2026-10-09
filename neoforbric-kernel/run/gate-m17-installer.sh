@@ -313,7 +313,7 @@ fi
 step "the installed version runs the tri-ecosystem game (must PASS)"
 check "the kernel booted from the profile" "NeoForbric/Boot\] sovereign kernel — client" "$CLOG"
 check "it opened the merged base"          "NeoForbric/Boot\] merged base"               "$CLOG"
-check "mods from all three ecosystems"     "NeoForbric/Boot\] sovereign kernel .*Forge-family mod\(s\), [1-9]" "$CLOG"
+check "mods from both ecosystems"         "NeoForbric/Boot\] sovereign kernel .*Forge-family mod\(s\), [1-9]" "$CLOG"
 check "the smoke controller armed"         "ClientSmoke\] armed on Minecraft.tick"    "$CLOG"
 check "it entered the world"               "ClientSmoke\] client-ready after"         "$CLOG"
 check "it left cleanly"                    "ClientSmoke\] clean disconnect observed"  "$CLOG"
@@ -369,7 +369,7 @@ else
   # nothing is wrong. (That is how this assertion failed the first time it was written.)
   printf 'not a jar at all' > "$TOOLS"
   echo "mc=$MC_VERSION forge=PRETEND-OTHER neoforge=PRETEND-OTHER nfrt=0 result=none tools=none" \
-    > "$DEST/.neoforbric-build/out/patched-mc-merged-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar.pins"
+    > "$DEST/.neoforbric-build/out/patched-mc-neoforge-1.21.1.jar.pins"
   java -jar "$JAR" --dir "$DEST" --mc "$MC_VERSION" > "$BUILD/gate-m17-install-4.log" 2>&1
   check_absent "the merge re-runs, so the tool is actually asked for" "^\[merge\] up-to-date" \
     "$BUILD/gate-m17-install-4.log"

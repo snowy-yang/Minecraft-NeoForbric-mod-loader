@@ -4,7 +4,7 @@
 # GATE-PARALLEL: mem=2000
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-MERGED="${MERGED:-$RUN_OLD/merged-base/patched-mc-merged-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar}"
+MERGED="${MERGED:-$RUN_OLD/neoforge-base/patched-mc-neoforge-1.21.1.jar}"
 NEO_RT="${NEO_RT:-$RUN_OLD/neoforge-runtime/neoforge-runtime.jar}"
 export MERGED NEO_RT
 if [ "${1:-}" = --execute ]; then

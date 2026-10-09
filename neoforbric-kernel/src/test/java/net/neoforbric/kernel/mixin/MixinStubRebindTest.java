@@ -20,8 +20,10 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TypeInsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
 import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.BasicVerifier;
@@ -672,12 +674,16 @@ class MixinStubRebindTest {
 	private static final String CALLBACK_INFO_RETURNABLE = "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;";
 
 	/**
-	 * torrential's fuel modifier captures all three of the stub's arguments after the value it modifies. Two of them
-	 * go into a Builder and never reach the body, so on the body MixinExtras rejects the handler — it stays on the
+	 * A return modifier capturing all three of the stub's arguments after the value it modifies. Two of them go
+	 * into a Builder and never reach the body, so on the body MixinExtras rejects the handler — it stays on the
 	 * stub, where it binds, and both adapters and the verdict say so.
+	 *
+	 * <p>The stub pair is built here rather than read from the staged base: the pair this was written against
+	 * (26.x's FuelValues) does not exist on 1.21.1, and the rule the test guards — a handler capturing what the
+	 * delegate never receives cannot move — is about shapes, not about that class.
 	 */
 	@Test void aReturnModifierCapturingTheStubsArgumentsStaysOnTheStub() throws Exception {
-		ClassNode fuel = merged(FUEL);
+		ClassNode fuel = stubPair();
 		ClassNode mixin = synthetic("sircow/torrential/mixin/FuelValuesMixin", FUEL, "torrential$modifyFuelValues",
 				"(" + FUEL_VALUES + PROVIDER + FLAGS + "I)" + FUEL_VALUES, true, injector(MODIFY_RETURN, STUB_BURN, List.of(at("RETURN"))));
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC, "torrential.mixins.json");
@@ -686,8 +692,7 @@ class MixinStubRebindTest {
 		assertTrue(CompatibilityFindings.all().isEmpty(), "asking where it would go reports nothing");
 		assertEquals(0, MixinStubRebind.adapt(mixin, name -> fuel));
 		assertEquals(List.of(STUB_BURN), selectors(mixin, "torrential$modifyFuelValues"));
-		// It binds on the stub and runs only where the stub is called (the merged server reaches it only through the
-		// kernel's fuel bridge, KernelFabricFuel.throughVanillaReturnHooks).
+		// It binds on the stub and runs only where the stub is called.
 		List<CompatibilityFinding> stays = CompatibilityFindings.all();
 		assertEquals(1, stays.size(), stays.toString());
 		assertEquals(CompatibilityFinding.Confidence.SUSPECTED, stays.getFirst().confidence());
@@ -716,6 +721,46 @@ class MixinStubRebindTest {
 		assertEquals(1, MixinStubRebind.adapt(plain, name -> fuel), "no capture: the move it always made");
 		assertEquals(List.of(BODY_BURN), selectors(plain, "modify"));
 		assertTrue(CompatibilityFindings.all().isEmpty(), "a handler that moves is nothing to report");
+	}
+
+	/**
+	 * The carrier's forwarding pair by shape: a stub taking the old signature whose leading arguments feed a
+	 * Builder, and the body that takes that Builder. {@code new Builder(provider, flags)} consumes the two the
+	 * handler captures, so the trailing captures cannot follow the move — the exact seam the rule guards.
+	 */
+	private static ClassNode stubPair() {
+		ClassNode pair = new ClassNode();
+		pair.version = Opcodes.V21;
+		pair.name = FUEL;
+		pair.superName = "java/lang/Object";
+		pair.methods = new java.util.ArrayList<>();
+
+		MethodNode stub = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "vanillaBurnTimes",
+				"(" + PROVIDER + FLAGS + "I)" + FUEL_VALUES, null, null);
+		stub.instructions.add(new TypeInsnNode(Opcodes.NEW, FUEL + "$Builder"));
+		stub.instructions.add(new InsnNode(Opcodes.DUP));
+		stub.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		stub.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		stub.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, FUEL + "$Builder", "<init>",
+				"(" + PROVIDER + FLAGS + ")V", false));
+		stub.instructions.add(new VarInsnNode(Opcodes.ASTORE, 3));
+		stub.instructions.add(new VarInsnNode(Opcodes.ALOAD, 3));
+		stub.instructions.add(new VarInsnNode(Opcodes.ILOAD, 2));
+		stub.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, FUEL, "vanillaBurnTimes",
+				"(" + BUILDER + "I)" + FUEL_VALUES, false));
+		stub.instructions.add(new InsnNode(Opcodes.ARETURN));
+		stub.maxStack = 4;
+		pair.methods.add(stub);
+
+		MethodNode body = new MethodNode(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "vanillaBurnTimes",
+				"(" + BUILDER + "I)" + FUEL_VALUES, null, null);
+		body.instructions.add(new TypeInsnNode(Opcodes.NEW, FUEL));
+		body.instructions.add(new InsnNode(Opcodes.DUP));
+		body.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, FUEL, "<init>", "()V", false));
+		body.instructions.add(new InsnNode(Opcodes.ARETURN));
+		body.maxStack = 2;
+		pair.methods.add(body);
+		return pair;
 	}
 
 	/** puzzleslib's break-speed modifier captures the state, which the stub passes through first: it still moves. */

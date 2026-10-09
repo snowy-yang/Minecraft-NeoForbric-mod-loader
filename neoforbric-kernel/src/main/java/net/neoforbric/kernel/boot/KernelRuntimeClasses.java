@@ -121,7 +121,6 @@ public final class KernelRuntimeClasses {
 		// See KernelRegistryContent.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelRegistryContent", new Entry(Origin.COMPILED, List.of(
 				new Call("rebuildBlockStateIds", int.class),
-				new Call("rebuildFlowerPotTable", int.class),
 				new Call("initialiseBlockStateCaches", int.class),
 				new Call("initialiseBlockInfoCaches", boolean.class),
 				new Call("sortCreativeTabs", void.class),
@@ -151,10 +150,9 @@ public final class KernelRuntimeClasses {
 		// Called by the merged HopperBlockEntity's bytecode (HopperFabricStorageInjector); required whenever
 		// fabric-transfer-api and NeoForge's hopper are both present, with or without the bridge.
 		CLASSES.put(KernelTransferInterop.HOPPER, new Entry(Origin.COMPILED, List.of()));
-		CLASSES.put(KernelTransferInterop.TRANSACTIONS, new Entry(Origin.COMPILED, List.of(
-				new Call("beforeOpen", void.class), new Call("beforeClose", void.class, Object.class, boolean.class),
-				new Call("afterClose", void.class, Object.class, Throwable.class),
-				new Call("fabricFinal", void.class, Object.class, Object.class), new Call("neoFinal", void.class, Object.class))));
+		// No PairedTransactions entry on this line: 26.x paired live transaction objects across ecosystems
+		// through the neo transfer framework's TransactionContext; 1.21.1 capabilities are immediate with
+		// simulate booleans, so the adapters carry no paired journals at all.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelLootModifiers", new Entry(Origin.COMPILED, List.of()));
 		// The two calls LootTableEventBridgeInjector routes out of ReloadableServerRegistries, so fabric-loot-api-v3's
 		// callbacks fire at NeoForge's own loot-load point. Named as an ASM owner, so no Call entries.
@@ -181,19 +179,17 @@ public final class KernelRuntimeClasses {
 		// mod-loading window sits before the game's first resource reload. See KernelClientResources.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelClientResources", new Entry(Origin.COMPILED, List.of(
 				new Call("preload", int.class))));
-		// fabric-content-registries' fuel events on NeoForge's fuel builder; FabricFuelValuesInjector calls apply.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelFabricFuel", new Entry(Origin.COMPILED, List.of()));
 		// Fabric's fluid models for NeoForge's completeness check; FabricFluidModelsInjector calls hasModel.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelFabricFluidModels", new Entry(Origin.COMPILED, List.of()));
 		// Vanilla's compostables map behind NeoForge's data map: the merged ComposterBlock's bootStrap records vanilla's
 		// own entries and its four composter sites ask the rest (CompostablesFallbackInjector); no boot-side call.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelCompostables", new Entry(Origin.COMPILED, List.of()));
-		// NeoForge's item tooltip appenders, built once from the kernel's copy of postRegisterEvents' tail; also the
-		// per-container delivery NeoTooltipAppendersInjector sends ItemTooltipHandler.init's event through.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelNeoTooltips", new Entry(Origin.COMPILED, List.of(
-				new Call("init", void.class))));
-		// NeoForge's recipe-sync payload without the recipes their own serializer cannot encode; CommonHooks.sendRecipes.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelRecipeSync", new Entry(Origin.COMPILED, List.of()));
+		// No KernelNeoTooltips on this line: 26.x's NeoForge rebuilt item tooltips over appender lists, which the
+		// kernel had to build and thread Fabric's component providers through. 1.21.1 keeps vanilla's tooltip body
+		// (NeoForge adds attribute lines and the ItemTooltipEvent at the end), so fabric-item-api binds it natively
+		// and the kernel draws no tooltips of its own.
+		// No KernelRecipeSync on this line: the recipe-sync payload it filtered was 26.x's CommonHooks.sendRecipes
+		// path, which 1.21.1 does not have.
 		// The unified Mods screen. Named by ModsButtonRedirector as an ASM internal name rather than called, so
 		// it has no Call entries — the seam is the class existing and carrying a (Screen) constructor, and a
 		// missing runtime jar would otherwise surface as a NoClassDefFoundError the moment a player opens the
@@ -221,8 +217,6 @@ public final class KernelRuntimeClasses {
 		// their descriptors are the ones the merged base and the carrier already had — game types, not the JDK
 		// types this registry's own seams use. Listed with no calls for that reason alone.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelNeoWorldgen", new Entry(Origin.COMPILED, List.of()));
-		// Same shape as the one below: reached from a redirected instruction in BaseSpawner, not from boot code.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelSpawnerFinalize", new Entry(Origin.COMPILED, List.of()));
 		// Called from the position check SpawnPositionCallsInjector writes into BaseSpawner.serverTick.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelSpawnPosition", new Entry(Origin.COMPILED, List.of()));
 		// NeoForge's coremods, done after Mixin (NativeCoremodParity) and before it (BiomeInfoRebaseInjector):
@@ -249,20 +243,14 @@ public final class KernelRuntimeClasses {
 		// the creative screen call the first, and the screen implements the second. Descriptors name game types only.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelCreativePager", new Entry(Origin.COMPILED, List.of()));
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelCreativePagerScreen", new Entry(Origin.COMPILED, List.of()));
-		// NeoForge refuses to NAME a client reload listener a mixin added, and throws inside Minecraft.<init>.
-		// Called from a REWRITTEN CALL SITE, so it carries that site's game-typed descriptor.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelClientReloadNames", new Entry(Origin.COMPILED, List.of()));
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelServerReloadNames", new Entry(Origin.COMPILED, List.of()));
+		// No reload-listener naming classes on this line: 1.21.1 has no name-keyed reload listener graph.
 		// fabric-api's own two mixins for fabric:load_conditions cannot apply on the merged base, so nothing
 		// evaluated them. Wrapped into ConditionalOps' one codec factory by an inserted instruction, in Codec,
 		// which no JDK type can stand for.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelFabricConditions", new Entry(Origin.COMPILED, List.of()));
-		// NeoForge's model deserializer throws on a loader it did not register and never reads fabric:type. Called
-		// from an inserted instruction ahead of its dispatch, with the JsonObject and context NeoForge holds there.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelModelFormats", new Entry(Origin.COMPILED, List.of()));
-		// fabric-model-loading replaces the merged block-state codecs outright; FabricBlockStateCodecMixinAdapter makes
-		// its two redirect handlers keep NeoForge's and call this with both. Codec-typed, from guest mixin code.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelBlockStateModelFormats", new Entry(Origin.COMPILED, List.of()));
+		// No model-format runtime classes on these lines: 26.x's UnbakedModelParser dispatch and the
+		// BlockStateModel.Unbaked codec rework do not exist on 1.21.1, where vanilla's ModelBakery reads block
+		// models and each ecosystem's loaders sit where they always did.
 		// Between a NeoForge mod's getContextClassLoader() and its cast to FML's TransformingClassLoader
 		// (FmlContextLoaderRewriter): LibJF's ASM layer reaches the Mixin weaver through what it returns.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelFmlTransformerView", new Entry(Origin.COMPILED, List.of(
@@ -270,9 +258,8 @@ public final class KernelRuntimeClasses {
 		// Generated per boot by KernelHudBridge when fabric-rendering-v1 is present: it implements both
 		// HudElement and GuiLayer, and fabric-api is not on the runtime source set's compile classpath.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelHudLayer", new Entry(Origin.GENERATED, List.of()));
-		// Fills GuiRenderer's orphaned vanilla picture-in-picture map from the constructor's list. Named only as
-		// an ASM internal name by the merged-base transformer, so no Call entries.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelPipRenderers", new Entry(Origin.COMPILED, List.of()));
+		// No KernelPipRenderers on this line: the picture-in-picture render framework it served was 26.x's
+		// GuiRenderer world, which 1.21.1 does not have.
 	}
 
 	private KernelRuntimeClasses() {

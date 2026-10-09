@@ -51,7 +51,7 @@ import net.neoforbric.kernel.mixin.MixinWeaverSlot;
 
 /**
  * {@link FmlContextLoaderRewriter} puts {@code KernelFmlTransformerView.contextLoader} between a NeoForge mod's
- * {@code getContextClassLoader()} and its cast to FML's {@code TransformingClassLoader} — there and nowhere else.
+ * {@code getContextClassLoader()} and its cast to modlauncher's {@code TransformingClassLoader} — there and nowhere else.
  *
  * <p>LibJF's mixin plugin ({@code libjf_unsafe_v0}) is the class that paid for it: that pair is its first two
  * instructions, and under the kernel the cast threw, so "Could not initialize LibJF ASM" and no {@code libjf:asm}
@@ -139,7 +139,7 @@ class FmlContextLoaderRewriterTest {
 		}
 	}
 
-	/** The real class: LibJF's mixin plugin as it ships inside libjf-26.2.2+forge.jar, one rewrite and one only. */
+	/** The real class: LibJF's mixin plugin as it ships inside libjf-3.17.4+forge.jar, one rewrite and one only. */
 	@Test
 	void libJfsOwnMixinPluginIsRewrittenAtItsOneCast() throws Exception {
 		byte[] plugin = libJfPlugin();
@@ -286,19 +286,19 @@ class FmlContextLoaderRewriterTest {
 
 	/** LibJF's mixin plugin out of the nested libjf-unsafe-v0 jar; skipped when the sweep pack is not here. */
 	private static byte[] libJfPlugin() throws Exception {
-		Path outer = Path.of("build/compat-inputs/sweep90/mods/libjf-26.2.2+forge.jar");
+		Path outer = Path.of("build/compat-inputs/sweep90/mods/libjf-3.17.4+forge.jar");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(outer),
 				"the sweep90 pack (build/compat-inputs) is not linked into this checkout");
 		// The jar is pinned by its full name, so a present one without the plugin has changed under the test.
 		try (ZipFile zip = new ZipFile(outer.toFile())) {
-			ZipEntry nested = zip.getEntry("META-INF/jars/libjf-unsafe-v0-26.2.2+forge.jar");
-			assertNotNull(nested, "content drift: " + outer + " no longer nests libjf-unsafe-v0-26.2.2+forge.jar");
+			ZipEntry nested = zip.getEntry("META-INF/jars/libjf-unsafe-v0-3.17.4+forge.jar");
+			assertNotNull(nested, "content drift: " + outer + " no longer nests libjf-unsafe-v0-3.17.4+forge.jar");
 			try (InputStream in = zip.getInputStream(nested); JarInputStream jar = new JarInputStream(in)) {
 				for (ZipEntry e = jar.getNextEntry(); e != null; e = jar.getNextEntry()) {
 					if (PLUGIN.equals(e.getName())) return jar.readAllBytes();
 				}
 			}
 		}
-		throw new AssertionError("content drift: libjf-unsafe-v0-26.2.2+forge.jar no longer ships " + PLUGIN);
+		throw new AssertionError("content drift: libjf-unsafe-v0-3.17.4+forge.jar no longer ships " + PLUGIN);
 	}
 }

@@ -28,7 +28,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * Decides whether a {@code pack.mcmeta} section that will not parse is fatal to the WHOLE pack.
  *
  * <p>On a normal instance exactly one loader is running, so a pack only ever meets the metadata parsers that
- * loader ships. On NeoForbric all three are running at once, and a multiloader mod's {@code pack.mcmeta} carries a
+ * loader ships. On NeoForbric both are running at once, and a multiloader mod's {@code pack.mcmeta} carries a
  * section per loader — so a Fabric-only build gets read by NeoForge's parser, which then resolves things only a
  * NeoForge build would have registered.
  *

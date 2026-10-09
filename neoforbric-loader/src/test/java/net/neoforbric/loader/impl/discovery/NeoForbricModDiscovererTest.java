@@ -195,7 +195,7 @@ class NeoForbricModDiscovererTest {
 				+ "[[mixins]]\n"
 				+ "config=\"multimixin.neoforge.mixins.json\"\n"; // absent -> dropped
 
-		Map<String, String> entries = entry("META-INF/mods.toml", toml);
+		Map<String, String> entries = entry("META-INF/neoforge.mods.toml", toml);
 		entries.put("multimixin.mixins.json", "{ \"package\": \"com.example.mixin\" }");
 
 		Path jar = writeJar(mods, "multimixin.jar", entries, "1.0.0");

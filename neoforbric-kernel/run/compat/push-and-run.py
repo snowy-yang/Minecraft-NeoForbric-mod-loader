@@ -31,12 +31,12 @@ CLEAN = ('config', 'mods', 'saves', 'logs', '.neoforbric-kernel', '.mixin.out', 
          'crash-reports', 'screenshots', 'server-gen', 'quickPlay', 'resourcepacks',
          'defaultconfigs', '.cache', '.physics_mod_cache', 'replay_recordings', 'client-console.log',
          'server-console.log', 'bisect-console.log')
+# MinecraftForge's runtime is gone from the project, and with it the three-way merged base: the game base
+# the kernel opens is NeoForge's own patched jar alone. A profile that still names the old coordinates is
+# refused below rather than silently staged from a stale tree.
 ARTIFACTS = {
     'net.neoforbric:neoforbric-kernel': KERNEL / 'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar',
-    'net.neoforbric:patched-mc-merged': STAGED / 'merged-base/patched-mc-merged-1.21.1.jar',
-    'net.neoforbric:forge-runtime': (STAGED / 'merged-base/forge-runtime-interop.jar'
-                                if (STAGED / 'merged-base/forge-runtime-interop.jar').is_file()
-                                else STAGED / 'forge-runtime/forge-runtime.jar'),
+    'net.neoforbric:patched-mc-neoforge': STAGED / 'neoforge-base/patched-mc-neoforge-1.21.1.jar',
     'net.neoforbric:neoforge-runtime': STAGED / 'neoforge-runtime/neoforge-runtime.jar',
 }
 

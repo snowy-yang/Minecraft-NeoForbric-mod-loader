@@ -34,7 +34,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  *
  * <p>The merged base's title screen draws NeoForge's {@code BrandingControl}: "NeoForge 26.2.0.88 (N mods loaded)",
  * where N is NeoForge's {@code ModList} — only the NeoForge mods. It now reads
- * {@code neoforbric-v0.3.1-beta (N mods loaded)} with N every mod the player installed, of all three ecosystems
+ * {@code neoforbric-v0.3.1-beta (N mods loaded)} with N every mod the player installed, of both ecosystems
  * ({@code NeoForbricBranding.installedModCount}, what NeoForbric's Mods screen lists). F3's
  * "Minecraft 26.2 (26.2-neoforbric/neoforge)" — the launcher's profile id and the client brand — reads
  * "Minecraft 26.2 (neoforbric-v0.3.1-beta/neoforbric)".

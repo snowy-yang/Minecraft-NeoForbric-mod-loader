@@ -94,7 +94,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("FabricSoundMixinAdapter", new Switch(List.of("neoforbric.fabricSoundContracts"), "net.neoforbric.kernel.transform.FabricSoundContractTransformer")),
 			Map.entry("FabricEnchantmentMixinAdapter", new Switch(List.of("neoforbric.fabricItemContracts"), "net.neoforbric.kernel.transform.FabricItemContractTransformer")),
 			Map.entry("FabricRegistryLoaderMixinAdapter", Switch.own("neoforbric.fabricRegistryLoader")),
-			Map.entry("FabricBlockStateCodecMixinAdapter", Switch.own("neoforbric.blockStateModelFormats")),
 			Map.entry("FabricEntityMixinAnchors", Switch.own("neoforbric.fabricEntityAnchors")),
 			Map.entry("FabricClientMixinAnchors", Switch.own("neoforbric.fabricClientAnchors")),
 			Map.entry("FabricBlockBreakMixinAdapter", Switch.own("neoforbric.fabricBlockBreak")),

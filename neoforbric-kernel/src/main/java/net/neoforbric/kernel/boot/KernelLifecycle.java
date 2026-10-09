@@ -58,8 +58,6 @@ public final class KernelLifecycle {
 	// ClientNeoForgeMod on the same bus and route the game's mod-bus events to it.
 	private static volatile Object baselineBus;
 	private static volatile Object baselineContainer;
-	/** {@code -Dneoforbric.neoTooltipAppenders=off} leaves NeoForge's item tooltip appenders unbuilt, as the kernel used to. */
-	public static final String NEO_TOOLTIP_APPENDERS = "neoforbric.neoTooltipAppenders";
 
 	private KernelLifecycle() {
 	}
@@ -267,8 +265,9 @@ public final class KernelLifecycle {
 	 */
 	private static void rebuildNeoForgeBlockStateIds(ClassLoader cl) {
 		contentCall(cl, "rebuildBlockStateIds", "rebuild the NeoForge blockstate→id map");
-		// The pot half of the same bake callback: NeoForge's flower pot table, which every pot lookup reads.
-		contentCall(cl, "rebuildFlowerPotTable", "fill NeoForge's flower pot table");
+		// No flower pot refill on this line: 26.x's NeoForge filled its pot table in a registry bake
+		// callback the kernel's own registration window skipped; 1.21.1's pots register themselves in
+		// FlowerPotBlock's constructor, so the table is whole whatever window ran.
 		// Same moment, same reason: vanilla fills every block state's cache in Bootstrap, before any mod has
 		// registered a block, and the kernel drives registration itself.
 		contentCall(cl, "initialiseBlockStateCaches", "initialise the block state caches");
@@ -692,15 +691,9 @@ public final class KernelLifecycle {
 				invokeStaticOn(cl, "net.minecraft.world.entity.SpawnPlacements", "fireSpawnPlacementEvent");
 			postModBusEvent(cl, "net.neoforged.neoforge.event.BlockEntityTypeAddBlocksEvent");
 			invokeStaticOn(cl, "net.minecraft.world.level.gamerules.GameRuleCategory", "registerModdedCategories");
-			// Last in postRegisterEvents: NeoForge builds its item tooltip appenders — every vanilla component line
-			// (enchantments, lore, attributes, durability, …) and every mod's. Left out of this copy of the tail,
-			// the merged ItemStack's dispatcher walked three empty lists and tooltips showed only the name.
-			if (!"off".equalsIgnoreCase(System.getProperty(NEO_TOOLTIP_APPENDERS, "on"))) {
-				invokeStaticOn(cl, "net.neoforbric.kernel.runtime.KernelNeoTooltips", "init");
-			} else {
-				NeoForbricLog.warn("[NeoForbric/Tooltips] NeoForge's tooltip appenders left unbuilt with -D%s=off — item "
-						+ "tooltips show no component lines", NEO_TOOLTIP_APPENDERS);
-			}
+			// Not on this line: 26.x's NeoForge built item tooltip appenders here, which this copy of the tail had
+			// to rebuild (ItemTooltipHandler.init). 1.21.1's NeoForge keeps vanilla's tooltip body, so there are no
+			// appender lists to fill and nothing to rebuild.
 			NeoForbricLog.info("[NeoForbric/Lifecycle] fired RegisterEvent x%d on %d bus(es) [NeoForge baseline + %d mod(s)]",
 					n, buses.size(), buses.size() - 1);
 			logRegisteredContent(cl);
@@ -1423,7 +1416,7 @@ public final class KernelLifecycle {
 	 * before the mods'. And it is delivered phase by phase, as {@code ModLoader.postEvent} does: every mod's
 	 * {@code HIGHEST} listeners, then every mod's {@code HIGH}, and so on. One container at a time with all its phases
 	 * would let an earlier mod's {@code LOWEST} listener run before a later mod's {@code HIGHEST}; for an event whose
-	 * registration order is draw order ({@code RegisterTooltipAppendersEvent}) that is visible on screen.
+	 * registration order is observable behaviour (a registry's, an enum's) that is visible in the game.
 	 */
 	private static void postModBusEvent(ClassLoader cl, String eventClassName) {
 		Object event;
@@ -1445,8 +1438,7 @@ public final class KernelLifecycle {
 
 	/**
 	 * The same per-container delivery for a mod-bus event game code built itself and would have handed to
-	 * {@code ModLoader.postEvent} — {@code ItemTooltipHandler.init}'s {@code RegisterTooltipAppendersEvent}. Returns
-	 * how many containers took it.
+	 * {@code ModLoader.postEvent}. Returns how many containers took it.
 	 */
 	public static int postModBusEvent(Object event) {
 		ClassLoader cl = event.getClass().getClassLoader();

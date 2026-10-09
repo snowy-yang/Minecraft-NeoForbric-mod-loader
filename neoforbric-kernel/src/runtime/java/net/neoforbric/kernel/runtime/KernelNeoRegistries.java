@@ -32,7 +32,7 @@ import net.neoforbric.kernel.util.NeoForbricLog;
 import net.neoforbric.kernel.util.Reflect;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.GameData;
@@ -141,18 +141,18 @@ public final class KernelNeoRegistries {
 	 */
 	private static List<Object> inRegistrationOrder(List<Object> registries) {
 		try {
-			Set<Identifier> ids = GameData.getRegistrationOrder();
+			Set<ResourceLocation> ids = GameData.getRegistrationOrder();
 			if (ids == null || ids.isEmpty()) return registries;
 
 			Map<String, Integer> rank = new HashMap<>();
 			int next = 0;
-			for (Identifier id : ids) rank.putIfAbsent(String.valueOf(id), next++);
+			for (ResourceLocation id : ids) rank.putIfAbsent(String.valueOf(id), next++);
 			int unranked = rank.size();
 
 			Map<Object, Integer> ranked = new IdentityHashMap<>();
 			for (Object registry : registries) {
 				ResourceKey<? extends Registry<?>> key = ((Registry<?>) registry).key();
-				ranked.put(registry, rank.getOrDefault(String.valueOf(key.identifier()), unranked));
+				ranked.put(registry, rank.getOrDefault(String.valueOf(key.location()), unranked));
 			}
 
 			List<Object> sorted = new ArrayList<>(registries);

@@ -19,7 +19,7 @@ package net.neoforbric.kernel.runtime;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.WritableRegistry;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.tags.TagLoader;
@@ -45,18 +45,15 @@ public final class KernelLootBridge {
 	}
 
 	/** {@code ReloadableServerRegistries.lambda$scheduleRegistryLoad$1}'s call, for every loaded table. */
-	public static LootTable loadLootTable(HolderLookup.Provider provider, Identifier id, LootTable table) {
+	public static LootTable loadLootTable(HolderLookup.Provider provider, ResourceLocation id, LootTable table) {
 		LootTable neo = EventHooks.loadLootTable(provider, id, table);
 		if (neo == null) return null;
 		Object fabric = LootTableEventDispatch.afterLoad(provider, ResourceKey.create(Registries.LOOT_TABLE, id), id, neo);
 		return fabric instanceof LootTable result ? result : neo;
 	}
 
-	/** {@code ReloadableServerRegistries.lambda$scheduleRegistryLoad$0}'s call, once per reloadable registry. */
-	public static void loadTagsForRegistry(ResourceManager resources, WritableRegistry<?> registry) {
-		TagLoader.loadTagsForRegistry(resources, registry);
-		if (Registries.LOOT_TABLE.equals(registry.key())) {
-			LootTableEventDispatch.allLoaded(resources, registry);
-		}
-	}
+	// 1.21.1: the tag-load site this shim answered to is gone — ReloadableServerRegistries parses loot elements
+	// only, and the loot registry's tags load through RegistryDataLoader during the datapack load, so Fabric's
+	// own ALL_LOADED fires from the ReloadableServerRegistriesMixin the base now admits. Nothing left to bridge
+	// here except the per-table hook below.
 }

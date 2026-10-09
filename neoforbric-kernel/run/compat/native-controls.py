@@ -25,12 +25,14 @@ SOURCE = KERNEL / "canary/native-controls"
 ORIGINAL = Path(os.environ.get("NATIVE_CONTROL_CACHE", Path(os.environ["NEOFORBRIC_OLD"]).resolve().parent
                               if os.environ.get("NEOFORBRIC_OLD") else KERNEL.parent))
 MC = Path(os.environ.get("MC_DIR", Path.home() / "Library/Application Support/minecraft"))
-VERSIONS = {"fabric": "0.19.5", "forge": "65.0.1", "neo": "26.2.0.88"}
+# MinecraftForge is gone from this project: NeoForge 21.1.256 is the only Forge-family native control.
+# Loader 0.19.5 is the same reference the kernel pins for 1.21.1, so both native arms run the era this
+# repository is anchored to.
+VERSIONS = {"fabric": "0.19.5", "neo": "21.1.256"}
 INSTALLERS = {
-    "forge": "https://maven.minecraftforge.net/net/minecraftforge/forge/26.2-65.0.1/forge-26.2-65.0.1-installer.jar",
-    "neo": "https://maven.neoforged.net/releases/net/neoforged/neoforge/26.2.0.88/neoforge-26.2.0.88-installer.jar",
+    "neo": "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.256/neoforge-21.1.256-installer.jar",
 }
-FABRIC_LAUNCHER = "fabric-server-mc26.2-loader0.19.5-launcher1.1.2.jar"
+FABRIC_LAUNCHER = "fabric-server-mc1.21.1-loader0.19.5-launcher1.1.2.jar"
 SEED = 8035262
 
 
@@ -69,7 +71,7 @@ def copy_file(source, destination):
 
 
 def fapi_source():
-    return ORIGINAL / "neoforbric-kernel/run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar"
+    return ORIGINAL / "neoforbric-kernel/run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar"
 
 
 def install(family):
@@ -117,8 +119,7 @@ def install(family):
     vanilla = ORIGINAL / "neoforbric-kernel/run/.gate-downloads/fab-server/.fabric/server/1.21.1-server.jar"
     metadata = json.loads((MC / "versions/1.21.1/1.21.1.json").read_text())
     assert sha(vanilla, "sha1") == metadata["downloads"]["server"]["sha1"]
-    suffix = "-bundled" if family == "forge" else ""
-    copy_file(vanilla, image / f"libraries/net/minecraft/server/1.21.1/server-1.21.1{suffix}.jar")
+    copy_file(vanilla, image / "libraries/net/minecraft/server/1.21.1/server-1.21.1.jar")
     # The installer's existing-output verification is deliberately retained on repeated prepare calls.
     command = ["java", "-jar", str(installer), "--installServer", "."]
     run_logged(command, image, image / "installer-console.log")
@@ -139,7 +140,7 @@ def compile_canaries():
     modules.mkdir(parents=True, exist_ok=True)
     fapi = fapi_source()
     with zipfile.ZipFile(fapi) as archive:
-        assert json.loads(archive.read("fabric.mod.json"))["version"] == "0.155.2+26.2"
+        assert json.loads(archive.read("fabric.mod.json"))["version"] == "0.116.17+1.21.1"
         for name in archive.namelist():
             if name.startswith("META-INF/jars/") and name.endswith(".jar"):
                 (modules / Path(name).name).write_bytes(archive.read(name))
@@ -153,11 +154,8 @@ def compile_canaries():
             with zipfile.ZipFile(image / ".fabric/server/1.21.1-server.jar") as bundle:
                 game.write_bytes(bundle.read("META-INF/versions/1.21.1/server-1.21.1.jar"))
             classpath = [game, *jars(image), *sorted(modules.glob("*.jar"))]
-        elif family == "forge":
-            game = image / "libraries/net/minecraftforge/forge/26.2-65.0.1/forge-26.2-65.0.1-server.jar"
-            classpath = [game, *jars(image)]
         else:
-            game = image / "libraries/net/neoforged/minecraft-server-patched/26.2.0.88/minecraft-server-patched-26.2.0.88.jar"
+            game = image / "libraries/net/neoforged/minecraft-server-patched/21.1.256/minecraft-server-patched-21.1.256.jar"
             classpath = [game, *jars(image)]
         destination = BASE / "compile" / family
         if destination.exists():
@@ -171,7 +169,7 @@ def compile_canaries():
         # Deterministic jar bytes allow exact jar identity between arms and across an unchanged rebuild.
         with zipfile.ZipFile(artifact, "w", zipfile.ZIP_DEFLATED) as archive:
             entries = [(p.relative_to(destination).as_posix(), p) for p in sorted(destination.rglob("*.class"))]
-            metadata = "fabric.mod.json" if family == "fabric" else "META-INF/" + ("mods.toml" if family == "forge" else "neoforge.mods.toml")
+            metadata = "fabric.mod.json" if family == "fabric" else "META-INF/neoforge.mods.toml"
             entries.append((metadata, SOURCE / family / metadata))
             for name, path in entries:
                 info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0)); info.compress_type = zipfile.ZIP_DEFLATED
@@ -185,8 +183,7 @@ def compile_canaries():
 def native_command(family, image, java_args):
     if family == "fabric":
         return ["java", *java_args, "-jar", FABRIC_LAUNCHER, "--nogui"]
-    group, version = ("net/minecraftforge/forge", "26.2-65.0.1") if family == "forge" else ("net/neoforged/neoforge", "26.2.0.88")
-    return ["java", *java_args, f"@libraries/{group}/{version}/unix_args.txt", "nogui"]
+    return ["java", *java_args, "@libraries/net/neoforged/neoforge/21.1.256/unix_args.txt", "nogui"]
 
 
 def terminate_owned(process):
@@ -211,7 +208,7 @@ def run_control(family, engine, timeout):
     canary = artifacts / f"nativecontrol{family}-1.0.0.jar"
     if sha(canary) != build_inputs["families"][family]["mod"]["sha256"]:
         raise RuntimeError("compiled fixture drift: rebuild and rerun both arms")
-    mod_files = [canary] + ([artifacts / "fabric-api-0.155.2+26.2.jar"] if family == "fabric" else [])
+    mod_files = [canary] + ([artifacts / "fabric-api-0.116.17+1.21.1.jar"] if family == "fabric" else [])
     for mod in mod_files:
         copy_file(mod, instance / "mods" / mod.name)
     (instance / "eula.txt").write_text("eula=true\n")
@@ -244,8 +241,7 @@ def run_control(family, engine, timeout):
         env["NEOFORBRIC_COMPAT_POLICY"] = "strict"
         env["NEOFORBRIC_JVM"] = " ".join(java_args) + " " + env.get("NEOFORBRIC_JVM", "")
         old = ORIGINAL / "neoforbric-loader/run"
-        carrier_paths = [Path(env.get("MERGED", old / "merged-base/patched-mc-merged-1.21.1.jar")),
-                         Path(env.get("FORGE_RT", old / "merged-base/forge-runtime-interop.jar")),
+        carrier_paths = [Path(env.get("MERGED", old / "neoforge-base/patched-mc-neoforge-1.21.1.jar")),
                          Path(env.get("NEO_RT", old / "neoforge-runtime/neoforge-runtime.jar")),
                          KERNEL / "build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar"]
         carrier_inputs = [record(p) for p in carrier_paths]

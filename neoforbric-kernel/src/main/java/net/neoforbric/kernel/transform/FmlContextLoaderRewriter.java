@@ -34,17 +34,20 @@ import net.neoforbric.kernel.mixin.MixinWeaverSlot;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
 /**
- * Answers a NeoForge mod that casts the thread's context class loader to FML's {@code TransformingClassLoader}
- * with a view of FML's transformer, rather than with the kernel's own loader and a {@code ClassCastException}.
+ * Answers a NeoForge mod that casts the thread's context class loader to modlauncher's
+ * {@code TransformingClassLoader} with a view of the launcher's transformer chain, rather than with the kernel's
+ * own loader and a {@code ClassCastException}.
  *
  * <h2>The call site</h2>
  *
- * <p>LibJF's mixin plugin opens with {@code (TransformingClassLoader) Thread.currentThread().getContextClassLoader()}
- * and walks from there to the live Mixin transformer ({@code classTransformer.processors.processors[MIXIN]
- * .transformer}), which it wraps in its own {@code AsmTransformer} and writes back — that is how LibJF's ASM
- * patches reach every class on NeoForge. Under the kernel the context loader is {@code NeoForbricClassLoader}, so the
- * cast failed at its first instruction, LibJF logged "Could not initialize LibJF ASM", and no {@code libjf:asm}
- * patch was ever applied.
+ * <p>LibJF's mixin plugin ({@code libjf_unsafe_v0}, the NeoForge build) opens with
+ * {@code (TransformingClassLoader) Thread.currentThread().getContextClassLoader()} and walks from there to the
+ * live Mixin transformer — {@code classTransformer} on the loader, {@code pluginHandler} on the transformer,
+ * {@code get("mixin")} on the handler, {@code processors.getFirst()} on the plugin, and the handler's
+ * {@code transformer} — which it wraps in its own {@code AsmTransformer} and writes back: that is how LibJF's
+ * ASM patches reach every class on NeoForge. Under the kernel the context loader is
+ * {@code NeoForbricClassLoader}, so the cast failed at its first instruction, LibJF logged "Could not initialize
+ * LibJF ASM", and no {@code libjf:asm} patch was ever applied.
  *
  * <p>The thread's context loader is not changed — every other reader keeps getting the real one. Only this exact
  * instruction pair, {@code invokevirtual Thread.getContextClassLoader} immediately followed by {@code checkcast
@@ -58,13 +61,13 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * and then loads through it used to get a {@code ClassCastException} it could catch; handing it the view would
  * crash the game instead. LibJF's cast and its field name sit in the one method, {@code onLoad}.
  *
- * <p>Only classes from jars arbitrated to NeoForge: nothing else can mean FML's loader by that name. A byte scan for
+ * <p>Only classes from jars arbitrated to NeoForge: nothing else can mean modlauncher's loader by that name. A byte scan for
  * the class name and the field name rejects everything else before ASM parses it.
  *
  * <p>{@code -Dneoforbric.fmlTransformerView=off} rewrites nothing.
  */
 public final class FmlContextLoaderRewriter implements ClassTransformer {
-	static final String TRANSFORMING_LOADER = "net/neoforged/fml/classloading/transformation/TransformingClassLoader";
+	static final String TRANSFORMING_LOADER = "cpw/mods/modlauncher/TransformingClassLoader";
 	static final String VIEW = "net/neoforbric/kernel/runtime/KernelFmlTransformerView";
 	/** The field of {@code TransformingClassLoader} a walk to the Mixin weaver reads first. */
 	static final String WALKED_FIELD = "classTransformer";
@@ -114,8 +117,8 @@ public final class FmlContextLoaderRewriter implements ClassTransformer {
 		}
 		if (hits == 0) return classBytes;
 
-		NeoForbricLog.info("[NeoForbric/FmlView] %s casts the context class loader to FML's TransformingClassLoader %d "
-				+ "time(s) — it is handed a view of FML's transformer there, as on NeoForge", className, hits);
+		NeoForbricLog.info("[NeoForbric/FmlView] %s casts the context class loader to modlauncher's TransformingClassLoader "
+				+ "%d time(s) — it is handed a view of the launcher's transformer chain there, as on NeoForge", className, hits);
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
 		return writer.toByteArray();

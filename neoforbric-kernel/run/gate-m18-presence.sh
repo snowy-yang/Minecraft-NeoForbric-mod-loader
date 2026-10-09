@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M18 gate — the three ecosystems can SEE each other.
+# M18 gate — the two ecosystems can SEE each other.
 #
 # WHY THIS EXISTS. Every mod that integrates with another mod starts by asking its own loader "is X installed",
 # and branches on the answer. In this instance each loader keeps its own list, so that question used to be
@@ -48,7 +48,7 @@ boot() { # boot <log> [extra jvm flags]
   await_server "$pid" "$log" 130
 }
 
-step "boot all three ecosystems in one instance"
+step "boot both ecosystems in one instance"
 boot "$LOG"
 
 step "every ecosystem's mods reach every ecosystem's list (must PASS)"

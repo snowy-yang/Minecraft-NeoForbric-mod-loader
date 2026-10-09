@@ -133,6 +133,13 @@ public final class KernelModFileInfo implements IModFileInfo {
 		return false;
 	}
 
+	// 21.1's IModFileInfo added the module name over the 26.x ten; the JPMS module a mod file backs is the
+	// kernel's own, and this name is what the mod list's "module" column would read were it shown.
+	@Override
+	public String moduleName() {
+		return modId;
+	}
+
 	@Override
 	public String toString() {
 		return "KernelModFileInfo[" + modId + "]";
