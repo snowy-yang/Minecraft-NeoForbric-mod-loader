@@ -22,20 +22,20 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 KERNEL = ROOT / 'neoforbric-kernel'
 STATE = KERNEL / '.dev'
-MC_VERSION = '26.2'
+MC_VERSION = '1.21.1'
 API_PINS = (
-    ('fabric-api-0.155.2+26.2.jar',
-     'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.155.2+26.2/fabric-api-0.155.2+26.2.jar',
-     'd6518c770024cbe8a556248f16fcdbb91c6a62f50227a6c3bae8190511e2c1b8'),
+    ('fabric-api-0.116.17+1.21.1.jar',
+     'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.116.17+1.21.1/fabric-api-0.116.17+1.21.1.jar',
+     '79ac44b40780acbd884b34c50be1e39af682847e5f5cb3b1fddeeaa768dce800'),
     ('energy-5.0.0.jar', 'https://maven.modmuss50.me/teamreborn/energy/5.0.0/energy-5.0.0.jar',
      '889afc438d3e4add5cfdac76517da7987a2c495e4731690a56f2c5dee775db59'),
 )
-STAGED_FILES = ('neoforge-base/patched-mc-neoforge-26.2.jar', 'neoforge-runtime/neoforge-runtime.jar',
+STAGED_FILES = ('neoforge-base/patched-mc-neoforge-1.21.1.jar', 'neoforge-runtime/neoforge-runtime.jar',
                 # Not launched, but the bytecode tests read the patched side the base was staged from.
-                'neoforge-patched/patched-mc-neoforge-26.2.jar',
+                'neoforge-patched/patched-mc-neoforge-1.21.1.jar',
                 # Also only read by tests: the pins that tie the NeoForge side to this base,
                 # and the canary mod (see CANARIES).
-                'neoforge-patched/patched-mc-neoforge-26.2.jar.pins',
+                'neoforge-patched/patched-mc-neoforge-1.21.1.jar.pins',
                 'neoforge-runtime/neoforbricneolive.jar')
 # neoforbric-loader/run/build-testmods.sh's canary mod, built the same way into the stage: (sources, jar, javac
 # --release, the staged game jars it compiles against). Its sources go beside it, as in neoforbric-loader/run/,
@@ -43,7 +43,7 @@ STAGED_FILES = ('neoforge-base/patched-mc-neoforge-26.2.jar', 'neoforge-runtime/
 CANARY_SOURCES = ROOT / 'neoforbric-loader' / 'run'
 CANARIES = (
     ('livemod-src-neoforge', 'neoforge-runtime/neoforbricneolive.jar', '21',
-     ('neoforge-runtime/neoforge-runtime.jar', 'neoforge-patched/patched-mc-neoforge-26.2.jar')),
+     ('neoforge-runtime/neoforge-runtime.jar', 'neoforge-patched/patched-mc-neoforge-1.21.1.jar')),
 )
 # What build-testmods.sh packages besides classes.
 CANARY_RESOURCES = ('META-INF', 'neoforbriclive.mixins.json', 'data', 'assets')
@@ -400,7 +400,7 @@ def launch_arguments(side, info, mc, stage, instance, natives, jvm=(), game=(), 
                         '--runtimeJar', pathsep.join([str(stage / STAGED_FILES[2]), str(stage / STAGED_FILES[3])]),
                         '--libraryPath', pathsep.join(owned), '--', '--gameDir', str(instance)]
     if side == 'client':
-        args += ['--version', '26.2-neoforbric-dev', '--assetsDir', str(mc / 'assets'),
+        args += ['--version', '1.21.1-neoforbric-dev', '--assetsDir', str(mc / 'assets'),
                  '--assetIndex', metadata['assetIndex']['id'], '--accessToken', '0',
                  '--username', 'NeoForbricDev', '--uuid', '00000000000000000000000000000000',
                  '--userType', 'legacy', '--versionType', 'release']
@@ -567,7 +567,9 @@ def main(argv=None):
             subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', str(mac), '-t', str(mac), '-p', 'test_*.py'], check=True, cwd=KERNEL)
             return 0
         java = java_bin(args.java)
-        env = java_environment(java, minimum=21 if args.command == 'test' else 25)
+        # 1.21.1 runs on Java 21 and the kernel's build pins release 21, so 21 is the floor for every
+        # command, including launches (the 26.2 anchor needed 25).
+        env = java_environment(java, minimum=21)
         if args.command == 'prepare':
             prepare(args, java, env)
         elif args.command in ('client', 'server'):

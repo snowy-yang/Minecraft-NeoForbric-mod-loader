@@ -135,7 +135,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
 
     def launch_fixture(self, with_runtime=True):
         mc, stage = self.root / 'Minecraft With Spaces', self.root / 'stage/run'
-        version = mc / 'versions/26.2/26.2.json'
+        version = mc / f'versions/{dev.MC_VERSION}/{dev.MC_VERSION}.json'
         version.parent.mkdir(parents=True)
         version.write_text(json.dumps({'assetIndex': {'id': '32'}, 'libraries': []}))
         boot = self.root / 'kernel.jar'
@@ -161,7 +161,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
         self.assertNotIn('-XstartOnFirstThread', linux)
         self.assertIn('-XstartOnFirstThread', mac)
         self.assertIn('Minecraft With Spaces', win[win.index('--assetsDir')+1])
-        with zipfile.ZipFile(stage / 'merged-base/neoforbric-game-metadata.jar') as archive:
+        with zipfile.ZipFile((stage / dev.STAGED_FILES[0]).parent / 'neoforbric-game-metadata.jar') as archive:
             self.assertEqual(archive.namelist(), ['version.json'])
 
     def test_boot_only_jar_is_refused(self):
@@ -172,7 +172,7 @@ class DevelopmentWorkflowTest(unittest.TestCase):
 
     def test_missing_library_is_named_before_launch(self):
         info, mc, stage = self.launch_fixture()
-        version = mc / 'versions/26.2/26.2.json'
+        version = mc / f'versions/{dev.MC_VERSION}/{dev.MC_VERSION}.json'
         metadata = json.loads(version.read_text())
         metadata['libraries'] = [{'downloads': {'artifact': {'path': 'missing/library.jar'}}}]
         version.write_text(json.dumps(metadata))
