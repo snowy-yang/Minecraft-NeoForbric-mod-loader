@@ -579,9 +579,23 @@ def executedSuites = Collections.synchronizedSet(new HashSet<String>())
 // because Python coerces that locale for its children, but a plain ./gradlew does not.
 def inheritedLocale = ['LC_ALL', 'LC_CTYPE', 'LANG'].collect { System.getenv(it) }.find { it }
 def utf8TestLocale = osName.contains('linux') && !(inheritedLocale ==~ /(?i).*utf-?8.*/)
+// Headless Swing (DependencyDialogTest's wrapping contract among them) needs a fontconfig the container may not
+// have — without any font, java.desktop dies with "Fontconfig head is null" before the first assertion, which
+// reads as a product bug. A user font stack (~/fontstack: libfontconfig/libfreetype + DejaVu + a fonts.conf with
+// writable cachedirs, buildable without root from the distro's own rpms) is enough for the headless toolkit, so
+// when one is there the test JVM gets it; FONTCONFIG_FILE/LD_LIBRARY_PATH set by the caller always win.
+def userFontStack = file(System.getProperty('user.home') + '/fontstack')
+def fontStackEnv = osName.contains('linux') && !System.getenv('FONTCONFIG_FILE') && userFontStack.isDirectory() ? [
+		'FONTCONFIG_FILE', new File(userFontStack, 'etc/fonts/fonts.conf').absolutePath,
+		'LD_LIBRARY_PATH', (System.getenv('LD_LIBRARY_PATH') ? System.getenv('LD_LIBRARY_PATH') + File.pathSeparator : '')
+				+ new File(userFontStack, 'usr/lib64').absolutePath] : []
 tasks.withType(Test).configureEach {
 	def suiteName = name
 	if (utf8TestLocale) environment 'LC_ALL', 'C.UTF-8'
+	if (!fontStackEnv.isEmpty()) {
+		environment fontStackEnv[0], fontStackEnv[1]
+		environment fontStackEnv[2], fontStackEnv[3]
+	}
 	inputs.property('strictIntegration', strictIntegration)
 	inputs.property('skipBaseline', skipBaseline ?: '')
 	// The fixtures whose absence fails instead of skipping (TestFixtures.Fixture ids, or 'all'), read by
