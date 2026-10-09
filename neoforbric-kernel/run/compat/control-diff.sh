@@ -31,7 +31,7 @@ shift || true
 
 PORT="${CONTROL_PORT:-25807}"
 DL="$RUN_OLD/downloads"
-LAUNCHER="$DL/fabric-server-26.2/fabric-server-mc26.2-loader0.19.5-launcher1.1.2.jar"
+LAUNCHER="$DL/fabric-server-1.21.1/fabric-server-mc1.21.1-loader0.16.0-launcher1.1.2.jar"
 MODS=("$@")
 if [ "${#MODS[@]}" -eq 0 ]; then
   MODS=("$DL/fabric-26.2/fabric-api-0.154.0+26.2.jar" "$DL/fabric-26.2/mcw-bridges-3.1.2-mc26.2fabric.jar")

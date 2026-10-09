@@ -7,7 +7,7 @@
 # afterwards. So a library nested by a Fabric mod AND by a NeoForge mod loaded twice and was constructed
 # twice.
 #
-# On a real 26.2 pack that was Xaero's: xaerominimap-fabric nests xaerolib-fabric while the NeoForge half nests
+# On a real pack that was Xaero's: xaerominimap-fabric nests xaerolib-fabric while the NeoForge half nests
 # xaerolib's own build, both claiming "xaerolib". The second construction threw "Attempted to register a duplicate
 # config channel: xaerolib:main" — but only AFTER XaeroLib.<init> had already done INSTANCE = this, so a live
 # mixin then called into a half-built object and took the client down on a render frame.

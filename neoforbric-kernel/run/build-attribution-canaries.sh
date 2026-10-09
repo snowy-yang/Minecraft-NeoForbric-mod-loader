@@ -9,9 +9,9 @@ set -uo pipefail
 SRC="$KERNEL/canary/attribution"
 OUT="$KERNEL/run/canary"
 canary_scratch attribution
-MERGED="$OLD/run/merged-base/patched-mc-merged-26.2.jar"
+MERGED="$OLD/run/merged-base/patched-mc-merged-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar"
 NEO_RT="$OLD/run/neoforge-runtime/neoforge-runtime.jar"
-NEO_MC="$OLD/run/neoforge-patched/patched-mc-neoforge-26.2.jar"
+NEO_MC="$OLD/run/neoforge-patched/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar"
 MC_DIR="${MC_DIR:-$HOME/Library/Application Support/minecraft}"
 VLIBS="$(find "$MC_DIR/libraries" -name '*.jar' 2>/dev/null | paste -sd: -)"
 

@@ -221,11 +221,11 @@ class SoakVerifierTest(unittest.TestCase):
                 return path
             runtime=put(kernel/'build/libs/neoforbric-kernel-runtime-0.1.0-SNAPSHOT.jar')
             jar(kernel/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar',{'bundled/neoforbric-kernel-runtime.jar':runtime.read_bytes()})
-            merged=jar(staged/'merged-base/patched-mc-merged-26.2.jar',{'version.json':'{}'})
+            merged=jar(staged/'merged-base/patched-mc-merged-1.21.1.jar',{'version.json':'{}'})
             put(staged/'merged-base/forge-runtime-interop.jar');put(staged/'neoforge-runtime/neoforge-runtime.jar')
             put(pack/'saves/NeoForbricTest/level.dat');put(pack/'mods/probe.jar');put(pack/'options.txt')
             metadata={'id':'26.2','assetIndex':{'id':'test'},'libraries':[{'name':'group:test:1','downloads':{'artifact':{'path':'test.jar'}}}]}
-            put(mc/'versions/26.2/26.2.json',json.dumps(metadata).encode());put(mc/'libraries/test.jar');put(mc/'assets/indexes/test.json',b'{}');put(mc/'versions/26.2/26.2-natives/probe.dylib')
+            put(mc/'versions/1.21.1/1.21.1.json',json.dumps(metadata).encode());put(mc/'libraries/test.jar');put(mc/'assets/indexes/test.json',b'{}');put(mc/'versions/26.2/26.2-natives/probe.dylib')
             cp=put(root/'boot-classpath.txt',str(put(root/'dependency.jar')).encode())
             args=argparse.Namespace(kernel=str(kernel),staged=str(staged),fixture=str(pack),minecraft=str(mc),world_source=None,merged=str(merged),forge=None,neo=None,natives=None,boot_classpath=str(cp),seconds=1,control=True,sessions=2,dwell_ticks=20,between_seconds=0,settle_seconds=0,timeout=60,policy='strict',heap='1G',java='unused-test-java')
             source={'root':str(root),'commit':'test','sha256':'source-content','files':{},'dirty':False}

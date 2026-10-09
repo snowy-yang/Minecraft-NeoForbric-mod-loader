@@ -11,13 +11,13 @@ ${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, shutil, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M51_KERNEL', 'M51_OLD', 'M51_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))
-compile_game = pathlib.Path(os.environ.get('M51_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-26.2.jar'))
+compile_game = pathlib.Path(os.environ.get('M51_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar'))
 neo = pathlib.Path(os.environ.get('NEO_RT', old / 'run/neoforge-runtime/neoforge-runtime.jar'))
-fapi = pathlib.Path(os.environ.get('M51_FABRIC_API', kernel / 'run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar'))
-vanilla = mc / 'versions/26.2/26.2.jar'
+fapi = pathlib.Path(os.environ.get('M51_FABRIC_API', kernel / 'run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar'))
+vanilla = mc / ('versions/' + os.environ.get('MC_VERSION', '1.21.1') + '/' + os.environ.get('MC_VERSION', '1.21.1') + '.jar')
 kernel_jar = kernel / 'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
 libraries = []
-for entry in json.loads((mc / 'versions/26.2/26.2.json').read_text())['libraries']:
+for entry in json.loads((mc / ('versions/' + os.environ.get('MC_VERSION', '1.21.1') + '/' + os.environ.get('MC_VERSION', '1.21.1') + '.json')).read_text())['libraries']:
     artifact = entry.get('downloads', {}).get('artifact', {}).get('path')
     if artifact and (mc / 'libraries' / artifact).is_file(): libraries.append(mc / 'libraries' / artifact)
 for path in [compile_game, neo, fapi, vanilla, kernel_jar]:

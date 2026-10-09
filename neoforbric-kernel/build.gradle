@@ -30,11 +30,15 @@ java {
 // 35MB file another session may be running from.
 // -Pneoforbric.stagedRoot wins; then NEOFORBRIC_OLD, which is the one variable the run/ scripts also read, so a
 // second working tree needs exactly one export rather than a different knob per tool.
+// The one Minecraft version this kernel generation is anchored to. Every staged-name literal in this script
+// derives from it, so re-anchoring is a change here (and in the installer's Pins, dev.py's pins and the gates'
+// fixtures) rather than a hunt through the file.
+def mcVersion = '1.21.1'
 def devStage = file('.dev/staged/run')
 def stagedRoot       = file(project.findProperty('neoforbric.stagedRoot')
 		?: (System.getenv('NEOFORBRIC_OLD') ? System.getenv('NEOFORBRIC_OLD') + '/run'
-				: (new File(devStage, 'neoforge-base/patched-mc-neoforge-26.2.jar').isFile() ? devStage : '../neoforbric-loader/run')))
-def stagedBase       = new File(stagedRoot, 'neoforge-base/patched-mc-neoforge-26.2.jar')
+				: (new File(devStage, "neoforge-base/patched-mc-neoforge-${mcVersion}.jar").isFile() ? devStage : '../neoforbric-loader/run')))
+def stagedBase       = new File(stagedRoot, "neoforge-base/patched-mc-neoforge-${mcVersion}.jar")
 def stagedNeoRuntime = new File(stagedRoot, 'neoforge-runtime/neoforge-runtime.jar')
 def stagedGameJars = [stagedBase, stagedNeoRuntime].findAll { it.isFile() }
 
@@ -47,9 +51,9 @@ def stagedGameJars = [stagedBase, stagedNeoRuntime].findAll { it.isFile() }
 // is missing its transfer component" -- a dedicated server exited 78 on a pack that launched before the bridge
 // existed. A machine that builds the game side must supply the API (-Pneoforbric.fabricApi=<fabric-api jar>) or the
 // build fails naming the file; a machine with no staged game jars builds neither half, exactly as before.
-def devFabricApi = file('.dev/api/fabric-api-0.155.2+26.2.jar')
+def devFabricApi = file('.dev/api/fabric-api-0.116.17+1.21.1.jar')
 def stagedFabricApi = file(project.findProperty('neoforbric.fabricApi') ?: (devFabricApi.isFile() ? devFabricApi
-		: new File(stagedRoot.parentFile.parentFile, 'neoforbric-kernel/run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar')))
+		: new File(stagedRoot.parentFile.parentFile, 'neoforbric-kernel/run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar')))
 def transferApiModules = ['fabric-transfer-api-v1-', 'fabric-api-lookup-api-v1-', 'fabric-api-base-']
 def transferModulesDir = layout.buildDirectory.dir('transfer-api-compile')
 def extractTransferApis = tasks.register('extractTransferApis', Sync) {
@@ -111,13 +115,13 @@ def defaultMinecraft = osName.contains('windows')
 def devMinecraft = file('.dev/minecraft')
 // .dev/minecraft is preferred only while it has its version JSON, because the transfer suite's library list below is
 // read from that JSON. A tree without it is a tree with no libraries as far as that list goes. One here had all 73
-// jars it needs and no 26.2.json (removed after prepare had finished; what removed it is unknown), and preferring
+// jars it needs and no version JSON (removed after prepare had finished; what removed it is unknown), and preferring
 // it because the directory existed sent the transfer suite into ClassNotFoundException for netty and Commons Lang
 // with nothing saying why. The JSON is NOT proof that prepare finished -- it is the first file prepare writes -- so
 // the transferTest guard below also names any library the JSON lists that is not on disk.
-def devMinecraftPrepared = new File(devMinecraft, 'versions/26.2/26.2.json').isFile()
+def devMinecraftPrepared = new File(devMinecraft, "versions/${mcVersion}/${mcVersion}.json").isFile()
 if (devMinecraft.isDirectory() && !devMinecraftPrepared && !project.hasProperty('neoforbric.mcLibraries') && !System.getenv('MC_DIR'))
-	logger.lifecycle("[neoforbric] ${devMinecraft} has no versions/26.2/26.2.json, so Minecraft's libraries come from " +
+	logger.lifecycle("[neoforbric] ${devMinecraft} has no versions/${mcVersion}/${mcVersion}.json, so Minecraft's libraries come from " +
 			"${defaultMinecraft}; run `python tools/dev.py prepare` to restore it")
 def mcLibraries = file(project.findProperty('neoforbric.mcLibraries')
 		?: (System.getenv('MC_DIR') ? System.getenv('MC_DIR') + '/libraries'
@@ -148,14 +152,14 @@ def stagedMcLibraries = lastByNameUnder('com/mojang/brigadier/**/*.jar') +
 
 // LazyOptional's real carrier implementation uses Commons Lang's Mutable types, and every Team Reborn Energy store
 // initialises Reborn's EnergyStorage interface, whose static fields build an Identifier and a DataComponentType
-// (netty, joml, ...). Resolve Minecraft 26.2's OWN library set from its version JSON (the one launch-kernel-server.sh
+// (netty, joml, ...). Resolve Minecraft's OWN library set from its version JSON (the one launch-kernel-server.sh
 // puts on the game's classpath), rather than a stub or whichever cached jar happens to sort last. This is test
 // runtime linkage only and is never bundled.
 def stagedTransferTestLibraries = []
 // Libraries the JSON lists for every platform (no OS rules) that are not on disk. Those with rules are natives for one
 // OS, so the other platforms' copies being absent is normal.
 def missingTransferTestLibraries = []
-def stagedMcVersionJson = new File(mcLibraries.parentFile, 'versions/26.2/26.2.json')
+def stagedMcVersionJson = new File(mcLibraries.parentFile, "versions/${mcVersion}/${mcVersion}.json")
 if (stagedMcVersionJson.isFile()) {
 	def versionMetadata = new groovy.json.JsonSlurper().parse(stagedMcVersionJson)
 	versionMetadata.libraries.each { library ->
@@ -263,7 +267,7 @@ dependencies {
 
 	// JOML, GAME side only, on the same terms: vanilla renderer and NeoForge event signatures carry joml types
 	// (fog colour as a Vector4f among them), so javac cannot read them without it. Pinned to the version
-	// Minecraft 26.2 lists.
+	// Minecraft 1.21.1 lists.
 	runtimeCompileOnly('org.joml:joml:1.10.8') { transitive = false }
 
 	testImplementation "org.junit.jupiter:junit-jupiter:${project.junit_version}"
@@ -292,7 +296,7 @@ tasks.named('compileRuntimeJava') {
 				+ stagedGameJars.size() + "/2 under ${stagedRoot}. Run prepareDev before building the game side.")
 		if (!stagedFabricApi.isFile()) throw new GradleException("The kernel game side includes its transfer " +
 				"component and compiles it against Fabric API's transfer modules, but ${stagedFabricApi} does not " +
-				"exist. Pass -Pneoforbric.fabricApi=<a fabric-api jar for 26.2> (the compatibility pack's is the default).")
+				"exist. Pass -Pneoforbric.fabricApi=<a fabric-api jar for ${mcVersion}> (the compatibility pack's is the default).")
 	}
 }
 // No outputs, so never up to date: it runs whenever the game side is built.
@@ -438,13 +442,13 @@ tasks.register('transferTest', Test) {
 	// after a scenario that needs none of it, so that one only warns.
 	doFirst {
 		def problem = !stagedMcVersionJson.isFile()
-				? "${stagedMcVersionJson} is absent, so Minecraft 26.2's library list is unknown"
+				? "${stagedMcVersionJson} is absent, so Minecraft's library list is unknown"
 				: !missingTransferTestLibraries.isEmpty()
 						? "${missingTransferTestLibraries.size()} of the libraries ${stagedMcVersionJson} lists are not under " +
 								"${mcLibraries}: ${missingTransferTestLibraries.take(5).join(', ')}"
 						: null
 		if (problem == null) return
-		def advice = "Point -Pneoforbric.mcLibraries or MC_DIR at a Minecraft install that has run 26.2, or run " +
+		def advice = "Point -Pneoforbric.mcLibraries or MC_DIR at a Minecraft install that has run ${mcVersion}, or run " +
 				"`python tools/dev.py prepare`"
 		if (filter.commandLineIncludePatterns.isEmpty()) throw new GradleException("The transfer suite needs Minecraft's " +
 				"own libraries: ${problem}. ${advice}")

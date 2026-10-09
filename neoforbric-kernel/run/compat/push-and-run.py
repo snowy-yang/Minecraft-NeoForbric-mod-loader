@@ -33,7 +33,7 @@ CLEAN = ('config', 'mods', 'saves', 'logs', '.neoforbric-kernel', '.mixin.out', 
          'server-console.log', 'bisect-console.log')
 ARTIFACTS = {
     'net.neoforbric:neoforbric-kernel': KERNEL / 'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar',
-    'net.neoforbric:patched-mc-merged': STAGED / 'merged-base/patched-mc-merged-26.2.jar',
+    'net.neoforbric:patched-mc-merged': STAGED / 'merged-base/patched-mc-merged-1.21.1.jar',
     'net.neoforbric:forge-runtime': (STAGED / 'merged-base/forge-runtime-interop.jar'
                                 if (STAGED / 'merged-base/forge-runtime-interop.jar').is_file()
                                 else STAGED / 'forge-runtime/forge-runtime.jar'),

@@ -31,7 +31,7 @@ for engine in ('native','neoforbric'):
   command=[str(K/'run/launch-kernel-server.sh')];env.update(RUNDIR=str(run),NEOFORBRIC_COMPAT_POLICY='strict',NEOFORBRIC_JVM=' '.join(args))
   # Same defaults as native-controls.py, exported so the launcher runs exactly the carriers recorded here.
   old=Path(env.setdefault('NEOFORBRIC_OLD',str(c.ORIGINAL/'neoforbric-loader')))/'run'
-  for key,default in (('MERGED','merged-base/patched-mc-merged-26.2.jar'),('FORGE_RT','merged-base/forge-runtime-interop.jar'),('NEO_RT','neoforge-runtime/neoforge-runtime.jar')):env.setdefault(key,str(old/default))
+  for key,default in (('MERGED','merged-base/patched-mc-merged-1.21.1.jar'),('FORGE_RT','merged-base/forge-runtime-interop.jar'),('NEO_RT','neoforge-runtime/neoforge-runtime.jar')):env.setdefault(key,str(old/default))
   carriers=[c.record(Path(env[key])) for key in ('MERGED','FORGE_RT','NEO_RT')]+[c.record(K/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar')]
  inputs={'engine':engine,'token':token,'modSet':[c.record(p) for p in sorted((run/'mods').glob('*.jar'))],'carriers':carriers,'sources':[c.record(p) for p in sources]+[c.record(__file__)],'command':command}
  c.write_json(run/'inputs.json',inputs);began=time.monotonic();sent=False

@@ -8,9 +8,9 @@ from evidence import source_record,file_record
 sys.dont_write_bytecode=True
 K=Path(__file__).resolve().parents[2];BASE=K/'build/corpse-render-control';BASE.mkdir(parents=True,exist_ok=True)
 old=Path(os.environ['NEOFORBRIC_OLD']);mc=Path(os.environ.get('MC_DIR',Path.home()/'Library/Application Support/minecraft'));fixture=K/'run/client-merged-pack'
-compile_game=old/'run/neoforge-patched/patched-mc-neoforge-26.2.jar';boot=K/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
+compile_game=old/'run/neoforge-patched/patched-mc-neoforge-1.21.1.jar';boot=K/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
 cp=[compile_game,boot,Path(os.environ['FORGE_RT']),Path(os.environ['NEO_RT']),mc/'libraries/net/fabricmc/sponge-mixin/0.17.3+mixin.0.8.7/sponge-mixin-0.17.3+mixin.0.8.7.jar']
-for entry in json.loads((mc/'versions/26.2/26.2.json').read_text())['libraries']:
+for entry in json.loads((mc/'versions/1.21.1/1.21.1.json').read_text())['libraries']:
  path=entry.get('downloads',{}).get('artifact',{}).get('path')
  if path and (mc/'libraries'/path).is_file():cp.append(mc/'libraries'/path)
 source_dir=K/'canary/corpse-render';classes=BASE/'classes';classes.mkdir(exist_ok=True)

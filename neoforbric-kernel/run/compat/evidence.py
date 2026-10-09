@@ -26,7 +26,7 @@ RELEASE_ROLES = frozenset({"game-base", "neo-runtime", "kernel", "kernel-runtime
 
 # The fixed platform (PLAN P0). A release reads each value out of the artifact it describes; a name, a path or a
 # stamp beside the file is not the version of the bytes being accepted.
-PINS = {"minecraft": "26.2", "neoforge": "26.2.0.88"}
+PINS = {"minecraft": "1.21.1", "neoforge": "21.1.256"}
 # Which roles carry which reading: the game jar its own version.json, the carrier its manifest.
 MINECRAFT_ROLES = ("game-base",)
 NEOFORGE_ROLES = ("neo-runtime",)
@@ -34,7 +34,7 @@ NEOFORGE_ROLES = ("neo-runtime",)
 # What neoforbric-kernel/build.gradle compiles kernel-runtime against and what its ~130 bytecode tests read: the
 # staged root is $NEOFORBRIC_OLD/run, else <source>/neoforbric-loader/run -- the same resolution the build uses when no
 # -Pneoforbric.stagedRoot is given, and the build hands that root to its tests as NEOFORBRIC_OLD.
-STAGED_BUILD_INPUTS = {"game-base": "neoforge-base/patched-mc-neoforge-26.2.jar",
+STAGED_BUILD_INPUTS = {"game-base": "neoforge-base/patched-mc-neoforge-1.21.1.jar",
                        "neo-runtime": "neoforge-runtime/neoforge-runtime.jar"}
 
 # The gate aggregator's verdict lines. A release acceptance must not contain a gate that was not run, or that is

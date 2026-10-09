@@ -8,11 +8,11 @@ ${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M35_KERNEL', 'M35_OLD', 'M35_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))
-compile_game = pathlib.Path(os.environ.get('M35_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-26.2.jar'))
-base = pathlib.Path(os.environ.get('MERGED', old / 'run/neoforge-base/patched-mc-neoforge-26.2.jar'))
+compile_game = pathlib.Path(os.environ.get('M35_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar'))
+base = pathlib.Path(os.environ.get('MERGED', old / 'run/neoforge-base/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar'))
 neo = pathlib.Path(os.environ.get('NEO_RT', old / 'run/neoforge-runtime/neoforge-runtime.jar'))
 libraries = []
-for entry in json.loads((mc / 'versions/26.2/26.2.json').read_text())['libraries']:
+for entry in json.loads((mc / ('versions/' + os.environ.get('MC_VERSION', '1.21.1') + '/' + os.environ.get('MC_VERSION', '1.21.1') + '.json')).read_text())['libraries']:
     artifact = entry.get('downloads', {}).get('artifact', {}).get('path')
     if artifact and (mc / 'libraries' / artifact).is_file(): libraries.append(mc / 'libraries' / artifact)
 mixin = mc / 'libraries/net/fabricmc/sponge-mixin/0.17.3+mixin.0.8.7/sponge-mixin-0.17.3+mixin.0.8.7.jar'
@@ -31,5 +31,6 @@ with zipfile.ZipFile(jar, 'w', zipfile.ZIP_DEFLATED) as target:
 def record(path):
     path = path.resolve(); return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
 (output / 'm35-build-inputs.json').write_text(json.dumps({'mod': record(jar), 'compileGame': record(compile_game),
-    'compileClasspath': [record(path) for path in classpath], 'merged': record(base), 'neo': record(neo)}, indent=2) + '
-')
+    'compileClasspath': [record(path) for path in classpath], 'merged': record(base), 'neo': record(neo)}, indent=2) + '\n')
+print('[M35Behavior] built actual world portal/spawner/item fixture')
+PY

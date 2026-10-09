@@ -4,7 +4,7 @@
 # GATE-PARALLEL: mem=2000
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-MERGED="${MERGED:-$RUN_OLD/merged-base/patched-mc-merged-26.2.jar}"
+MERGED="${MERGED:-$RUN_OLD/merged-base/patched-mc-merged-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar}"
 NEO_RT="${NEO_RT:-$RUN_OLD/neoforge-runtime/neoforge-runtime.jar}"
 export MERGED NEO_RT
 if [ "${1:-}" = --execute ]; then
@@ -56,7 +56,7 @@ assert any(p.name=='ForgeTransferCanary.class' for p in files) and any(p.name=='
 with zipfile.ZipFile(run/'mods/neoforbric-transfer-core.jar','w') as output:
  for file in files:output.write(file,file.relative_to(classes).as_posix())
  output.write(kernel/'src/transferTest/resources/forge-transfer-canary.fabric.mod.json','fabric.mod.json')
-shutil.copy2(kernel/'run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar',run/'mods')
+shutil.copy2(kernel/'run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar',run/'mods')
 PY
 seed_server_properties "$RUNDIR"
 printf '\nlevel-type=minecraft:flat\ngenerate-structures=false\n' >> "$RUNDIR/server.properties"

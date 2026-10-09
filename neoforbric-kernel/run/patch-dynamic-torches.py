@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Patch Dynamic Torches 5.4's old entity-type predicate for Minecraft 26.2 into a separate jar."""
+"""Patch Dynamic Torches 5.4's old entity-type predicate for Minecraft 1.21.1 into a separate jar."""
 import argparse
 import json
 from pathlib import Path

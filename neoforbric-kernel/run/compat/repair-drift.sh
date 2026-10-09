@@ -17,7 +17,7 @@ OLD="${NEOFORBRIC_OLD:-$(cd "$KERNEL/../neoforbric-loader" && pwd)}"
 RUN_OLD="$OLD/run"
 
 if [ "$#" -eq 0 ]; then
-  set -- "$RUN_OLD/merged-base/patched-mc-merged-26.2.jar" \
+  set -- "$RUN_OLD/merged-base/patched-mc-merged-1.21.1.jar" \
          "$RUN_OLD/neoforge-runtime/neoforge-runtime.jar" \
          "$RUN_OLD/forge-runtime/forge-runtime.jar"
 fi

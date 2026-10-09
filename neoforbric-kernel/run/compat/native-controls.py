@@ -77,15 +77,15 @@ def install(family):
     image.mkdir(parents=True, exist_ok=True)
     if family == "fabric":
         cache = ORIGINAL / "neoforbric-kernel/run/fab-server"
-        launcher = ORIGINAL / "neoforbric-loader/run/downloads/fabric-server-26.2" / FABRIC_LAUNCHER
+        launcher = ORIGINAL / "neoforbric-loader/run/downloads/fabric-server-1.21.1" / FABRIC_LAUNCHER
         with zipfile.ZipFile(launcher) as jar:
             properties = jar.read("install.properties").decode()
-            assert "fabric-loader-version=0.19.5" in properties and "game-version=26.2" in properties
+            assert "fabric-loader-version=0.19.5" in properties and "game-version=1.21.1" in properties
         copy_file(launcher, image / FABRIC_LAUNCHER)
         # Only immutable native distribution caches, never mods/processedMods/config/world from that instance.
         for rel in ("libraries", ".fabric/server"):
             shutil.copytree(cache / rel, image / rel, dirs_exist_ok=True)
-        write_json(image / "installation.json", {"family": family, "loader": VERSIONS[family], "minecraft": "26.2",
+        write_json(image / "installation.json", {"family": family, "loader": VERSIONS[family], "minecraft": "1.21.1",
                    "launcher": record(image / FABRIC_LAUNCHER), "cacheSource": str(cache), "kind": "official Fabric server launcher cache"})
         return
     downloads = BASE / "downloads"
@@ -101,7 +101,7 @@ def install(family):
         raise RuntimeError(f"official installer checksum mismatch: {installer}")
     with zipfile.ZipFile(installer) as archive:
         profile = json.loads(archive.read("install_profile.json"))
-        assert profile["minecraft"] == "26.2"
+        assert profile["minecraft"] == "1.21.1"
         for name in ("install_profile.json", "version.json"):
             data = json.loads(archive.read(name))
             write_json(image / (name + ".input"), data)
@@ -114,17 +114,17 @@ def install(family):
                 if source.is_file() and sha(source, "sha1") == expected_hash:
                     copy_file(source, image / "libraries" / relative)
     # Vanilla bundle copied from the native Fabric cache; native installers verify it and produce their own patches.
-    vanilla = ORIGINAL / "neoforbric-kernel/run/.gate-downloads/fab-server/.fabric/server/26.2-server.jar"
-    metadata = json.loads((MC / "versions/26.2/26.2.json").read_text())
+    vanilla = ORIGINAL / "neoforbric-kernel/run/.gate-downloads/fab-server/.fabric/server/1.21.1-server.jar"
+    metadata = json.loads((MC / "versions/1.21.1/1.21.1.json").read_text())
     assert sha(vanilla, "sha1") == metadata["downloads"]["server"]["sha1"]
     suffix = "-bundled" if family == "forge" else ""
-    copy_file(vanilla, image / f"libraries/net/minecraft/server/26.2/server-26.2{suffix}.jar")
+    copy_file(vanilla, image / f"libraries/net/minecraft/server/1.21.1/server-1.21.1{suffix}.jar")
     # The installer's existing-output verification is deliberately retained on repeated prepare calls.
     command = ["java", "-jar", str(installer), "--installServer", "."]
     run_logged(command, image, image / "installer-console.log")
     if "server installed successfully" not in (image / "installer-console.log").read_text():
         raise RuntimeError(f"no successful native installer result: {family}")
-    write_json(image / "installation.json", {"family": family, "minecraft": "26.2", "loader": VERSIONS[family],
+    write_json(image / "installation.json", {"family": family, "minecraft": "1.21.1", "loader": VERSIONS[family],
                "url": url, "upstreamSha1": expected, "installer": record(installer), "command": command,
                "log": record(image / "installer-console.log"), "kind": "official native --installServer"})
 
@@ -149,9 +149,9 @@ def compile_canaries():
         if not (image / "installation.json").is_file():
             raise RuntimeError(f"prepare {family} before compiling native APIs")
         if family == "fabric":
-            game = BASE / "compile/vanilla-server-26.2.jar"
-            with zipfile.ZipFile(image / ".fabric/server/26.2-server.jar") as bundle:
-                game.write_bytes(bundle.read("META-INF/versions/26.2/server-26.2.jar"))
+            game = BASE / "compile/vanilla-server-1.21.1.jar"
+            with zipfile.ZipFile(image / ".fabric/server/1.21.1-server.jar") as bundle:
+                game.write_bytes(bundle.read("META-INF/versions/1.21.1/server-1.21.1.jar"))
             classpath = [game, *jars(image), *sorted(modules.glob("*.jar"))]
         elif family == "forge":
             game = image / "libraries/net/minecraftforge/forge/26.2-65.0.1/forge-26.2-65.0.1-server.jar"
@@ -244,7 +244,7 @@ def run_control(family, engine, timeout):
         env["NEOFORBRIC_COMPAT_POLICY"] = "strict"
         env["NEOFORBRIC_JVM"] = " ".join(java_args) + " " + env.get("NEOFORBRIC_JVM", "")
         old = ORIGINAL / "neoforbric-loader/run"
-        carrier_paths = [Path(env.get("MERGED", old / "merged-base/patched-mc-merged-26.2.jar")),
+        carrier_paths = [Path(env.get("MERGED", old / "merged-base/patched-mc-merged-1.21.1.jar")),
                          Path(env.get("FORGE_RT", old / "merged-base/forge-runtime-interop.jar")),
                          Path(env.get("NEO_RT", old / "neoforge-runtime/neoforge-runtime.jar")),
                          KERNEL / "build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar"]
@@ -312,7 +312,7 @@ def run_control(family, engine, timeout):
         "passMarker": f"[NativeControl] PASS family={family}" in text,
         "noFailMarker": "[NativeControl] FAIL" not in text,
     }
-    result = {"schemaVersion": 1, "engine": engine, "family": family, "loaderVersion": VERSIONS[family], "minecraft": "26.2",
+    result = {"schemaVersion": 1, "engine": engine, "family": family, "loaderVersion": VERSIONS[family], "minecraft": "1.21.1",
               "pass": all(checks.values()) and not error, "checks": checks, "exitCode": process.returncode,
               "timedOut": timed_out, "error": error, "inputDrift": drift, "seconds": round(time.monotonic() - started_at, 3),
               "proof": proof, "inputs": record(result_dir / "inputs.json"), "log": record(log), "instance": str(instance)}
@@ -460,7 +460,7 @@ def run_set(engine, family, mods, ticks=200, timeout=900, xmx="3G", level_type="
         env["NEOFORBRIC_COMPAT_POLICY"] = policy
         env["NEOFORBRIC_JVM"] = " ".join(java_args) + " " + env.get("NEOFORBRIC_JVM", "")
         old = ORIGINAL / "neoforbric-loader/run"
-        carriers = {"merged": Path(env.get("MERGED", old / "merged-base/patched-mc-merged-26.2.jar")),
+        carriers = {"merged": Path(env.get("MERGED", old / "merged-base/patched-mc-merged-1.21.1.jar")),
                     "forgeRuntime": Path(env.get("FORGE_RT", old / "merged-base/forge-runtime-interop.jar")),
                     "neoRuntime": Path(env.get("NEO_RT", old / "neoforge-runtime/neoforge-runtime.jar"))}
         identity = {"kernel": {"name": jar.name, "bytes": jar.stat().st_size, "sha256": sha(jar)},

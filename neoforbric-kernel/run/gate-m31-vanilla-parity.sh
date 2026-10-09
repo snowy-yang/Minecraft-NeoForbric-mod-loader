@@ -38,8 +38,8 @@ GENERATE_SECONDS="${M31_GENERATE_SECONDS:-150}"
 mkdir -p "$BUILD"
 
 MC="${MC_DIR:-$HOME/Library/Application Support/minecraft}"
-if [ ! -f "${VANILLA_JAR:-$MC/versions/26.2/26.2.jar}" ]; then
-  echo "[kernel] FATAL: no vanilla 26.2 jar under $MC — this gate's control arm IS vanilla; there is nothing to"
+if [ ! -f "${VANILLA_JAR:-$MC/versions/${MC_VERSION}/${MC_VERSION}.jar}" ]; then
+  echo "[kernel] FATAL: no vanilla ${MC_VERSION} jar under $MC — this gate's control arm IS vanilla; there is nothing to"
   echo "[kernel]        compare against without it. Set VANILLA_JAR or MC_DIR."
   exit 3
 fi
@@ -149,7 +149,7 @@ fi
 
 step "M31 result"
 if [ "$FAIL" -eq 0 ]; then
-  echo "[kernel] ✅ M31 VANILLA PARITY GATE GREEN — zero mods, same seed: same biomes, same structures as vanilla 26.2"
+  echo "[kernel] ✅ M31 VANILLA PARITY GATE GREEN — zero mods, same seed: same biomes, same structures as vanilla ${MC_VERSION}"
 else
   echo "[kernel] ❌ M31 GATE RED — vanilla $LOG_V / NeoForbric $LOG_F / report $REPORT"
 fi

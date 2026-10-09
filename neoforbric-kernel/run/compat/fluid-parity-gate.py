@@ -336,7 +336,7 @@ def main():
                         + ', '.join(f'{k} vanilla={vanilla["cells"].get(k)} neoforbric={neoforbric["cells"].get(k)}' for k in differing_cells[:12]))
     jar = kernel / 'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
     mc = Path(os.environ.get('MC_DIR', Path.home() / 'Library/Application Support/minecraft'))
-    vanilla_jar = Path(os.environ.get('VANILLA_JAR', mc / 'versions/26.2/26.2.jar'))
+    vanilla_jar = Path(os.environ.get('VANILLA_JAR', mc / 'versions/1.21.1/1.21.1.jar'))
     summary = dict(unfixed=args.unfixed, passed=not failures, failures=failures,
                    kernel_sha256=hashlib.sha256(jar.read_bytes()).hexdigest() if jar.is_file() else None,
                    vanilla_jar_sha256=hashlib.sha256(vanilla_jar.read_bytes()).hexdigest() if vanilla_jar.is_file() else None,

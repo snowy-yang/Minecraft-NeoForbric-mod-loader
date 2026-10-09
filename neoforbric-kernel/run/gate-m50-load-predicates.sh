@@ -34,7 +34,7 @@ run_server() {
   mkdir -p "$SERVER_DIR/mods"
   # lithostitched's Fabric build uses fabric-api's registry builder without declaring it, so fabric-api goes in too.
   cp "$KERNEL/run/canary/neoforbricpredicates.jar" "$KERNEL/run/client-merged-pack/mods/lithostitched-1.7.13-fabric-26.2.jar" \
-    "$KERNEL/run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar" "$SERVER_DIR/mods/"
+    "$KERNEL/run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar" "$SERVER_DIR/mods/"
   echo "eula=true" > "$SERVER_DIR/eula.txt"
   seed_server_properties "$SERVER_DIR"
   printf 'level-name=world\nlevel-type=minecraft:flat\ngenerate-structures=false\nmax-tick-time=-1\npause-when-empty-seconds=0\nonline-mode=false\n' >> "$SERVER_DIR/server.properties"

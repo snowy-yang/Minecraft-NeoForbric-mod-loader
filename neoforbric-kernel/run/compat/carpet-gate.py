@@ -59,11 +59,11 @@ def main():
     output = (args.output or kernel / 'build/verification' / ('carpet-' + datetime.now().strftime('%Y%m%d-%H%M%S'))).resolve()
     output.mkdir(parents=True, exist_ok=False)
     root = kernel / 'canary/carpet'
-    game = stage / 'neoforge-patched/patched-mc-neoforge-26.2.jar'
+    game = stage / 'neoforge-patched/patched-mc-neoforge-1.21.1.jar'
     forge = stage / 'merged-base/forge-runtime-interop.jar'
     neo = stage / 'neoforge-runtime/neoforge-runtime.jar'
     cp = [game, forge, neo, carpet]
-    for lib in json.loads((mc / 'versions/26.2/26.2.json').read_text())['libraries']:
+    for lib in json.loads((mc / 'versions/1.21.1/1.21.1.json').read_text())['libraries']:
         path = lib.get('downloads', {}).get('artifact', {}).get('path')
         if path and (mc / 'libraries' / path).is_file():
             cp.append(mc / 'libraries' / path)

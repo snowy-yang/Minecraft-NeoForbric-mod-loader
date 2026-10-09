@@ -11,18 +11,18 @@ ${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, shutil, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M53_KERNEL', 'M53_OLD', 'M53_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))
-compile_game = pathlib.Path(os.environ.get('M53_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-26.2.jar'))
+compile_game = pathlib.Path(os.environ.get('M53_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar'))
 forge = pathlib.Path(os.environ.get('FORGE_RT', old / 'run/merged-base/forge-runtime-interop.jar'))
 if not forge.is_file(): forge = old / 'run/forge-runtime/forge-runtime.jar'
 neo = pathlib.Path(os.environ.get('NEO_RT', old / 'run/neoforge-runtime/neoforge-runtime.jar'))
-fapi = pathlib.Path(os.environ.get('M53_FABRIC_API', kernel / 'run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar'))
-vanilla = mc / 'versions/26.2/26.2.jar'
+fapi = pathlib.Path(os.environ.get('M53_FABRIC_API', kernel / 'run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar'))
+vanilla = mc / ('versions/' + os.environ.get('MC_VERSION', '1.21.1') + '/' + os.environ.get('MC_VERSION', '1.21.1') + '.jar')
 kernel_jar = kernel / 'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
 mixin = mc / 'libraries/net/fabricmc/sponge-mixin/0.17.3+mixin.0.8.7/sponge-mixin-0.17.3+mixin.0.8.7.jar'
 # A vanilla Minecraft tree (a CI runner's .dev/minecraft) has no Fabric libraries: take the kernel's own copy.
 if not mixin.is_file() and os.environ.get('NEOFORBRIC_SPONGE_MIXIN'): mixin = pathlib.Path(os.environ['NEOFORBRIC_SPONGE_MIXIN'])
 libraries = []
-for entry in json.loads((mc / 'versions/26.2/26.2.json').read_text())['libraries']:
+for entry in json.loads((mc / ('versions/' + os.environ.get('MC_VERSION', '1.21.1') + '/' + os.environ.get('MC_VERSION', '1.21.1') + '.json')).read_text())['libraries']:
     artifact = entry.get('downloads', {}).get('artifact', {}).get('path')
     if artifact and (mc / 'libraries' / artifact).is_file(): libraries.append(mc / 'libraries' / artifact)
 for path in [compile_game, forge, neo, fapi, vanilla, kernel_jar, mixin]:

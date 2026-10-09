@@ -54,7 +54,7 @@ step "stage fabric-api + Tectonic + the lithostitched build Tectonic links again
 reap_stale_server "$RUNDIR"
 rm -rf "$RUNDIR/world" "$RUNDIR/mods" "$RUNDIR/.neoforbric-kernel" 2>/dev/null
 mkdir -p "$RUNDIR/mods"
-for jar in "$PACK/fabric-api-0.155.2+26.2.jar" \
+for jar in "$PACK/fabric-api-0.116.17+1.21.1.jar" \
            "$PACK/lithostitched-1.7.13-neoforge-26.2.jar" \
            "$PACK/tectonic-3.0.27-neoforge-26.2.jar"; do
   if [ -f "$jar" ]; then cp "$jar" "$RUNDIR/mods/"; else echo "[kernel] WARN absent: $jar"; fi

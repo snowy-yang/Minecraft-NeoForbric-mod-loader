@@ -30,6 +30,10 @@ RUN_OLD="$OLD/run"
 BUILD="$KERNEL/build"
 FAIL=0
 
+# The Minecraft version this kernel generation is anchored to (the installer's Pins and the kernel build's
+# mcVersion are the same number). Every staged-name and versions/ path below derives from it.
+MC_VERSION="${MC_VERSION:-1.21.1}"
+
 # The port the single-server gates bind. They share one by default because they are meant to run one at a
 # time; give each concurrent run its own GATE_PORT and they stop fighting over 25565.
 #

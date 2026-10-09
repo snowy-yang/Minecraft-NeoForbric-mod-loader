@@ -145,9 +145,9 @@ class EvidenceTest(unittest.TestCase):
         return {"META-INF/MANIFEST.MF": f"Manifest-Version: 1.0\nImplementation-Title: {title}\n"
                                         f"Implementation-Version: {version}\n\nName: x/\nImplementation-Version: 0\n"}
 
-    def release_artifacts(self, neo_version="26.2.0.88"):
+    def release_artifacts(self, neo_version="21.1.256"):
         """A complete, consistent release set: the pinned readings and the staged inputs they attest."""
-        game = {"version.json": json.dumps({"id": "26.2"})}
+        game = {"version.json": json.dumps({"id": "1.21.1"})}
         artifacts = {"game-base": self.jar("game-base.jar", dict(game, **{"marker": "game-base"})),
                      "neo-runtime": self.jar("neo-runtime.jar", self.carrier("NeoForge", neo_version)),
                      "kernel": self.jar("kernel.jar", {"marker": "kernel"}),
@@ -170,15 +170,15 @@ class EvidenceTest(unittest.TestCase):
 
     def test_release_reads_the_pinned_versions_out_of_the_artifacts(self):
         recorded = evidence.capture(self.source, self.release_artifacts(), [self.mods], self.report, release=True)
-        self.assertEqual({"game-base": "26.2"}, recorded["platform"]["readings"]["minecraft"])
-        self.assertEqual("26.2.0.88", recorded["platform"]["readings"]["neoforge"]["neo-runtime"])
-        wrong = self.release_artifacts(neo_version="26.2.0.38-beta")
-        with self.assertRaisesRegex(ValueError, "not the pinned platform: neo-runtime=26.2.0.38-beta"):
+        self.assertEqual({"game-base": "1.21.1"}, recorded["platform"]["readings"]["minecraft"])
+        self.assertEqual("21.1.256", recorded["platform"]["readings"]["neoforge"]["neo-runtime"])
+        wrong = self.release_artifacts(neo_version="21.1.193-beta")
+        with self.assertRaisesRegex(ValueError, "not the pinned platform: neo-runtime=21.1.193-beta"):
             evidence.capture(self.source, wrong, [self.mods], self.report, release=True)
         # An ordinary capture records what it read and does not judge it.
         loose = evidence.capture(self.source, {"neo-runtime": wrong["neo-runtime"], "kernel": self.artifact},
                                  [self.mods], self.report)
-        self.assertEqual("26.2.0.38-beta", loose["platform"]["readings"]["neoforge"]["neo-runtime"])
+        self.assertEqual("21.1.193-beta", loose["platform"]["readings"]["neoforge"]["neo-runtime"])
 
     def test_an_unreadable_platform_artifact_is_not_a_pinned_one(self):
         artifacts = self.release_artifacts()

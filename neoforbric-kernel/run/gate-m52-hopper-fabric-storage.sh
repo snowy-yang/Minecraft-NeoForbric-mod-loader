@@ -24,7 +24,7 @@ set -uo pipefail
 SERVER_DIR="$KERNEL/run/server-hopper-m52"
 RESULTS="$BUILD/verification/m52-hopper-fabric-storage"
 FAIL=0
-FAPI="$KERNEL/run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar"
+FAPI="$KERNEL/run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar"
 LITHIUM="$(ls "$KERNEL"/run/client-merged-pack/mods/lithium-neoforge-*.jar 2>/dev/null | head -1)"
 LOST="{'unslotted.insert.step', 'unslotted.insert.drain', 'unslotted.extract.step', 'unslotted.extract.drain', 'unslotted.refill', 'blockonly.insert.step', 'blockonly.insert.drain', 'blockonly.extract.step', 'blockonly.extract.drain', 'blockonly.refill', 'blockonly.emptyBlocksPickup'}"
 rm -rf "$RESULTS"; mkdir -p "$RESULTS"

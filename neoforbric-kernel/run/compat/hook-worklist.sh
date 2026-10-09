@@ -13,7 +13,7 @@ OLD="${NEOFORBRIC_OLD:-$(cd "$KERNEL/../neoforbric-loader" && pwd)}"
 RUN_OLD="$OLD/run"
 MODS="${MODS:-$KERNEL/run/client-merged-pack/mods}"
 
-BASE="$RUN_OLD/merged-base/patched-mc-merged-26.2.jar"
+BASE="$RUN_OLD/merged-base/patched-mc-merged-1.21.1.jar"
 FORGE_RT="$RUN_OLD/forge-runtime/forge-runtime.jar"
 NEO_RT="$RUN_OLD/neoforge-runtime/neoforge-runtime.jar"
 for f in "$BASE" "$FORGE_RT"; do

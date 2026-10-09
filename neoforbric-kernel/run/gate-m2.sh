@@ -69,7 +69,7 @@ check "builtin mods resolvable"               "builtins minecraft=true java=true
 # Mojang's own names, which is what that namespace means — so a mod comparing against it now matches, where
 # "named" was a spelling no real instance of this loader reports and sent such a mod down its other branch.
 check "runtime namespace is what a real loader reports" "namespace=official" "$LOG"
-check "game version detected from version.json" "gameVersion=26.2" "$LOG"
+check "game version detected from version.json" "gameVersion=$MC_VERSION" "$LOG"
 check "metadata + customValue round-trip"     "customKind=fabric customExpects=3" "$LOG"
 check "findPath reaches inside the mod jar"   "findPath\(fabric.mod.json\) present=true" "$LOG"
 check "objectShare round-trip"                "objectShare roundtrip=world" "$LOG"

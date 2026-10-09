@@ -44,19 +44,19 @@ step "install into an empty directory"
 rm -rf "$DEST"
 mkdir -p "$DEST"
 # The base version is copied rather than re-downloaded: this gate is about the installer, not about Mojang's CDN.
-mkdir -p "$DEST/versions/26.2"
-cp "$MC/versions/26.2/26.2.json" "$MC/versions/26.2/26.2.jar" "$DEST/versions/26.2/" 2>/dev/null || true
-java -jar "$JAR" --dir "$DEST" --mc 26.2 > "$LOG" 2>&1
+mkdir -p "$DEST/versions/$MC_VERSION"
+cp "$MC/versions/$MC_VERSION/$MC_VERSION.json" "$MC/versions/${MC_VERSION}/${MC_VERSION}.jar" "$DEST/versions/${MC_VERSION}/" 2>/dev/null || true
+java -jar "$JAR" --dir "$DEST" --mc "$MC_VERSION" > "$LOG" 2>&1
 INSTALL_RC=$?
 sed 's/^/[kernel]   /' "$LOG" | cut -c1-180
 
 step "the install wrote what a launcher needs (must PASS)"
 assert_eq "the installer exited cleanly" "0" "$INSTALL_RC"
-check "it wrote a version profile"     "wrote .*versions/26.2-neoforbric/26.2-neoforbric.json" "$LOG"
+check "it wrote a version profile"     "wrote .*versions/1.21.1-neoforbric/1.21.1-neoforbric.json" "$LOG"
 check "it staged NeoForbric's own jars"   "staged [1-9][0-9]* NeoForbric and kernel-dependency jar" "$LOG"
 check "it staged the game artifacts"   "staged 3 game artifact"                          "$LOG"
 check_absent "it never claimed to ship Minecraft" "bundled (merged|game) base"            "$LOG"
-[ -f "$DEST/versions/26.2-neoforbric/26.2-neoforbric.json" ] && echo "[kernel] PASS the profile exists" \
+[ -f "$DEST/versions/1.21.1-neoforbric/1.21.1-neoforbric.json" ] && echo "[kernel] PASS the profile exists" \
   || { echo "[kernel] FAIL the profile exists"; FAIL=1; }
 
 step "a launcher reads the profile as MODDED (must PASS)"
@@ -65,7 +65,7 @@ step "a launcher reads the profile as MODDED (must PASS)"
 # NeoForge. A NeoForbric profile carried none of those strings, so it was read as vanilla, which is not a label: an
 # unmodded version gets the SHARED .minecraft/mods folder instead of this version's own, so every mod downloaded
 # through the launcher landed where the instance does not look.
-PROFILE="$DEST/versions/26.2-neoforbric/26.2-neoforbric.json"
+PROFILE="$DEST/versions/1.21.1-neoforbric/1.21.1-neoforbric.json"
 if grep -q 'net\.fabricmc:fabric-loader' "$PROFILE"; then
   echo "[kernel] PASS the profile names a loader coordinate a launcher matches on"
 else
@@ -90,10 +90,11 @@ fi
 step "give the directory the vanilla libraries a launcher would have downloaded"
 # The installer stages only what it owns; the base version's own libraries are the launcher's job. Copying them
 # from the real install is what makes this a launcher simulation rather than a half-populated directory.
-COPIED=$(${PYTHON} - "$DEST" "$MC" <<'LIBS'
+MC_V="$MC_VERSION" COPIED=$(${PYTHON} - "$DEST" "$MC" <<'LIBS'
 import json, os, platform, shutil, sys
 dest, mc = sys.argv[1:3]
-with open(os.path.join(dest, "versions", "26.2", "26.2.json")) as f:
+MC_VERSION = os.environ["MC_V"]
+with open(os.path.join(dest, "versions", MC_VERSION, MC_VERSION + ".json")) as f:
     base = json.load(f)
 osname = {"Darwin": "osx", "Windows": "windows"}.get(platform.system(), "linux")
 
@@ -150,7 +151,7 @@ def load(version):
     with open(os.path.join(dest, "versions", version, version + ".json")) as f:
         return json.load(f)
 
-child = load("26.2-neoforbric")
+child = load("1.21.1-neoforbric")
 parent = load(child["inheritsFrom"])
 
 osname = {"Darwin": "osx", "Windows": "windows"}.get(platform.system(), "linux")
@@ -190,7 +191,7 @@ missing = [e["name"] for e in child.get("libraries", []) if not os.path.isfile(
 # A launcher always puts the base version's jar on the classpath. It is harmless here and worth keeping in the
 # simulation: the kernel defines every net.minecraft class itself, from the merged base, so the vanilla copy on
 # the parent classpath is never the one that answers.
-game_jar = os.path.join(dest, "versions", "26.2", "26.2.jar")
+game_jar = os.path.join(dest, "versions", MC_VERSION, MC_VERSION + ".jar")
 if os.path.isfile(game_jar):
     classpath.append(game_jar)
 
@@ -198,11 +199,11 @@ placeholders = {
     "${library_directory}": os.path.join(dest, "libraries"),
     "${classpath}": os.pathsep.join(classpath),
     "${classpath_separator}": os.pathsep,
-    "${natives_directory}": os.path.join(mc, "versions", "26.2", "26.2-natives"),
+    "${natives_directory}": os.path.join(mc, "versions", MC_VERSION, MC_VERSION + "-natives"),
     "${launcher_name}": "neoforbric-gate",
     "${launcher_version}": "1",
     "${auth_player_name}": "NeoForbricKernel",
-    "${version_name}": "26.2-neoforbric",
+    "${version_name}": "1.21.1-neoforbric",
     "${game_directory}": dest,
     "${assets_root}": os.path.join(mc, "assets"),
     "${assets_index_name}": parent["assetIndex"]["id"],
@@ -332,7 +333,7 @@ check_absent "nothing the installer staged went missing" \
 # These two phases run LAST on purpose: the second one rebuilds an artifact, and nothing downstream should be
 # resolved from a half-refreshed cache.
 step "a second install into the same directory reuses what is already built"
-java -jar "$JAR" --dir "$DEST" --mc 26.2 > "$BUILD/gate-m17-install-2.log" 2>&1
+java -jar "$JAR" --dir "$DEST" --mc "$MC_VERSION" > "$BUILD/gate-m17-install-2.log" 2>&1
 REUSED=$(grep -cE "^\[(forge-runtime|patched|neoforge-runtime|neoform|merge|interop)\] up-to-date" "$BUILD/gate-m17-install-2.log")
 assert_eq "every artifact came from the cache" "6" "$REUSED"
 
@@ -344,8 +345,8 @@ FR_STAMP="$DEST/.neoforbric-build/out/forge-runtime.jar.pins"
 if [ ! -f "$FR_STAMP" ]; then
   echo "[kernel] FAIL no stamp beside forge-runtime.jar — nothing records what built it"; FAIL=$((FAIL+1))
 else
-  echo "mc=26.2 forge=PRETEND-OTHER neoforge=PRETEND-OTHER nfrt=0 result=none" > "$FR_STAMP"
-  java -jar "$JAR" --dir "$DEST" --mc 26.2 > "$BUILD/gate-m17-install-3.log" 2>&1
+  echo "mc=$MC_VERSION forge=PRETEND-OTHER neoforge=PRETEND-OTHER nfrt=0 result=none" > "$FR_STAMP"
+  java -jar "$JAR" --dir "$DEST" --mc "$MC_VERSION" > "$BUILD/gate-m17-install-3.log" 2>&1
   check_absent "the stale artifact is rebuilt, not reused" "^\[forge-runtime\] up-to-date" \
     "$BUILD/gate-m17-install-3.log"
   check "and it says so"       "^\[forge-runtime\] (fetching|merging|wrote)" "$BUILD/gate-m17-install-3.log"
@@ -367,9 +368,9 @@ else
   # install is served entirely from cache, never asks for the tool, and the tampered file survives while
   # nothing is wrong. (That is how this assertion failed the first time it was written.)
   printf 'not a jar at all' > "$TOOLS"
-  echo "mc=26.2 forge=PRETEND-OTHER neoforge=PRETEND-OTHER nfrt=0 result=none tools=none" \
-    > "$DEST/.neoforbric-build/out/patched-mc-merged-26.2.jar.pins"
-  java -jar "$JAR" --dir "$DEST" --mc 26.2 > "$BUILD/gate-m17-install-4.log" 2>&1
+  echo "mc=$MC_VERSION forge=PRETEND-OTHER neoforge=PRETEND-OTHER nfrt=0 result=none tools=none" \
+    > "$DEST/.neoforbric-build/out/patched-mc-merged-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar.pins"
+  java -jar "$JAR" --dir "$DEST" --mc "$MC_VERSION" > "$BUILD/gate-m17-install-4.log" 2>&1
   check_absent "the merge re-runs, so the tool is actually asked for" "^\[merge\] up-to-date" \
     "$BUILD/gate-m17-install-4.log"
   assert_eq "the stale tool is replaced by the bundled one" \

@@ -29,7 +29,7 @@ kernel_jar
 reap_stale_server "$RUNDIR"
 rm -rf "$RUNDIR/world" "$RUNDIR/mods" "$RUNDIR/.neoforbric-kernel" 2>/dev/null
 mkdir -p "$RUNDIR/mods"
-for j in fabric-api-0.155.2+26.2.jar balm-neoforge-26.2-26.2.0.4.jar shogi-neoforge-26.2-26.2.0.3.jar \
+for j in fabric-api-0.116.17+1.21.1.jar balm-neoforge-26.2-26.2.0.4.jar shogi-neoforge-26.2-26.2.0.3.jar \
          cookingforblockheads-neoforge-26.2-26.2.0.2.jar waystones-neoforge-26.2-26.2.0.5.jar; do
   src="$KERNEL/run/client-merged-pack/mods/$j"
   [ -f "$src" ] || { echo "[kernel] FATAL: missing $j — this gate needs the merged pack staged" >&2; exit 3; }

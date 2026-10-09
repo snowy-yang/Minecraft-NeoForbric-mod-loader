@@ -13,7 +13,7 @@ set -uo pipefail
 SRC="$KERNEL/canary/fabric"
 OUT="$KERNEL/run/canary"
 canary_scratch fabric
-MERGED="$OLD/run/merged-base/patched-mc-merged-26.2.jar"
+MERGED="$OLD/run/merged-base/patched-mc-merged-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar"
 NEO_RT="$OLD/run/neoforge-runtime/neoforge-runtime.jar"
 
 step "prerequisites"

@@ -5,7 +5,7 @@
 # That is the shape no gate pack had. Every pack's nested duplicates are same-family (one fabric-api-base nested
 # by five Fabric mods), which both loaders already deduplicate on their own. What nobody was checking is the SAME
 # id claimed by two ECOSYSTEMS — each loader only ever deduplicates within its own family — and that is what made
-# Xaero's xaerolib construct twice on a real 26.2 pack.
+# Xaero's xaerolib construct twice on a real anchored-version pack.
 #
 # The library carries a one-shot registry that throws on a second registration, the way xaerolib's config channel
 # does, so the gate proves the BEHAVIOUR and not only the arbitration log line.

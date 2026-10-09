@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Boot the MC 26.2 CLIENT through the SOVEREIGN KERNEL (no Knot, no genuine FML/FancyModLoader lifecycle) from
+# Boot the MC 1.21.1 CLIENT through the SOVEREIGN KERNEL (no Knot, no genuine FML/FancyModLoader lifecycle) from
 # NeoForge's own patched game jar, with the NeoForge runtime jar as a PASSIVE ABI carrier. M5 goal: reach the
 # TITLE screen.
 #
-# Parent -cp: kernel boot jar + kernel deps + MC 26.2 libraries (incl. LWJGL). Owned (transform-loaded): neoforge
+# Parent -cp: kernel boot jar + kernel deps + MC 1.21.1 libraries (incl. LWJGL). Owned (transform-loaded): neoforge
 # base + neoforge-runtime + the MC libraries (via --libraryPath, so mods can mixin into them).
 #
 # macOS: -XstartOnFirstThread is MANDATORY (GLFW must own the main thread); the kernel invokes the client Main on
@@ -19,11 +19,13 @@ KERNEL="$(cd "$HERE/.." && pwd)"
 # instead of needing GAME_BASE and NEO_RT set individually.
 OLD="$(cd "${NEOFORBRIC_OLD:-$KERNEL/../neoforbric-loader}" && pwd)"
 STAGE="$OLD/run"
+# The Minecraft version this kernel generation is anchored to (same number as lib.sh and the installer Pins).
+MC_VERSION="${MC_VERSION:-1.21.1}"
 
-GAME_BASE="${GAME_BASE:-$STAGE/neoforge-base/patched-mc-neoforge-26.2.jar}"
+GAME_BASE="${GAME_BASE:-$STAGE/neoforge-base/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar}"
 NEO_RT="${NEO_RT:-$STAGE/neoforge-runtime/neoforge-runtime.jar}"
 RUNDIR="${RUNDIR:-$KERNEL/run/client-kernel}"
-NATIVES="${NATIVES_DIR:-$MC/versions/26.2/26.2-natives}"
+NATIVES="${NATIVES_DIR:-$MC/versions/${MC_VERSION}/${MC_VERSION}-natives}"
 ASSETS="$MC/assets"
 mkdir -p "$RUNDIR/mods"
 
@@ -40,11 +42,11 @@ fi
 BOOT_JAR="${NEOFORBRIC_BOOT_JAR:-$(ls "$KERNEL"/build/libs/neoforbric-kernel-*.jar | head -1)}"
 BOOT_DEPS="$("$KERNEL/gradlew" --offline -q -p "$KERNEL" printBootClasspath 2>/dev/null | grep -vE 'WARNING|native|Restricted|enable' | tail -1)"
 
-# MC 26.2 libraries (parent-loaded), resolved from the Mojang install's version json. Includes LWJGL.
+# MC 1.21.1 libraries (parent-loaded), resolved from the Mojang install's version json. Includes LWJGL.
 VANILLA_CP="$(${PYTHON} - "$MC" <<'PY'
 import json, os, sys
 mc = sys.argv[1]
-d = json.load(open(os.path.join(mc, 'versions', '26.2', '26.2.json')))
+d = json.load(open(os.path.join(mc, 'versions', '1.21.1', '1.21.1.json')))
 out = []
 for lib in d.get('libraries', []):
     p = lib.get('name', '').split(':')
@@ -56,7 +58,7 @@ for lib in d.get('libraries', []):
 print(os.pathsep.join(out))
 PY
 )"
-ASSET_INDEX="$(${PYTHON} -c "import json;print(json.load(open('$MC/versions/26.2/26.2.json'))['assetIndex']['id'])")"
+ASSET_INDEX="$(${PYTHON} -c "import json;print(json.load(open('$MC/versions/$MC_VERSION/$MC_VERSION.json'))['assetIndex']['id'])")"
 
 
 # Game root metadata (version.json) on the PARENT -cp, as a resources-only jar. Mods that ask
@@ -91,6 +93,6 @@ exec java -XstartOnFirstThread -Djava.library.path="$NATIVES" \
   -cp "$CP" net.neoforbric.kernel.boot.KernelClientLaunch \
   --gameJar "$GAME_BASE" --runtimeJar "$NEO_RT" \
   --libraryPath "$VANILLA_CP" \
-  -- --version 26.2-neoforbric-kernel --gameDir "$RUNDIR" --assetsDir "$ASSETS" --assetIndex "$ASSET_INDEX" \
+  -- --version 1.21.1-neoforbric-kernel --gameDir "$RUNDIR" --assetsDir "$ASSETS" --assetIndex "$ASSET_INDEX" \
   --accessToken 0 --username NeoForbricKernel --uuid 00000000000000000000000000000000 \
   --userType legacy --versionType release "$@"

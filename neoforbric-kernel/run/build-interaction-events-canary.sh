@@ -10,11 +10,11 @@ ${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M44_KERNEL', 'M44_OLD', 'M44_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))
-compile_game = pathlib.Path(os.environ.get('M44_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-26.2.jar'))
+compile_game = pathlib.Path(os.environ.get('M44_COMPILE_GAME', old / 'run/neoforge-patched/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar'))
 neo = pathlib.Path(os.environ.get('NEO_RT', old / 'run/neoforge-runtime/neoforge-runtime.jar'))
-fapi = pathlib.Path(os.environ.get('M44_FABRIC_API', kernel / 'run/client-merged-pack/mods/fabric-api-0.155.2+26.2.jar'))
+fapi = pathlib.Path(os.environ.get('M44_FABRIC_API', kernel / 'run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar'))
 libraries = []
-for entry in json.loads((mc / 'versions/26.2/26.2.json').read_text())['libraries']:
+for entry in json.loads((mc / ('versions/' + os.environ.get('MC_VERSION', '1.21.1') + '/' + os.environ.get('MC_VERSION', '1.21.1') + '.json')).read_text())['libraries']:
     artifact = entry.get('downloads', {}).get('artifact', {}).get('path')
     if artifact and (mc / 'libraries' / artifact).is_file(): libraries.append(mc / 'libraries' / artifact)
 modules = kernel / 'run/canary/m44-modules'; modules.mkdir(parents=True, exist_ok=True)

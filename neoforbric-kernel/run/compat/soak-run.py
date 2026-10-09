@@ -350,7 +350,7 @@ def launch(args):
         embedded = [name for name in jar.namelist() if name.endswith('neoforbric-kernel-runtime.jar')]
         if len(embedded) != 1 or hashlib.sha256(jar.read(embedded[0])).hexdigest() != digest(runtime):
             raise ValueError('boot embedded runtime is missing or differs from frozen runtime jar')
-    merged = copy_frozen(Path(args.merged) if args.merged else staged / 'merged-base/patched-mc-merged-26.2.jar', frozen / 'merged.jar', records)
+    merged = copy_frozen(Path(args.merged) if args.merged else staged / 'merged-base/patched-mc-merged-1.21.1.jar', frozen / 'merged.jar', records)
     forge_source = Path(args.forge) if args.forge else staged / 'merged-base/forge-runtime-interop.jar'
     if not forge_source.is_file(): forge_source = staged / 'forge-runtime/forge-runtime.jar'
     forge = copy_frozen(forge_source, frozen / 'forge.jar', records)
@@ -364,7 +364,7 @@ def launch(args):
             continue
         if not path.is_file() or path.suffix != '.jar': raise ValueError(f'unfreezable boot classpath: {path}')
         parent.append(copy_frozen(path, frozen / 'boot-libs' / f'{index:03d}-{path.name}', records))
-    metadata = copy_frozen(mc / 'versions/26.2/26.2.json', frozen / '26.2.json', records)
+    metadata = copy_frozen(mc / 'versions/1.21.1/1.21.1.json', frozen / '1.21.1.json', records)
     version = json.loads(metadata.read_text())
     game_libraries = []
     for index, lib in enumerate(version['libraries']):

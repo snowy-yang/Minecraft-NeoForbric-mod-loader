@@ -6,9 +6,9 @@ from evidence import source_record,file_record
 sys.dont_write_bytecode=True
 K=Path(__file__).resolve().parents[2];BASE=K/'build/compat-ui';BASE.mkdir(parents=True,exist_ok=True)
 old=Path(os.environ['NEOFORBRIC_OLD']);mc=Path.home()/'Library/Application Support/minecraft'
-compile_game=old/'run/neoforge-patched/patched-mc-neoforge-26.2.jar';boot=K/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
+compile_game=old/'run/neoforge-patched/patched-mc-neoforge-1.21.1.jar';boot=K/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar'
 cp=[compile_game,boot,Path(os.environ['FORGE_RT']),Path(os.environ['NEO_RT'])]
-for entry in json.loads((mc/'versions/26.2/26.2.json').read_text())['libraries']:
+for entry in json.loads((mc/'versions/1.21.1/1.21.1.json').read_text())['libraries']:
  path=entry.get('downloads',{}).get('artifact',{}).get('path')
  if path and (mc/'libraries'/path).is_file():cp.append(mc/'libraries'/path)
 classes=BASE/'classes';classes.mkdir(exist_ok=True)

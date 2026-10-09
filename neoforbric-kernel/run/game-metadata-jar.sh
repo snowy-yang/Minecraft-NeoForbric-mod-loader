@@ -9,9 +9,9 @@
 #
 # Measured cost of that: CustomSkinLoader's bootstrap picks its bytecode patch variant by PROTOCOL VERSION
 # ("skin-manager.v1" claims [,763], "skin-manager.v2" claims [765,800],…). With version.json unreadable its
-# protocol reads 0, which lands inside v1's open lower bound, so it applied a pre-1.20.2 pattern to 26.2, matched
+# protocol reads 0, which lands inside v1's open lower bound, so it applied a pre-1.20.2 pattern to the version, matched
 # nothing, and threw `matched protocol 0 but did not modify any bytecode` — taking SkinManager and
-# PlayerTabOverlay with it, i.e. skin loading. 26.2's real protocol is 776, which selects v2. Its documented
+# PlayerTabOverlay with it, i.e. skin loading. 1.21.1's real protocol is 767, which selects v2. Its documented
 # fallback (net/minecraft/realms/RealmsSharedConstants) cannot help either: that class no longer exists.
 #
 # NO CLASS FILES, EVER. Putting the game base itself on the parent -cp would let the application loader win

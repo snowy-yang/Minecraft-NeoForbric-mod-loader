@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Boot the MC 26.2 DEDICATED SERVER through the SOVEREIGN KERNEL (no Knot, no genuine FML/FancyModLoader
+# Boot the MC 1.21.1 DEDICATED SERVER through the SOVEREIGN KERNEL (no Knot, no genuine FML/FancyModLoader
 # lifecycle) from NeoForge's own patched game jar, with the NeoForge runtime jar as a PASSIVE ABI carrier.
 # M1 goal: reach Done.
 #
-# Parent -cp: kernel boot jar + kernel deps + MC 26.2 libraries (parent-loaded).
+# Parent -cp: kernel boot jar + kernel deps + MC 1.21.1 libraries (parent-loaded).
 # Owned (transform-loaded by NeoForbricClassLoader): neoforge base + neoforge-runtime.
 #
 # Usage: [RUNDIR=…] [NEOFORBRIC_JVM=…] ./launch-kernel-server.sh [extra game args]
@@ -16,8 +16,10 @@ KERNEL="$(cd "$HERE/.." && pwd)"
 # instead of needing GAME_BASE and NEO_RT set individually.
 OLD="$(cd "${NEOFORBRIC_OLD:-$KERNEL/../neoforbric-loader}" && pwd)"
 STAGE="$OLD/run"
+# The Minecraft version this kernel generation is anchored to (same number as lib.sh and the installer Pins).
+MC_VERSION="${MC_VERSION:-1.21.1}"
 
-GAME_BASE="${GAME_BASE:-$STAGE/neoforge-base/patched-mc-neoforge-26.2.jar}"
+GAME_BASE="${GAME_BASE:-$STAGE/neoforge-base/patched-mc-neoforge-' + os.environ.get('MC_VERSION', '1.21.1') + '.jar}"
 NEO_RT="${NEO_RT:-$STAGE/neoforge-runtime/neoforge-runtime.jar}"
 RUNDIR="${RUNDIR:-$KERNEL/run/server-kernel}"
 mkdir -p "$RUNDIR"
@@ -37,11 +39,11 @@ fi
 BOOT_JAR="$(ls "$KERNEL"/build/libs/neoforbric-kernel-*.jar | head -1)"
 BOOT_DEPS="$("$KERNEL/gradlew" --offline -q -p "$KERNEL" printBootClasspath 2>/dev/null | grep -vE 'WARNING|native|Restricted|enable' | tail -1)"
 
-# MC 26.2 libraries (parent-loaded), resolved from the Mojang install's version json.
+# MC 1.21.1 libraries (parent-loaded), resolved from the Mojang install's version json.
 VANILLA_CP="$(${PYTHON} - "$MC" <<'PY'
 import json, os, sys
 mc = sys.argv[1]
-d = json.load(open(os.path.join(mc, 'versions', '26.2', '26.2.json')))
+d = json.load(open(os.path.join(mc, 'versions', '1.21.1', '1.21.1.json')))
 out = []
 for lib in d.get('libraries', []):
     p = lib.get('name', '').split(':')
@@ -54,7 +56,7 @@ print(os.pathsep.join(out))
 PY
 )"
 
-# jline (server console) is shipped in the MC libraries tree but not listed in 26.2.json's libraries array;
+# jline (server console) is shipped in the MC libraries tree but not listed in the version json's libraries array;
 # add it explicitly so the dedicated-server console handler doesn't NoClassDefFound.
 JLINE="$(find "$MC/libraries/org/jline" -name 'jline-*-3.25.1.jar' 2>/dev/null | paste -sd: -)"
 

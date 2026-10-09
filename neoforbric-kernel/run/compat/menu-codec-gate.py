@@ -27,7 +27,7 @@ def main():
     staged = os.environ.get('NEOFORBRIC_OLD') or (dev / 'staged' if (dev / 'staged/run/merged-base').is_dir() else kernel.parent / 'neoforbric-loader')
     stage = (args.staged_root or Path(staged) / 'run').resolve()
     # Like the build: .dev/minecraft only while it has the version JSON this script reads below.
-    mc = Path(os.environ.get('MC_DIR') or (dev / 'minecraft' if (dev / 'minecraft/versions/26.2/26.2.json').is_file()
+    mc = Path(os.environ.get('MC_DIR') or (dev / 'minecraft' if (dev / 'minecraft/versions/1.21.1/1.21.1.json').is_file()
                                          else Path.home() / 'Library/Application Support/minecraft')).resolve()
     delight = args.farmers_delight.resolve()
     api = args.fabric_api or next((path for path in (dev / 'api/fabric-api-0.155.2+26.2.jar',
@@ -44,7 +44,7 @@ def main():
     output = (args.output or kernel / 'build/verification' / ('menu-codec-' + datetime.now().strftime('%Y%m%d-%H%M%S'))).resolve()
     output.mkdir(parents=True, exist_ok=False)
     root = kernel / 'canary/menu-codec'
-    game = stage / 'merged-base/patched-mc-merged-26.2.jar'
+    game = stage / 'merged-base/patched-mc-merged-1.21.1.jar'
     forge = stage / 'merged-base/forge-runtime-interop.jar'
     neo = stage / 'neoforge-runtime/neoforge-runtime.jar'
     # The kernel's boot jar carries Fabric Loader's API (ModInitializer); launch-kernel-server.sh rebuilds it below.
@@ -62,7 +62,7 @@ def main():
                     module.parent.mkdir(exist_ok=True)
                     module.write_bytes(jar.read(name))
                     cp.append(module)
-        for lib in json.loads((mc / 'versions/26.2/26.2.json').read_text())['libraries']:
+        for lib in json.loads((mc / 'versions/1.21.1/1.21.1.json').read_text())['libraries']:
             path = lib.get('downloads', {}).get('artifact', {}).get('path')
             if path and (mc / 'libraries' / path).is_file():
                 cp.append(mc / 'libraries' / path)

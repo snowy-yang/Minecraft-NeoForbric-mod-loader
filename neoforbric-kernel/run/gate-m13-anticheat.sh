@@ -7,7 +7,7 @@
 # jar (1045 resolved conflicts, plus the kernel's post-merge fixups). Any place that merge nudged movement physics
 # off vanilla would read to a prediction-based anti-cheat as "this player moves wrong", and nothing measured that.
 #
-# This gate does. It boots Paper 26.2 with GrimAC (the strictest open-source prediction anti-cheat, sensitised so
+# This gate does. It boots the anchored Paper with GrimAC (the strictest open-source prediction anti-cheat, sensitised so
 # that EVERY violation prints — see the staging step), connects a NeoForbric client, and drives it through the
 # movement drill in KernelClientSmoke: walk, sprint, sprint-jump, turn, strafe, backpedal, sneak, mine, place
 # blocks, swim. Every input goes through the same path a keyboard would, so the packets are the real game's.
