@@ -58,7 +58,7 @@
 #                          to find last time.
 set -euo pipefail
 
-NF_VERSION="${NF_VERSION:-26.2.0.88}"
+NF_VERSION="${NF_VERSION:-21.1.256}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${OUT:-$HERE/neoforge-runtime/neoforge-runtime.jar}"
 WORK="${WORK:-$HERE/neoforge-runtime/work}"
@@ -140,7 +140,7 @@ for jar in order:
             data = z.read(info)
             if n.startswith('META-INF/services/'): services[n] = services.get(n, b'') + data + b'\n'
             else: files[n] = data
-fmj = b'{\n  "schemaVersion": 1,\n  "id": "neoforge",\n  "version": "26.2.0",\n  "name": "NeoForge runtime (via NeoForbric)",\n  "environment": "*"\n}\n'
+fmj = b'{\n  "schemaVersion": 1,\n  "id": "neoforge",\n  "version": "21.1.0",\n  "name": "NeoForge runtime (via NeoForbric)",\n  "environment": "*"\n}\n'
 # FML's JarVersionLookupHandler resolves component versions from the module descriptor's rawVersion or the
 # package Implementation-Version (substrate patch 0004 serves the latter under Knot). Without a manifest
 # version, LanguageProviderLoader throws "Failed to find implementation version for language provider javafml".
@@ -161,7 +161,7 @@ fi
 # --- NeoForbric NeoForge bridge mod: a genuine raw NeoForge @Mod compiled here against the runtime-supplied ---
 # NeoForge (never redistributed). Its RegisterEvent listener opens the Fabric-content window inside NeoForge's
 # REAL registration span; it enters the game like any downloaded NeoForge mod (discovered -> layered).
-PATCHED="${PATCHED:-$HERE/neoforge-patched/patched-mc-neoforge-26.2.jar}"
+PATCHED="${PATCHED:-$HERE/neoforge-patched/patched-mc-neoforge-1.21.1.jar}"
 if [ ! -f "$BRIDGE_OUT" ] && [ -d "$BRIDGE_SRC" ] && [ -f "$PATCHED" ]; then
   echo "[assemble] compiling neoforbric NeoForge bridge mod ..."
   BW="$WORK/bridge-classes"; rm -rf "$BW"; mkdir -p "$BW"

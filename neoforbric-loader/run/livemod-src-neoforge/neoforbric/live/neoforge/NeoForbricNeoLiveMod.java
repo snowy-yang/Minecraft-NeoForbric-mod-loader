@@ -24,12 +24,13 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
- * NeoForbric tri-in-one B-5 canary (NeoForge side): a genuine NeoForge {@code @Mod} that counts NeoForge's OWN
- * {@code ServerTickEvent.Post} on the game bus. Staged alongside the traditional-Forge canary (neoforbriclive) on the
- * MERGED base, it proves BOTH ecosystems' server-tick listeners fire — NeoForge natively (its lifecycle owns
- * {@code MinecraftServer.tickServer}'s hook) and Forge via the Neo->Forge event bridge — and, since each counts one
- * increment per game tick, that the bridge does NOT double-fire (both reach "20 ticks" at the same game tick, not
- * 40). Compiled at assemble time against the NeoForge runtime; never redistributed.
+ * NeoForbric B-5 canary (NeoForge side): a genuine NeoForge {@code @Mod} that counts NeoForge's OWN
+ * {@code ServerTickEvent.Post} on the game bus. Staged alongside the Fabric canary (neoforbricfabriclive) on the
+ * NeoForge-patched base, it proves the NeoForge side of a mixed install behaves exactly as on stock NeoForge —
+ * its lifecycle owns {@code MinecraftServer.tickServer}'s hook — while the Fabric side runs on the kernel's
+ * adapter layer, and, since each side counts one increment per game tick, that the kernel does NOT double-fire
+ * the hook (both reach "20 ticks" at the same game tick, not 40). Compiled at assemble time against the NeoForge
+ * runtime; never redistributed.
  */
 @Mod("neoforbricneolive")
 public class NeoForbricNeoLiveMod {
@@ -50,7 +51,7 @@ public class NeoForbricNeoLiveMod {
 				var features = steps.size() > ores ? steps.get(ores) : net.minecraft.core.HolderSet.<net.minecraft.world.level.levelgen.placement.PlacedFeature>empty();
 				boolean present = false;
 				for (var holder : features) {
-					if (holder.unwrapKey().map(k -> k.identifier().toString()).orElse("").equals("neoforbricneolive:probe")) present = true;
+					if (holder.unwrapKey().map(k -> k.location().toString()).orElse("").equals("neoforbricneolive:probe")) present = true;
 				}
 				System.out.println("[NeoForbricNeoLive/WORLDGEN] probe ran: plains has " + features.size() + " feature(s) in underground_ores");
 				System.out.println("[NeoForbricNeoLive/WORLDGEN] plains underground_ores has neoforbricneolive:probe = " + present);
@@ -71,10 +72,12 @@ public class NeoForbricNeoLiveMod {
 				// holding and NPEs on null before any listener runs. NeoForge's own fake player is what a mod
 				// breaking a block on nobody's behalf uses, so it is also the honest stand-in here.
 				var breaker = net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(level);
-				var probe = new net.neoforged.neoforge.event.level.block.BreakBlockEvent(
+				// 1.21.1 spells it BlockEvent.BreakEvent (the flat BreakBlockEvent name is 26.x's); same
+				// four-argument construction, same isCanceled() veto seam for the MinecraftForge protection mod.
+				var probe = new net.neoforged.neoforge.event.level.BlockEvent.BreakEvent(
 						level, pos, level.getBlockState(pos), breaker);
 				net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(probe);
-				System.out.println("[NeoForbricNeoLive/BLOCKBREAK] posted BreakBlockEvent at " + pos
+				System.out.println("[NeoForbricNeoLive/BLOCKBREAK] posted BreakEvent at " + pos
 						+ " refused=" + probe.isCanceled());
 
 				// The two click events, which carry a useBlock/useItem decision as well as a cancel. The Forge
@@ -119,8 +122,12 @@ public class NeoForbricNeoLiveMod {
 				var override = mineshaft.getModifiedStructureSettings().spawnOverrides().get(net.minecraft.world.entity.MobCategory.CREATURE);
 				boolean present = false;
 				if (override != null) {
+					// 1.21.1: WeightedRandomList<SpawnerData>.unwrap() yields the SpawnerData entries themselves
+					// (no wrapper indirection), SpawnerData exposes its EntityType as the public field `type`
+					// (a type() accessor is 26.x's), and the singleton holder is EntityType.LLAMA (EntityTypes.*
+					// is the 26.x plural rename).
 					for (var weighted : override.spawns().unwrap()) {
-						if (weighted.value().type() == net.minecraft.world.entity.EntityTypes.LLAMA) present = true;
+						if (weighted.type == net.minecraft.world.entity.EntityType.LLAMA) present = true;
 					}
 				}
 				System.out.println("[NeoForbricNeoLive/WORLDGEN] structure probe ran: mineshaft creature override present = " + (override != null));
@@ -229,7 +236,9 @@ public class NeoForbricNeoLiveMod {
 			System.out.println("[NeoForbricNeoLive] ModList not available yet: " + notYet);
 		}
 		try {
-			modFile = net.neoforged.fml.loading.FMLLoader.getCurrent().getLoadingModList()
+			// 1.21.1: FMLLoader exposes the loading list directly (the getCurrent() indirection is 26.x's), and
+			// LoadingModList answers getModFileById with a ModFileInfo or null.
+			modFile = net.neoforged.fml.loading.FMLLoader.getLoadingModList()
 					.getModFileById("neoforbricfabriclive") != null;
 		} catch (Throwable absent) {
 			System.out.println("[NeoForbricNeoLive] LoadingModList lookup unavailable: " + absent);
@@ -274,7 +283,7 @@ public class NeoForbricNeoLiveMod {
 				return;
 			}
 			System.out.println("[NeoForbricNeoLive] getModFileById(self) answered, file=" + info.getFile().getFileName()
-					+ " id=" + info.getFile().getId() + " type=" + info.getFile().getType());
+					+ " type=" + info.getFile().getType());
 			java.util.List<? extends net.neoforged.neoforgespi.language.IModInfo> mine = info.getMods();
 			if (mine.isEmpty()) {
 				System.out.println("[NeoForbricNeoLive] own metadata: the file reports NO mods");

@@ -57,7 +57,7 @@ class MixinTwinRebindTest {
 
 	@Test void aRowParsesAndAMalformedOneIsRefused() {
 		MixinTwinRebind.Row row = MixinTwinRebind.Row.parse(RENDERER + "#shouldRenderFace" + VANILLA + " -> " + OVERLOAD
-				+ " | 0,2,3,4 | FABRIC,FORGE");
+				+ " | 0,2,3,4 | FABRIC,NEOFORGE");
 		assertNotNull(row);
 		assertEquals(RENDERER, row.owner());
 		assertEquals("shouldRenderFace", row.name());

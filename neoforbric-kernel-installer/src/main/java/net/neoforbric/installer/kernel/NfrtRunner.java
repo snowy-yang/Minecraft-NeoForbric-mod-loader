@@ -105,7 +105,23 @@ final class NfrtRunner {
 		Path tool = fetchTool();
 
 		List<String> cmd = new ArrayList<>(List.of(
-				jvm.javaBin().toString(), HEAP,
+				jvm.javaBin().toString(), HEAP));
+		// NFRT is a child JVM with a command line we build, so it does not see this JVM's proxy settings unless
+		// they are on that line. The installer's own downloads honour -Dhttp(s).proxyHost because java.net.http
+		// defaults to the JVM-wide ProxySelector, and a user behind a proxy (this whole install ran through one)
+		// would watch the installer fetch every jar, then see the child die with ConnectException on the first
+		// Maven request. Forward whatever the parent JVM was given.
+		for (String scheme : List.of("http", "https")) {
+			String host = System.getProperty(scheme + ".proxyHost");
+			String port = System.getProperty(scheme + ".proxyPort");
+			if (host != null && !host.isBlank()) {
+				cmd.add("-D" + scheme + ".proxyHost=" + host);
+				if (port != null && !port.isBlank()) cmd.add("-D" + scheme + ".proxyPort=" + port);
+			}
+			String nonProxy = System.getProperty(scheme + ".nonProxyHosts");
+			if (nonProxy != null && !nonProxy.isBlank()) cmd.add("-D" + scheme + ".nonProxyHosts=" + nonProxy);
+		}
+		cmd.addAll(List.of(
 				"-jar", tool.toString(),
 				"--home-dir", nfrtHome.toString(),
 				"--work-dir", workDir.toString(),

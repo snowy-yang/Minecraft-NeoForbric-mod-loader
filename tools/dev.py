@@ -31,11 +31,9 @@ API_PINS = (
      '889afc438d3e4add5cfdac76517da7987a2c495e4731690a56f2c5dee775db59'),
 )
 STAGED_FILES = ('neoforge-base/patched-mc-neoforge-1.21.1.jar', 'neoforge-runtime/neoforge-runtime.jar',
-                # Not launched, but the bytecode tests read the patched side the base was staged from.
-                'neoforge-patched/patched-mc-neoforge-1.21.1.jar',
-                # Also only read by tests: the pins that tie the NeoForge side to this base,
+                # Not launched, but the bytecode tests read the pins that tie the NeoForge side to this base,
                 # and the canary mod (see CANARIES).
-                'neoforge-patched/patched-mc-neoforge-1.21.1.jar.pins',
+                'neoforge-base/patched-mc-neoforge-1.21.1.jar.pins',
                 'neoforge-runtime/neoforbricneolive.jar')
 # neoforbric-loader/run/build-testmods.sh's canary mod, built the same way into the stage: (sources, jar, javac
 # --release, the staged game jars it compiles against). Its sources go beside it, as in neoforbric-loader/run/,
@@ -43,7 +41,7 @@ STAGED_FILES = ('neoforge-base/patched-mc-neoforge-1.21.1.jar', 'neoforge-runtim
 CANARY_SOURCES = ROOT / 'neoforbric-loader' / 'run'
 CANARIES = (
     ('livemod-src-neoforge', 'neoforge-runtime/neoforbricneolive.jar', '21',
-     ('neoforge-runtime/neoforge-runtime.jar', 'neoforge-patched/patched-mc-neoforge-1.21.1.jar')),
+     ('neoforge-runtime/neoforge-runtime.jar', 'neoforge-base/patched-mc-neoforge-1.21.1.jar')),
 )
 # What build-testmods.sh packages besides classes.
 CANARY_RESOURCES = ('META-INF', 'neoforbriclive.mixins.json', 'data', 'assets')
@@ -256,7 +254,22 @@ def java_environment(java, minimum=25):
     home = Path(values['java.home'])
     if not (home / 'bin' / ('javac.exe' if os.name == 'nt' else 'javac')).is_file():
         raise RuntimeError(f'a full JDK is required, not a JRE: {home}')
-    return dict(os.environ, JAVA_HOME=str(home), NEOFORBRIC_DEV_ARCH=values['os.arch'])
+    # A JVM ignores the http_proxy/https_proxy environment variables every other tool here honours (python,
+    # curl, git), and this driver's children — the installer's DevPrepare, its NFRT grandchild, Gradle — all
+    # reach the network. A developer behind a proxy (this whole pipeline was validated through one) would watch
+    # the python half fetch the version manifest and then see DevPrepare die with ConnectException on the first
+    # jar. JAVA_TOOL_OPTIONS is the one channel every JVM reads without a flag change at every call site, so the
+    # proxy variables are translated into the JVM's own system properties and every descendant inherits them.
+    proxy = []
+    for scheme in ('http', 'https'):
+        value = os.environ.get(f'{scheme}_proxy') or os.environ.get(f'{scheme}_proxy'.upper())
+        if value and value.startswith('http://'):
+            host, _, port = value[7:].rpartition(':')
+            proxy.append(f'-D{scheme}.proxyHost={host or value[7:]}')
+            if port.isdigit():
+                proxy.append(f'-D{scheme}.proxyPort={port}')
+    return dict(os.environ, JAVA_HOME=str(home), NEOFORBRIC_DEV_ARCH=values['os.arch'],
+                JAVA_TOOL_OPTIONS=(' '.join(proxy) + ' ' + os.environ.get('JAVA_TOOL_OPTIONS', '')).strip())
 
 
 def gradle(module, arguments, env, capture=False):
@@ -397,7 +410,10 @@ def launch_arguments(side, info, mc, stage, instance, natives, jvm=(), game=(), 
              f'-Dneoforbric.dependencyDialog={os.environ.get("NEOFORBRIC_DEP_DIALOG", "off")}']
     args += list(jvm) + ['-cp', cp, 'net.neoforbric.kernel.boot.Kernel' + side.title() + 'Launch',
                         '--gameJar', str(stage / STAGED_FILES[0]),
-                        '--runtimeJar', pathsep.join([str(stage / STAGED_FILES[2]), str(stage / STAGED_FILES[3])]),
+                        # The runtime jar is NeoForge's own FML/mod-loading half, not the game: LaunchInputCheck
+                        # rejects a launch whose runtime jar is missing FML's marker classes, and the game jar is
+                        # already on the classpath as --gameJar.
+                        '--runtimeJar', str(stage / STAGED_FILES[1]),
                         '--libraryPath', pathsep.join(owned), '--', '--gameDir', str(instance)]
     if side == 'client':
         args += ['--version', '1.21.1-neoforbric-dev', '--assetsDir', str(mc / 'assets'),

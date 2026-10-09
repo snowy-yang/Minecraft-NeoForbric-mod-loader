@@ -180,9 +180,6 @@ class MixinRetargetRenamedBodyTest {
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver(ITEM_STACK, uncalledTooltip(true, true))).isEmpty(), "called");
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver(ITEM_STACK, uncalledTooltip(true, false))).isEmpty(), "NeoForge mod");
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
-		assertEquals(1, MixinRetarget.plan(MixinFit.parse(mixin), resolver(ITEM_STACK, uncalledTooltip(true, false))).rewrites().size(),
-				"MinecraftForge kept vanilla's body in addDetailsToTooltip");
 
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
 		System.setProperty(MixinRetarget.UNCALLED_PROPERTY, "off");

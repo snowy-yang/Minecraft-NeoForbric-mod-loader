@@ -69,7 +69,6 @@ class MixinStubRebindWeaveTest {
 		RUNS.put("fabric", run("fabric", Ecosystem.FABRIC, Map.of()));
 		RUNS.put("fabric-off", run("fabric-off", Ecosystem.FABRIC, Map.of(MixinStubRebind.PROPERTY, "off")));
 		RUNS.put("neoforge", run("neoforge", Ecosystem.NEOFORGE, Map.of()));
-		RUNS.put("forge", run("forge", Ecosystem.NEOFORGE, Map.of()));
 	}
 
 	@Test void aFabricModsInjectorsLeaveTheStubForTheBody() throws Exception {
@@ -101,22 +100,18 @@ class MixinStubRebindWeaveTest {
 		WeaveHarness.assertWovenAndVerified(off, TARGET, fixture);
 	}
 
-	/** The row's carrier columns, read through the real pipeline: each Forge family gets what its own platform did. */
-	@Test void aForgeFamilyModMovesOnlyWhereItsCarrierRanTheBody() throws Exception {
+	/**
+	 * The row's NeoForge column, read through the real pipeline: NeoForge's own class holds the same stub, so a
+	 * NeoForge mod compiled against it gets exactly what it bound — the injector stays on the stub, and the audit
+	 * does not call HEAD's place a carrier artefact.
+	 */
+	@Test void aNeoForgeModGetsWhatItsOwnCarrierHolds() throws Exception {
 		WeaveHarness.Result neoforge = RUNS.get("neoforge");
 		assertTrue(neoforge.printed(WeaveHarnessMain.DONE + " " + STAYED), neoforge.describe());
 		assertFalse(neoforge.printed(ANCHOR_MOVED) || neoforge.printed(HEAD_MOVED), neoforge.describe());
 		assertEquals(1, handlerCalls(neoforge, STUB), neoforge.describe());
-		// NeoForge's own class has the same stub, so the audit does not call HEAD's place a merge artefact.
 		assertEquals(List.of(), stubHosted(neoforge), neoforge.describe());
 		WeaveHarness.assertWovenAndVerified(neoforge, TARGET, fixture);
-
-		WeaveHarness.Result forge = RUNS.get("forge");
-		assertTrue(forge.printed(WeaveHarnessMain.DONE + " " + MOVED), forge.describe());
-		assertTrue(forge.printed(ANCHOR_MOVED) && forge.printed(HEAD_MOVED), forge.describe());
-		assertEquals(List.of(), losses(forge), forge.describe());
-		assertEquals(2, handlerCalls(forge, BODY), forge.describe());
-		WeaveHarness.assertWovenAndVerified(forge, TARGET, fixture);
 	}
 
 	/** The run and its control must be told apart by the very predicates the test uses on them. */

@@ -48,9 +48,9 @@ build_one "$HERE/livemod-src" "$HERE/forge-runtime/neoforbriclive.jar"
 build_neo() { # <src-dir> <out-jar>
   local src="$1" out="$2" classes
   local neo_rt="$HERE/neoforge-runtime/neoforge-runtime.jar"
-  local neo_mc="$HERE/neoforge-patched/patched-mc-neoforge-26.2.jar"
+  local neo_mc="$HERE/neoforge-patched/patched-mc-neoforge-1.21.1.jar"
   [ -f "$neo_rt" ] || { echo "neoforge-runtime.jar missing - run assemble-neoforge-runtime.sh" >&2; return 2; }
-  [ -f "$neo_mc" ] || { echo "patched-mc-neoforge-26.2.jar missing" >&2; return 2; }
+  [ -f "$neo_mc" ] || { echo "patched-mc-neoforge-1.21.1.jar missing" >&2; return 2; }
   classes="$WORK/testmod-classes-$(basename "$out" .jar)"
   rm -rf "$classes"; mkdir -p "$classes/META-INF"
   find "$src" -name '*.java' -print0 | xargs -0 javac --release 21 -proc:none \

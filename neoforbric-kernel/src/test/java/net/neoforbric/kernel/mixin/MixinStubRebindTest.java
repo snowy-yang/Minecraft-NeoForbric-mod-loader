@@ -510,20 +510,21 @@ class MixinStubRebindTest {
 				"another overload binds the name first, and nothing has the descriptor");
 		assertEquals(MixinStubRebind.Shape.ABSENT, MixinStubRebind.Shape.of(null, "f", stub, overload));
 
+		// The row's one column is what NeoForge's own patched class holds at the stub: a NeoForge mod was
+		// compiled against exactly that, so it moves where its platform ran the selector form on code and only there.
 		MixinStubRebind.Row neoAdded = new MixinStubRebind.Row(MixinStubRebind.Shape.BODY);
 		assertTrue(neoAdded.moves(Ecosystem.FABRIC, true));
+		assertTrue(neoAdded.moves(Ecosystem.FABRIC, false));
 		assertTrue(neoAdded.moves(Ecosystem.NEOFORGE, true));
 		assertTrue(neoAdded.moves(Ecosystem.NEOFORGE, false));
-		assertFalse(neoAdded.moves(Ecosystem.NEOFORGE, true));
 		MixinStubRebind.Row late = new MixinStubRebind.Row(MixinStubRebind.Shape.DESCRIPTOR_BODY);
+		assertTrue(late.moves(Ecosystem.FABRIC, true));
 		assertFalse(late.moves(Ecosystem.NEOFORGE, true), "natively the name bound the other overload");
 		assertTrue(late.moves(Ecosystem.NEOFORGE, false));
-		assertTrue(late.moves(Ecosystem.NEOFORGE, true));
-		assertFalse(late.moves(Ecosystem.NEOFORGE, false), "natively that descriptor bound nothing");
 		MixinStubRebind.Row both = new MixinStubRebind.Row(MixinStubRebind.Shape.STUB);
 		assertTrue(both.moves(Ecosystem.FABRIC, false));
 		assertFalse(both.moves(Ecosystem.NEOFORGE, true));
-		assertFalse(both.moves(Ecosystem.NEOFORGE, true));
+		assertFalse(both.moves(Ecosystem.NEOFORGE, false), "natively that shape bound nothing");
 		System.setProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY, "off");
 		assertFalse(neoAdded.moves(Ecosystem.NEOFORGE, true), "the switch");
 		assertTrue(neoAdded.moves(Ecosystem.FABRIC, true));

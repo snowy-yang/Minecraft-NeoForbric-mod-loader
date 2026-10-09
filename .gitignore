@@ -82,3 +82,4 @@ CLAUDE.md
 .gradle-local/
 # Generated nested arbitration gate instance; its inputs are declared by gate-m19, not source files.
 /neoforbric-kernel/run/server-nesteddupe/
+research/
