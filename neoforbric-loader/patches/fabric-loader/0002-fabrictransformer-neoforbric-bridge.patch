@@ -1,5 +1,5 @@
 diff --git a/src/main/java/net/fabricmc/loader/impl/transformer/FabricTransformer.java b/src/main/java/net/fabricmc/loader/impl/transformer/FabricTransformer.java
-index 8a730e1..95c180d 100644
+index 8a730e1..ef744a0 100644
 --- a/src/main/java/net/fabricmc/loader/impl/transformer/FabricTransformer.java
 +++ b/src/main/java/net/fabricmc/loader/impl/transformer/FabricTransformer.java
 @@ -29,6 +29,13 @@ import net.fabricmc.loader.impl.launch.FabricLauncherBase;

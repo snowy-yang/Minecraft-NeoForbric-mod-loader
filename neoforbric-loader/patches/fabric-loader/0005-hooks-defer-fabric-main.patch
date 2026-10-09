@@ -1,5 +1,5 @@
 diff --git a/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/Hooks.java b/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/Hooks.java
-index f331bbd..43eb4da 100644
+index f331bbd..cbf2d9d 100644
 --- a/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/Hooks.java
 +++ b/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/Hooks.java
 @@ -33,6 +33,14 @@ public final class Hooks {

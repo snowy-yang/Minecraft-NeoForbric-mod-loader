@@ -1,5 +1,5 @@
 diff --git a/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/patch/EntrypointPatch.java b/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/patch/EntrypointPatch.java
-index f8f2e9f..5c33839 100644
+index f8f2e9f..209db12 100644
 --- a/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/patch/EntrypointPatch.java
 +++ b/minecraft/src/main/java/net/fabricmc/loader/impl/game/minecraft/patch/EntrypointPatch.java
 @@ -442,10 +442,14 @@ public class EntrypointPatch extends GamePatch {

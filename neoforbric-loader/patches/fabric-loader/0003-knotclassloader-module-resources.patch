@@ -1,5 +1,5 @@
 diff --git a/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassLoader.java b/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassLoader.java
-index 7c32250..7b778f4 100644
+index 7c32250..88dfe60 100644
 --- a/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassLoader.java
 +++ b/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassLoader.java
 @@ -81,6 +81,28 @@ final class KnotClassLoader extends AbstractSecureClassLoader implements ClassLo

@@ -1,5 +1,5 @@
 diff --git a/src/main/java/net/fabricmc/loader/impl/launch/FabricMixinBootstrap.java b/src/main/java/net/fabricmc/loader/impl/launch/FabricMixinBootstrap.java
-index fa85071..8333a22 100644
+index fa85071..69dc122 100644
 --- a/src/main/java/net/fabricmc/loader/impl/launch/FabricMixinBootstrap.java
 +++ b/src/main/java/net/fabricmc/loader/impl/launch/FabricMixinBootstrap.java
 @@ -27,6 +27,8 @@ import org.spongepowered.asm.mixin.FabricUtil;

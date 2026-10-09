@@ -1,5 +1,5 @@
 diff --git a/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassDelegate.java b/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassDelegate.java
-index 2446ae6..ffcc691 100644
+index 2446ae6..5fdb76b 100644
 --- a/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassDelegate.java
 +++ b/src/main/java/net/fabricmc/loader/impl/launch/knot/KnotClassDelegate.java
 @@ -353,12 +353,27 @@ final class KnotClassDelegate<T extends ClassLoader & ClassLoaderAccess> impleme
