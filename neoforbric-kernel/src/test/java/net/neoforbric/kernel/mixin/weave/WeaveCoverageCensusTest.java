@@ -78,14 +78,12 @@ class WeaveCoverageCensusTest {
 			Map.entry("MixinHandlerShim", Switch.own("neoforbric.mixinHandlerShim")),
 			Map.entry("MixinAnonymousRetarget", Switch.own("neoforbric.mixinAnonymousDrift")),
 			Map.entry("InterfaceDefaultConflictRepair", Switch.own("neoforbric.defaultConflictRepair")),
-			Map.entry("BarrelRollCameraAdapter", Switch.own("neoforbric.barrelRollCamera")),
 			Map.entry("ReplacedCallRedirects", Switch.own("neoforbric.replacedCallRedirects")), // ReplacedCallRedirectsWeaveTest
 			Map.entry("MixinTwinRebind", Switch.own("neoforbric.mixinTwinRebind")), // MixinTwinRebindWeaveTest
 			Map.entry("ThinnedCallOrdinals", Switch.own("neoforbric.thinnedCallOrdinals")), // ThinnedCallOrdinalsWeaveTest
 			Map.entry("GuiItemCaptureMixinAdapter", Switch.own("neoforbric.guiItemCaptureAnchor")),
 			Map.entry("MixinShearsRelay", Switch.own("neoforbric.shearsRelay")),
 			Map.entry("InsertedLambdaArgumentShim", Switch.own("neoforbric.insertedLambdaArguments")),
-			Map.entry("CarpetMixinAdapter", Switch.own("neoforbric.carpetMixins")),
 			Map.entry("NativeCoremodParity", Switch.own("neoforbric.flowerPotRepair")), // NativeCoremodParityWeaveTest
 			Map.entry("PostMixinFixups", Switch.own("neoforbric.postMixinFixups")), // PostMixinFixupsWeaveTest
 			Map.entry("FabricRegistryInitializationMixinAdapter", Switch.own("neoforbric.fabricRegistryInitialization")),
@@ -101,15 +99,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("FabricClientMixinAnchors", Switch.own("neoforbric.fabricClientAnchors")),
 			Map.entry("FabricBlockBreakMixinAdapter", Switch.own("neoforbric.fabricBlockBreak")),
 			Map.entry("FabricSectionCompilerMixinAdapter", Switch.own("neoforbric.fabricChunkRendering")),
-			Map.entry("CreateStructureMixinAdapter", Switch.own("neoforbric.createStructureMixin")),
-			Map.entry("CreateKeyboardMixinAdapter", Switch.own("neoforbric.createKeyboardMixin")),
-			Map.entry("ContinuitySpriteMixinAdapter", Switch.own("neoforbric.continuitySpriteSources")),
-			Map.entry("CreateInjectionAdapters", Switch.own("neoforbric.createInjectionAdapters")),
-			Map.entry("CreateInteractionMixinAdapters", Switch.own("neoforbric.createInteractionMixins")),
-			Map.entry("CreateContextualBlockAdapters", Switch.own("neoforbric.createContextualBlocks")),
-			Map.entry("CreateEntitySoundMixinAdapter", Switch.own("neoforbric.createEntitySounds")),
-			Map.entry("CreateBreathingMixinAdapter", Switch.own("neoforbric.createBreathingMixin")),
-			Map.entry("CreateHudMixinAdapter", Switch.own("neoforbric.createHudMixin")),
 			// The injectors Mixin rejects outright, taken out at the end of getClassNode: MixinRefusedBindingWeaveTest.
 			Map.entry("GuestInjectorPruner", Switch.own("neoforbric.guestInjectorPruner.refused")));
 
@@ -118,14 +107,17 @@ class WeaveCoverageCensusTest {
 	static final Map<String, String> NOT_WOVEN_YET = notWovenYet(
 			"FabricMiningMixinAdapter",
 			// Their weave scenarios modelled merged-base FluidInteractionRegistry bytecode, deleted with it.
-			"CarpetFluidMixinAdapter", "CreateFluidMixinAdapter", "FabricFluidFlowMixinAdapter");
+			"FabricFluidFlowMixinAdapter");
 
 	@Test void everyPipelineStageIsWovenOrListedWithAReason() throws Exception {
 		Set<String> configTime = configTimeStages();
 		Set<String> preMixin = preMixinAdapters();
 		Set<String> postMixin = postMixinStages();
 		assertEquals(Set.of("KernelGuestMixinAdapter"), configTime, "the config-time stages changed; place the new one in a list");
-		assertTrue(preMixin.size() >= 40, "the census could not read getClassNode's adapters: " + preMixin);
+		// A floor, not a description: it only has to be high enough that a census which stopped reading getClassNode's
+		// adapters fails. It fell from 40 when the per-mod adapters were deleted; the coverage check below is what
+		// actually holds the chain accountable, and this is only the reader's liveness guard.
+		assertTrue(preMixin.size() >= 35, "the census could not read getClassNode's adapters: " + preMixin);
 		assertEquals(Set.of("NativeCoremodParity", "PostMixinFixups", "InterfaceDefaultConflictRepair"),
 				postMixin, "the post-Mixin stages changed; place the new one in a list");
 

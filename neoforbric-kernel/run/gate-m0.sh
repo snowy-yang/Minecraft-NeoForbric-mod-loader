@@ -2,7 +2,7 @@
 # M0 gate — kernel scaffold + ported libs + oracle harness.
 #   1. offline build (boot jar) succeeds
 #   2. ported unit tests green (transform / access / mapping / metadata / discovery)
-#   3. kernel --scan produces well-formed JSON discovering mods across all 3 ecosystems (both merged sets)
+#   3. kernel --scan produces well-formed JSON discovering mods across both ecosystems
 #   4. differential oracle: kernel parser ≡ independent ground-truth parser on the real mod sets
 #   6. the evidence, soak and link-gate tools' own tests, and the transfer-engine suite, all actually executed
 # This is the differential-oracle foundation every later milestone builds on.
@@ -12,7 +12,7 @@ set -uo pipefail
 
 # The verdict of a JUnit task: report files, tests, skipped, failures, errors -- read from the XML it wrote.
 junit_summary() {
-  python3 - "$1" <<'PYEOF'
+  ${PYTHON} - "$1" <<'PYEOF'
 import glob, os, sys, xml.etree.ElementTree as ET
 tests = skipped = failures = errors = 0
 files = glob.glob(os.path.join(sys.argv[1], "*.xml"))
@@ -30,11 +30,11 @@ PYEOF
 }
 
 step "0. the base the unit tests read is the base this run checks"
-# The bytecode tests and the kernel-runtime compile read $RUN_OLD/... (build.gradle hands them that root); step 4
-# link-checks ${MERGED:-...}. With MERGED naming a candidate and NEOFORBRIC_OLD the reference checkout they are two
-# different jars, and this gate would pass the unit tests on one base and the link check on another while the
-# runtime the tests read, so it has no staged twin to compare.)
-for pair in "MERGED:$RUN_OLD/merged-base/patched-mc-merged-26.2.jar" "NEO_RT:$RUN_OLD/neoforge-runtime/neoforge-runtime.jar"; do
+# The bytecode tests and the kernel-runtime compile read $RUN_OLD/... (build.gradle hands them that root); the link
+# check below reads ${MERGED:-...} and ${NEO_RT:-...}. With MERGED naming a candidate and NEOFORBRIC_OLD the
+# reference checkout they are two different jars, and this gate would pass the unit tests on one base and the link
+# check on another. So each override is compared against the jar the tests read, and refused when it differs.
+for pair in "MERGED:$RUN_OLD/neoforge-base/patched-mc-neoforge-26.2.jar" "NEO_RT:$RUN_OLD/neoforge-runtime/neoforge-runtime.jar"; do
   var="${pair%%:*}"; staged="${pair#*:}"; requested="${!var:-}"
   [ -n "$requested" ] || { echo "[kernel] PASS $var unset: the tests and the link check both read $staged"; continue; }
   if [ -f "$requested" ] && [ -f "$staged" ] && cmp -s "$requested" "$staged"; then
@@ -105,19 +105,19 @@ else
   echo "[kernel] PASS transfer tests ($tests ran, 0 skipped, 0 failed)"
 fi
 
-step "3. --scan across both merged mod sets"
+step "3. --scan across the mod sets"
 kernel_classpath
 for set in server-merged client-merged; do
   dir="$RUN_OLD/$set/mods"
   [ -d "$dir" ] || { echo "[kernel] FAIL $set (required fixture missing: $dir)"; FAIL=1; continue; }
   out="$BUILD/scan/$set.json"; mkdir -p "$BUILD/scan"
   kernel_scan "$dir" "$out" >/dev/null
-  # well-formed + non-empty + all three ecosystems represented
-  python3 - "$out" "$set" <<'PY'
+  # well-formed + non-empty + both ecosystems represented
+  ${PYTHON} - "$out" "$set" <<'PY'
 import json,sys
 o=json.loads(open(sys.argv[1]).read()); s=sys.argv[2]
 ecos={m["ecosystem"] for m in o["mods"]}
-ok = o["count"]>0 and {"FABRIC","FORGE","NEOFORGE"}<=ecos
+ok = o["count"]>0 and {"FABRIC","NEOFORGE"}<=ecos
 print(f"[kernel] {'PASS' if ok else 'FAIL'} scan {s}: {o['count']} mods, ecosystems={sorted(ecos)}")
 sys.exit(0 if ok else 1)
 PY
@@ -155,7 +155,7 @@ step "6. the evidence, soak and link-gate tools' own tests"
 # These tools decide what a release is. Their tests used to run only by hand, so a regression in the recorder
 # or the link gate would have been found by the release it waved through.
 TOOLLOG="$BUILD/gate-m0-tooling.log"
-if (cd "$KERNEL/run/compat" && python3 -m unittest -v test_evidence test_soak test_world_parity) >"$TOOLLOG" 2>&1; then
+if (cd "$KERNEL/run/compat" && ${PYTHON} -m unittest -v test_evidence test_soak test_world_parity) >"$TOOLLOG" 2>&1; then
   ran=$(grep -aoE '^Ran [0-9]+ tests?' "$TOOLLOG" | grep -oE '[0-9]+' | tail -1)
   if [ "${ran:-0}" -gt 0 ] && grep -aqE '^OK$' "$TOOLLOG"; then
     echo "[kernel] PASS evidence and soak tool tests ($ran ran, none skipped)"
@@ -174,7 +174,7 @@ fi
 # The installer's gate runs the PACKAGED tool and baseline, so it is exercised on the jar the installer ships.
 INSTALLERLOG="$BUILD/gate-m0-installer-link.log"
 if "$KERNEL/../neoforbric-loader/gradlew" --offline -q -p "$KERNEL/../neoforbric-loader" mergeToolsJar >"$INSTALLERLOG" 2>&1 \
-    && python3 "$KERNEL/../neoforbric-kernel-installer/run/test-link-gate.py" >>"$INSTALLERLOG" 2>&1; then
+    && ${PYTHON} "$KERNEL/../neoforbric-kernel-installer/run/test-link-gate.py" >>"$INSTALLERLOG" 2>&1; then
   check "the installer's link gate, on the packaged tools" "PASS installer gate" "$INSTALLERLOG"
 else
   echo "[kernel] FAIL the installer's link gate — see $INSTALLERLOG"; FAIL=1

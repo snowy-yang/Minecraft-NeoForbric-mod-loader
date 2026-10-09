@@ -24,7 +24,7 @@ if [ "${1:-}" = "--execute-phase" ]; then
     cp "$RUNDIR/.neoforbric-kernel/compatibility-report.json" "$RESULTS/$phase-compatibility.json"
   fi
   [ "$code" -eq 0 ] || exit "$code"
-  python3 - "$result" "$phase" "$token" <<'PY'
+  ${PYTHON} - "$result" "$phase" "$token" <<'PY'
 import json, sys
 proof = json.load(open(sys.argv[1]))
 assert proof['phase'] == sys.argv[2] and proof['token'] == sys.argv[3], proof
@@ -38,9 +38,9 @@ step "build the kernel and one explicitly mixed-bus behavioral test mod"
 kernel_jar
 bash "$KERNEL/run/build-behavior-canary.sh" > "$RESULTS/build.log" 2>&1 || { cat "$RESULTS/build.log"; exit 1; }
 INPUTS="$KERNEL/run/canary/m35-build-inputs.json"
-MERGED="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["merged"]["path"])' "$INPUTS")"
-NEO_RT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["neo"]["path"])' "$INPUTS")"
-COMPILE_GAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["compileGame"]["path"])' "$INPUTS")"
+MERGED="$(${PYTHON} -c 'import json,sys; print(json.load(open(sys.argv[1]))["merged"]["path"])' "$INPUTS")"
+NEO_RT="$(${PYTHON} -c 'import json,sys; print(json.load(open(sys.argv[1]))["neo"]["path"])' "$INPUTS")"
+COMPILE_GAME="$(${PYTHON} -c 'import json,sys; print(json.load(open(sys.argv[1]))["compileGame"]["path"])' "$INPUTS")"
 export MERGED NEO_RT
 
 kill_owned_descendants() {
@@ -68,7 +68,7 @@ fresh_world() {
   rm -f "$RUNDIR/.neoforbric-gate.pid"
   rm -rf "$RUNDIR/world" "$RUNDIR/mods" "$RUNDIR/.neoforbric-kernel"
   mkdir -p "$RUNDIR/mods"
-  python3 -c 'import uuid; print(uuid.uuid4())' > "$RUNDIR/.m35-owned"
+  ${PYTHON} -c 'import uuid; print(uuid.uuid4())' > "$RUNDIR/.m35-owned"
   cp "$KERNEL/run/canary/neoforbricbehaviorprobe.jar" "$RUNDIR/mods/"
   seed_server_properties "$RUNDIR"
   printf '\nlevel-name=world\nlevel-seed=8035262\nlevel-type=minecraft:flat\ngenerate-structures=false\nmax-tick-time=-1\npause-when-empty-seconds=0\n' >> "$RUNDIR/server.properties"
@@ -77,7 +77,7 @@ run_phase() {
   local phase="$1" token pid i
   fresh_world; token="$(cat "$RUNDIR/.m35-owned")"
   rm -f "$RESULTS/$phase-inputs.log"   # port_was_free below must not read an earlier run's log
-  python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
+  ${PYTHON} "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
     --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
     --artifact "kernel=$BUILD/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar" \
     --artifact "kernel-runtime=$BUILD/libs/neoforbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
@@ -93,7 +93,7 @@ run_phase() {
   fi
   wait "$pid" 2>/dev/null || true; rm -f "$RUNDIR/.neoforbric-gate.pid"
   port_was_free "$RESULTS/$phase-inputs.log"
-  if python3 - "$RESULTS" "$phase" "$token" <<'PY'
+  if ${PYTHON} - "$RESULTS" "$phase" "$token" <<'PY'
 import hashlib, json, pathlib, sys
 root, phase, token = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 proof_path = root / (phase + '-probe.json')

@@ -167,7 +167,7 @@ class ModAnnotationScannerTest {
 
 		try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
 			write(zip, "com/example/AForge.class",
-					classBytes("com/example/AForge", "aforge", ModAnnotationScanner.MOD_DESC_MINECRAFTFORGE));
+					classBytes("com/example/AForge", "aforge", "Lnet/minecraftforge/fml/common/Mod;"));
 			write(zip, "com/example/BNeo.class",
 					classBytes("com/example/BNeo", "bneo", ModAnnotationScanner.MOD_DESC_NEOFORGE));
 		}

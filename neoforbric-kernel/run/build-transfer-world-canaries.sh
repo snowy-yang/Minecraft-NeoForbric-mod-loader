@@ -9,7 +9,7 @@ set -euo pipefail
 canary_scratch transfer-world
 kernel_jar
 export M33_BUILD_WORK="$WORK" M33_BUILD_KERNEL="$KERNEL" M33_BUILD_OLD="$OLD"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel = pathlib.Path(os.environ['M33_BUILD_KERNEL'])
 old = pathlib.Path(os.environ['M33_BUILD_OLD'])

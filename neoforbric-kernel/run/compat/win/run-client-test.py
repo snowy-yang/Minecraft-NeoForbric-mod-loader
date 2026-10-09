@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 from common import (acknowledge_first_run, await_outcome, config, driver_command, finish, frame_verdict, fresh_shots,
-                    language_argument, own_driver, parser, screenshot_fallback, spawn, sweep_language)
+                    language_argument, own_driver, parser, prepare_world, screenshot_fallback, spawn, sweep_language)
 
 
 def main():
@@ -32,6 +32,10 @@ def main():
     instance = Path(configuration['instance'])
     if not (instance / 'saves' / configuration['world'] / 'level.dat').is_file():
         argument_parser.error('world missing; run run-server-test.py first')
+    # The experimental-settings prompt is per save, not per side: the server already acknowledged the copy it
+    # staged, and the client is about to play the very same save. Acknowledge here too, through the one shared
+    # helper, so no gate keeps a private copy of the NBT logic.
+    prepare_world(configuration, instance / 'saves' / configuration['world'])
     flags = ['-Dneoforbric.clientSmoke=true', '-Dneoforbric.clientSmokeWorld=' + configuration['world'],
              '-Dneoforbric.clientSmokeReadyTicks=80', '-Dneoforbric.clientSmokeModsScreen=100',
              '-Dneoforbric.clientSmokeScreenshots=100', '-Dneoforbric.clientSmokeDisconnectTicks=200']

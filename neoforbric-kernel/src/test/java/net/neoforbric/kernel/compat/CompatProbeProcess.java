@@ -2,6 +2,8 @@ package net.neoforbric.kernel.compat;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import net.neoforbric.kernel.util.PythonInterpreter;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -14,6 +16,11 @@ import java.util.concurrent.TimeUnit;
 final class CompatProbeProcess {
 	private CompatProbeProcess() { }
 
+	/** Every probe names its interpreter through {@link PythonInterpreter}; see it for why a bare {@code python3} is not enough. */
+	private static String interpreter(String requested) {
+		return PythonInterpreter.command(requested);
+	}
+
 	record Result(int exitCode, String output) { }
 
 	static Result run(Path temporary, String interpreter, String script, String... arguments) throws Exception {
@@ -22,7 +29,7 @@ final class CompatProbeProcess {
 
 	static Result run(Path temporary, Map<String, String> environment,
 			String interpreter, String script, String... arguments) throws Exception {
-		List<String> command = new ArrayList<>(List.of(interpreter,
+		List<String> command = new ArrayList<>(List.of(interpreter(interpreter),
 				Path.of("run/compat", script).toAbsolutePath().toString()));
 		command.addAll(List.of(arguments));
 		Path output = Files.createTempFile(temporary, "probe-", ".log");

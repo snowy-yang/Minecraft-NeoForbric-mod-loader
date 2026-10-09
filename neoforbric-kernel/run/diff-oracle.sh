@@ -3,8 +3,8 @@
 #
 # Rather than diff the kernel's discovery against the OLD system's discovery (which runs the SAME ported
 # NeoForbricModDiscoverer code — a tautology), this cross-validates the kernel's parser against an INDEPENDENT
-# ground-truth extractor (a separate Python reader of fabric.mod.json / mods.toml / neoforge.mods.toml). If the
-# two independent parsers agree on the (ecosystem, id) set for a mods/ dir, discovery is proven correct.
+# ground-truth extractor (a separate Python reader of fabric.mod.json / neoforge.mods.toml). If the two
+# independent parsers agree on the (ecosystem, id) set for a mods/ dir, discovery is proven correct.
 #
 # usage: diff-oracle.sh <mods-dir> [<mods-dir> ...]
 set -uo pipefail
@@ -20,7 +20,7 @@ for dir in "$@"; do
   mkdir -p "$(dirname "$out")"
   kernel_scan "$dir" "$out" >/dev/null
 
-  python3 - "$dir" "$out" <<'PY'
+  ${PYTHON} - "$dir" "$out" <<'PY'
 import json, re, sys, zipfile, pathlib
 mods_dir, kernel_json = sys.argv[1], sys.argv[2]
 
@@ -56,7 +56,10 @@ for jar in sorted(pathlib.Path(mods_dir).glob("*.jar")):
                 truth.add(("FABRIC", j["id"]))
         except Exception:
             pass
-    for path, eco in (("META-INF/mods.toml", "FORGE"), ("META-INF/neoforge.mods.toml", "NEOFORGE")):
+    # META-INF/mods.toml is deliberately NOT ground truth: it is the traditional MinecraftForge convention, and
+    # discovery skips a jar whose only Forge-family manifest is one. Judging it here would report a MISSED mod
+    # the kernel intentionally does not load.
+    for path, eco in (("META-INF/neoforge.mods.toml", "NEOFORGE"),):
         if path in names:
             for mid in toml_modids(z.read(path).decode("utf-8", "replace")):
                 truth.add((eco, mid))

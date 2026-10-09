@@ -36,13 +36,13 @@ import net.neoforbric.kernel.util.ByteScan;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
 /**
- * Names the mods compiled against a NeoForge or MinecraftForge this instance does not carry.
+ * Names the mods compiled against a NeoForge this instance does not carry.
  *
  * <p>A mod built for another loader version links fine at load and dies at the first call into a class that is
  * not there — a {@code NoClassDefFoundError} inside a deferred task, a listener, a render pass — and the report
- * names the class, not the mod. This reads every class's constant pool for the Forge-family classes it names and
+ * names the class, not the mod. This reads every class's constant pool for the NeoForge classes it names and
  * resolves each against the carriers, the merged base and every installed jar (a Fabric port of a Forge library
- * legitimately ships {@code net.minecraftforge.*} classes for its dependants); what resolves nowhere is dangling.
+ * legitimately ships those classes for its dependants); what resolves nowhere is dangling.
  *
  * <p>Loader-bootstrap packages are out of scope: the kernel REPLACES FML's loading layer, so
  * {@code fml/loading}, {@code fml/relauncher} and the {@code locating} SPIs are absent here by design and a mod
@@ -130,9 +130,7 @@ public final class AbiLinkAudit {
 				continue;
 			}
 			if (missing.isEmpty()) continue;
-			String first = missing.iterator().next();
-			out.add(new Finding(jar.getFileName().toString(), first.startsWith("net/neoforged/") ? "NeoForge" : "MinecraftForge",
-					List.copyOf(missing)));
+			out.add(new Finding(jar.getFileName().toString(), "NeoForge", List.copyOf(missing)));
 		}
 		return out;
 	}

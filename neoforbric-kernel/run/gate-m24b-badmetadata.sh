@@ -71,7 +71,7 @@ boot() { # boot <log> <policy> [expect-policy-stop]
 }
 
 findings() { # the broken NeoForge-only jar is the one confirmed, required loss; the universal one is a note
-  if python3 - "$COMPAT" <<'PY'
+  if ${PYTHON} - "$COMPAT" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)

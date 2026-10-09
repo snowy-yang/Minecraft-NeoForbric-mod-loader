@@ -134,8 +134,15 @@ public final class ModMenuApiStandIn {
 
 	private static byte[] read(URL resource) {
 		if (resource == null) return null;
-		try (InputStream in = resource.openStream()) {
-			return in.readAllBytes();
+		try {
+			// Uncached: a cached jar: connection pins the JarFile in the JDK's global cache for the whole JVM,
+			// which outlives the loader and makes the jar undeletable on Windows. Same reason as the loader's
+			// own read().
+			java.net.URLConnection connection = resource.openConnection();
+			connection.setUseCaches(false);
+			try (InputStream in = connection.getInputStream()) {
+				return in.readAllBytes();
+			}
 		} catch (IOException e) {
 			return null;
 		}

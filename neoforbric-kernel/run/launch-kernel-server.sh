@@ -38,7 +38,7 @@ BOOT_JAR="$(ls "$KERNEL"/build/libs/neoforbric-kernel-*.jar | head -1)"
 BOOT_DEPS="$("$KERNEL/gradlew" --offline -q -p "$KERNEL" printBootClasspath 2>/dev/null | grep -vE 'WARNING|native|Restricted|enable' | tail -1)"
 
 # MC 26.2 libraries (parent-loaded), resolved from the Mojang install's version json.
-VANILLA_CP="$(python3 - "$MC" <<'PY'
+VANILLA_CP="$(${PYTHON} - "$MC" <<'PY'
 import json, os, sys
 mc = sys.argv[1]
 d = json.load(open(os.path.join(mc, 'versions', '26.2', '26.2.json')))

@@ -5,7 +5,7 @@ set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 canary_scratch load-predicates
 export M50_WORK="$WORK" M50_KERNEL="$KERNEL" M50_OLD="$OLD"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M50_KERNEL', 'M50_OLD', 'M50_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))

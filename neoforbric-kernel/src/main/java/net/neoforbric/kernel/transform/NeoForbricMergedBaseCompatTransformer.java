@@ -1416,22 +1416,6 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 				+ "registered and a mod asking for its own died in its static initialiser");
 		return true;
 	}
-	static final String SPRITE_LOADER = "net/minecraft/client/renderer/texture/SpriteLoader";
-	static final String MIPMAP_LOWERING = "allowMipmapLowering";
-	/** {@code -Dneoforbric.mipmapLowering=off} hands the decision back to MinecraftForge's config (and its false default). */
-	static final String MIPMAP_PROPERTY = "neoforbric.mipmapLowering";
-
-	static boolean mipmapLoweringEnabled() {
-		return !"off".equalsIgnoreCase(System.getProperty(MIPMAP_PROPERTY, "on"));
-	}
-
-	static final String INPUT_CONSTANTS = "com/mojang/blaze3d/platform/InputConstants";
-	/** {@code -Dneoforbric.keyModifierSuffix=off} hands the whole value back to vanilla's parse, which throws on it. */
-	static final String KEY_SUFFIX_PROPERTY = "neoforbric.keyModifierSuffix";
-
-	static boolean keyModifierSuffixEnabled() {
-		return !"off".equalsIgnoreCase(System.getProperty(KEY_SUFFIX_PROPERTY, "on"));
-	}
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// A pack.mcmeta overlay gated by a condition no evaluator here can judge

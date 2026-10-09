@@ -81,7 +81,7 @@ for other in 'net\.neoforge' 'minecraftforge'; do
   fi
 done
 # And the declaration must not have become classpath: a real fabric-loader on -cp would fight the kernel.
-if python3 -c "import json,sys; j=json.load(open(sys.argv[1])); sys.exit(0 if not any('fabric-loader' in str(l.get('name','')) for l in j['libraries']) else 1)" "$PROFILE"; then
+if ${PYTHON} -c "import json,sys; j=json.load(open(sys.argv[1])); sys.exit(0 if not any('fabric-loader' in str(l.get('name','')) for l in j['libraries']) else 1)" "$PROFILE"; then
   echo "[kernel] PASS it is metadata, not a library the launcher would put on the classpath"
 else
   echo "[kernel] FAIL a fabric-loader jar reached libraries[] — that would be loaded, not just read"; FAIL=1
@@ -90,7 +90,7 @@ fi
 step "give the directory the vanilla libraries a launcher would have downloaded"
 # The installer stages only what it owns; the base version's own libraries are the launcher's job. Copying them
 # from the real install is what makes this a launcher simulation rather than a half-populated directory.
-COPIED=$(python3 - "$DEST" "$MC" <<'LIBS'
+COPIED=$(${PYTHON} - "$DEST" "$MC" <<'LIBS'
 import json, os, platform, shutil, sys
 dest, mc = sys.argv[1:3]
 with open(os.path.join(dest, "versions", "26.2", "26.2.json")) as f:
@@ -141,7 +141,7 @@ cp "$SRC_RUNDIR/mods"/*.jar "$DEST/mods/" 2>/dev/null || true
 echo "[kernel] mods: $(ls -1 "$DEST/mods" 2>/dev/null | wc -l | tr -d ' ')"
 
 CMD_FILE="$BUILD/gate-m17-command.txt"
-python3 - "$DEST" "$MC" "$WORLD" "$CMD_FILE" <<'PY'
+${PYTHON} - "$DEST" "$MC" "$WORLD" "$CMD_FILE" <<'PY'
 import json, os, platform, sys
 
 dest, mc, world, out = sys.argv[1:5]

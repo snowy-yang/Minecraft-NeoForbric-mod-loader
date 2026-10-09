@@ -76,5 +76,5 @@ fi
 
 # -u: the progress lines are the only view of a run that now takes minutes with nothing on the terminal,
 # and a redirected stdout is block-buffered, so without this they all arrive at the end.
-exec python3 -u "$HERE/gates-parallel.py" \
+exec ${PYTHON:-python3} -u "$HERE/gates-parallel.py" \
   --run-dir "$RUN" --out-dir "$OUT" --jobs "$JOBS" ${MEM:+--mem-budget "$MEM"} ${ARGS[@]+"${ARGS[@]}"}

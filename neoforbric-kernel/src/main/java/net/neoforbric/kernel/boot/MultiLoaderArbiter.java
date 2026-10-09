@@ -252,8 +252,8 @@ public final class MultiLoaderArbiter {
 
 		List<Ecosystem> order = new ArrayList<>();
 		for (String raw : csv.split(",")) {
-			// Ecosystem.parse, not valueOf: this knob has always taken "minecraftforge", and the constant is now
-			// spelled FORGE because run/diff-oracle.sh pins that spelling independently of kernel code.
+			// Ecosystem.parse, not valueOf: parse is lenient about case and returns null rather than throwing, and
+			// a name that names neither ecosystem is reported as unknown below rather than killing the boot.
 			Ecosystem parsed = Ecosystem.parse(raw);
 			if (parsed != null) {
 				order.add(parsed);

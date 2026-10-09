@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.regex.Matcher;
@@ -60,6 +59,7 @@ import net.neoforbric.kernel.boot.FabricLoadOrder;
 import net.neoforbric.kernel.boot.KernelFabricEcosystem;
 import net.neoforbric.kernel.boot.MultiLoaderArbiter;
 import net.neoforbric.kernel.mixin.MixinConfigOwners;
+import net.neoforbric.kernel.util.GrepCount;
 
 /**
  * Fabric mods run in Fabric Loader's order, which is by mod id. They used to run in NeoForbric's dependency order.
@@ -399,11 +399,14 @@ class FabricLoadOrderTest {
 		return m.group(1);
 	}
 
-	private boolean grep(String pattern, String text) throws Exception {
-		Path log = Files.writeString(gameDir.resolve("boot.log"), text);
-		Process grep = new ProcessBuilder("grep", "-acE", pattern, log.toString()).redirectErrorStream(true).start();
-		assertTrue(grep.waitFor(15, TimeUnit.SECONDS), "grep timed out");
-		return !"0".equals(new String(grep.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip());
+	/**
+	 * Whether {@code grep -acE pattern} counts a line of {@code text}, the way the gates ask — through
+	 * {@link GrepCount}, which is the same answer grep gives. It was {@code ProcessBuilder("grep", ...)}, which
+	 * fails on a machine with no grep on the PATH and reports a gate's behaviour as broken rather than the
+	 * machine as unusable.
+	 */
+	private boolean grep(String pattern, String text) {
+		return GrepCount.matchingLines(pattern, text) > 0;
 	}
 
 	private static Field activeLoader() throws NoSuchFieldException {

@@ -20,7 +20,7 @@ set -uo pipefail
 RUNDIR="${M9_RUNDIR:-$KERNEL/run/client-merged-pack}"
 WORLD="${M9_WORLD:-NeoForbricTest}"
 LOG="$BUILD/gate-m9-client-boot.log"
-COMPAT_STARTED_NS="$(python3 -c 'import time; print(time.time_ns())')"
+COMPAT_STARTED_NS="$(${PYTHON} -c 'import time; print(time.time_ns())')"
 mkdir -p "$BUILD"
 
 if [ ! -d "$RUNDIR/saves/$WORLD" ]; then
@@ -39,7 +39,7 @@ fi
 # setting AND the client then SAVES the defaults over the file. That last part is why this has to be re-seeded:
 # this fixture carried three of JEI's and lost them exactly that way, taking the evidence with them.
 # M9_KEY_MODIFIER_SEED_BEGIN — the contract test runs this exact step against a fixture options.txt.
-python3 - "$RUNDIR/options.txt" <<'PY_SEED' || exit 3
+${PYTHON} - "$RUNDIR/options.txt" <<'PY_SEED' || exit 3
 from pathlib import Path
 import sys
 options = Path(sys.argv[1])
@@ -432,7 +432,7 @@ step "the lost BlockGetter interface injection still has no consumer (must PASS)
 # That is a coincidence of this pack, not a property of the kernel, and it would stop holding silently — flip one
 # line in neoforbric-mods.txt to `sodium = fabric`, or add a mod that uses the render-data API, and the cast starts
 # throwing with nothing in the log pointing back here. Both triggers are asserted.
-BG_CONSUMERS=$(python3 - "$RUNDIR/mods" <<'PYEOF'
+BG_CONSUMERS=$(${PYTHON} - "$RUNDIR/mods" <<'PYEOF'
 import os, sys, zipfile, io
 needle = b"net/fabricmc/fabric/api/blockgetter/v2/FabricBlockGetter"
 found = set()
@@ -647,7 +647,7 @@ check "malilib's language format hook reaches the body the game calls" \
 # M9_EXTRA_JVM=-Dneoforbric.mixinRetarget.renameCensus.uncalled=off: this check and the strict acceptance fail.
 check "malilib's last tooltip hook binds in the renamed tooltip body, where it never runs" \
   "retargeted guest mixin malilib.*MixinItemStack — addDetailsToTooltip\(.* → addDetailsToTooltipComponents\(.*never runs" "$LOG"
-python3 - "$RUNDIR/.neoforbric-kernel/compatibility-report.json" <<'PY_MALILIB'
+${PYTHON} - "$RUNDIR/.neoforbric-kernel/compatibility-report.json" <<'PY_MALILIB'
 import json, pathlib, sys
 report = json.loads(pathlib.Path(sys.argv[1]).read_text())
 last = [row for row in report['findings'] if 'fi.dy.masa.malilib.mixin.item.MixinItemStack#onGetTooltipComponentsLast' in row['id']]
@@ -678,7 +678,7 @@ step "no row says the same thing twice (must PASS)"
 # load report. Checked over the whole report rather than that one row: a repeated reason is a reporting defect
 # wherever it appears, and pinning the row would go stale the moment the pack changes.
 # M9_LOAD_REPORT_DEDUP_BEGIN — the contract test runs this exact step against a fixture report.
-python3 - "$RUNDIR/.neoforbric-kernel/load-report.txt" <<'PY_DEDUP'
+${PYTHON} - "$RUNDIR/.neoforbric-kernel/load-report.txt" <<'PY_DEDUP'
 from pathlib import Path
 import sys, json
 report = Path(sys.argv[1])
@@ -812,7 +812,7 @@ step "nothing leaked past main"
 check_absent "no thread leaked past main"   "Client shutdown from post-main"                   "$LOG"
 
 # M9_COMPATIBILITY_REPORT_BEGIN
-if python3 - "$RUNDIR/.neoforbric-kernel/compatibility-report.json" "$COMPAT_STARTED_NS" <<'PY_COMPAT'
+if ${PYTHON} - "$RUNDIR/.neoforbric-kernel/compatibility-report.json" "$COMPAT_STARTED_NS" <<'PY_COMPAT'
 import json, pathlib, sys
 path = pathlib.Path(sys.argv[1])
 assert path.is_file() and path.stat().st_mtime_ns >= int(sys.argv[2]), 'missing or stale compatibility evidence'

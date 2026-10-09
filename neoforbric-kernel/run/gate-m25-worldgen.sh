@@ -25,7 +25,7 @@ for jar in "$RUN_OLD/forge-runtime/neoforbriclive.jar" "$RUN_OLD/neoforge-runtim
   cp "$jar" "$RUNDIR/mods/" || exit 3
 done
 if [ "${M25_NO_DATA:-0}" = 1 ]; then
-  python3 - "$RUNDIR/mods" <<'PY' || exit 3
+  ${PYTHON} - "$RUNDIR/mods" <<'PY' || exit 3
 from pathlib import Path
 import sys, zipfile
 for jar in Path(sys.argv[1]).glob('*.jar'):
@@ -164,7 +164,7 @@ check "and its refusal reached the event the game reads" \
 
 step "the saved overworld contains both markers, with no unreadable chunks"
 # REGION_PROBE_BEGIN — execute this exact command with an argv recorder in the contract test.
-python3 "$KERNEL/run/compat/region-probe.py" "$RUNDIR/world/dimensions/minecraft/overworld/region" \
+${PYTHON} "$KERNEL/run/compat/region-probe.py" "$RUNDIR/world/dimensions/minecraft/overworld/region" \
   minecraft:purpur_block minecraft:end_stone > "$PROBE_LOG" 2>&1 || FAIL=1
 # REGION_PROBE_END
 cat "$PROBE_LOG"
@@ -192,7 +192,7 @@ check "control: Forge structure probe false" 'NeoForbricLive/WORLDGEN\] mineshaf
 check "control: NeoForge structure probe still true" 'NeoForbricNeoLive/WORLDGEN\] mineshaft creature override has minecraft:llama = true' "$CONTROL_LOG"
 check "control: the shipper is named" 'forgeWorldgen=off — [1-9][0-9]* MinecraftForge mod jar\(s\) ship biome/structure modifiers that will NOT apply: .*neoforbriclive' "$CONTROL_LOG"
 check "control: neoforbriclive is DEGRADED in the load report" 'neoforbriclive' "$RUNDIR/.neoforbric-kernel/load-report.txt"
-python3 "$KERNEL/run/compat/region-probe.py" "$RUNDIR/world/dimensions/minecraft/overworld/region" \
+${PYTHON} "$KERNEL/run/compat/region-probe.py" "$RUNDIR/world/dimensions/minecraft/overworld/region" \
   minecraft:purpur_block minecraft:end_stone > "$CONTROL_PROBE" 2>&1 || FAIL=1
 cat "$CONTROL_PROBE"
 check "control: NeoForge marker still generated" '^minecraft:purpur_block: [1-9][0-9]*' "$CONTROL_PROBE"

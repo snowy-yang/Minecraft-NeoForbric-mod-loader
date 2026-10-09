@@ -49,7 +49,7 @@ run_server() {
 judge() {
   local phase="$1" rule="$2" what="$3"
   check "$phase: the server started" 'Done \(' "$RESULTS/$phase.log"
-  if python3 - "$RESULTS/$phase.json" "$phase" "$rule" <<'PY'
+  if ${PYTHON} - "$RESULTS/$phase.json" "$phase" "$rule" <<'PY'
 import json, sys
 report, phase, rule = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
 assert report['phase'] == phase, report['phase']
@@ -66,7 +66,7 @@ PY
 step "1. positive: landing and sprint dust carry fabric-particles' ground block"
 run_server positive strict ""
 judge positive "not failed" "all 4 cases pass"
-if python3 - "$RESULTS/positive-compatibility.json" <<'PY'
+if ${PYTHON} - "$RESULTS/positive-compatibility.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
 assert r['confirmedRequired'] == 0, r['confirmedRequired']

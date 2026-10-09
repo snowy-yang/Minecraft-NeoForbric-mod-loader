@@ -127,7 +127,10 @@ public final class KernelEventSubscribers {
 		return dists.isEmpty() || dists.contains(side.distName());
 	}
 
-	/** Maps a MinecraftForge {@code bus()} attribute to the group to pass FML. See {@link BusChoice}. */
+	/**
+	 * Maps the {@code bus()} attribute NeoForge's {@code @EventBusSubscriber} declares to the group to pass FML.
+	 * {@code FORGE}/{@code MOD}/{@code BOTH} are that annotation's own vocabulary, not a loader choice here.
+	 */
 	static BusChoice busGroupChoice(String bus, boolean handlePresent) {
 		if ("FORGE".equals(bus)) return BusChoice.DEFAULT;
 		if ("MOD".equals(bus)) return handlePresent ? BusChoice.MOD : BusChoice.SKIP;

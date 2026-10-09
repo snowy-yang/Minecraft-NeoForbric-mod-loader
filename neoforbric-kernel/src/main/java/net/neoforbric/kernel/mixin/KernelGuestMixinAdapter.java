@@ -260,9 +260,9 @@ public final class KernelGuestMixinAdapter {
 				// What the mixins Mixin applies first add to the same targets: a @Shadow of one of those members binds,
 				// on Fabric and here (moreculling's shadow of the mesh field fabric-renderer-api adds).
 				MixinAddedMembers.View added = MixinAddedMembers.before(configName, mixin, resource);
-				// Judged as Mixin will receive it: Carpet's anchor adapters run when Mixin loads the class, after this
-				// read, so an anchor they move onto the merged game is not missing (CarpetMixinAdapter.asLoaded).
-				byte[] judged = ReplacedCallRedirects.asLoaded(CarpetMixinAdapter.asLoaded(classBytes, resource), resource);
+				// Judged as Mixin will receive it: the redirect adapter runs when Mixin loads the class, after this
+				// read, so an anchor it moves onto the merged game is not missing (ReplacedCallRedirects.asLoaded).
+				byte[] judged = ReplacedCallRedirects.asLoaded(classBytes, resource);
 				MixinFit.Result fit = MixinFit.evaluate(judged, resource,
 						net.neoforbric.kernel.classloading.DelegationPolicy::alwaysGame, added, nativeView);
 				if (judged != classBytes) {

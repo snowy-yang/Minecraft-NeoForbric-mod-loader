@@ -25,12 +25,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+
+import net.neoforbric.kernel.util.GrepCount;
 
 /**
  * The gates' "no genuine Fabric Loader" assertions must still catch the genuine loader and must no longer catch the
@@ -57,9 +57,6 @@ class GateGenuineFabricLoaderContractTest {
 	private static final List<String> KNOT = List.of(
 			"\tat net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:74)",
 			"java.lang.ClassNotFoundException: x (KnotClassLoader)");
-
-	@TempDir
-	Path temporary;
 
 	@Test
 	void everyGenuineLoaderAssertionIgnoresTheFacadeAndStillSeesTheLoader() throws Exception {
@@ -98,12 +95,13 @@ class GateGenuineFabricLoaderContractTest {
 		return out;
 	}
 
-	/** Whether {@code grep -acE pattern} counts {@code line}, exactly as {@code check_absent} asks. */
-	private boolean matches(String pattern, String line) throws Exception {
-		Path log = Files.writeString(temporary.resolve("log.txt"), line + "\n");
-		Process grep = new ProcessBuilder("grep", "-acE", pattern, log.toString()).redirectErrorStream(true).start();
-		assertTrue(grep.waitFor(15, TimeUnit.SECONDS), "grep timed out");
-		String count = new String(grep.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
-		return !"0".equals(count);
+	/**
+	 * Whether {@code grep -acE pattern} counts {@code line}, exactly as {@code check_absent} asks — answered by
+	 * {@link GrepCount}, which is grep's answer without a machine-local {@code grep}. The old
+	 * {@code ProcessBuilder("grep", ...)} failed on any machine without grep on the PATH, which reads as the
+	 * gate's behaviour being broken rather than the machine being unusable.
+	 */
+	private boolean matches(String pattern, String line) {
+		return GrepCount.matchingLines(pattern, line) > 0;
 	}
 }

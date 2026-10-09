@@ -42,11 +42,11 @@ step "unpack $(basename "$PACK")"
 # ditto, not unzip: CurseForge/Modrinth overrides routinely carry CJK filenames, and unzip assumes CP437 when the
 # UTF-8 flag is unset, mangling them. python's zipfile is the portable twin.
 ditto -xk "$PACK" "$WORK" 2>/dev/null \
-  || python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$PACK" "$WORK" \
+  || ${PYTHON} -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$PACK" "$WORK" \
   || { echo "[kernel] FATAL: could not unpack $PACK" >&2; exit 2; }
 [ -f "$WORK/manifest.json" ] || { echo "[kernel] FATAL: no manifest.json — is this a CurseForge pack?" >&2; exit 2; }
 
-python3 - "$WORK/manifest.json" <<'PY'
+${PYTHON} - "$WORK/manifest.json" <<'PY'
 import json, sys
 m = json.load(open(sys.argv[1]))
 mc = m.get("minecraft", {})
@@ -56,10 +56,10 @@ print("[kernel] loaders: %s" % ", ".join(l.get("id", "?") for l in mc.get("modLo
 print("[kernel] files:   %d" % len(m.get("files", [])))
 PY
 
-TOTAL=$(python3 -c "import json;print(len(json.load(open('$WORK/manifest.json'))['files']))")
+TOTAL=$(${PYTHON} -c "import json;print(len(json.load(open('$WORK/manifest.json'))['files']))")
 
 step "download $TOTAL file(s)"
-python3 -c "
+${PYTHON} -c "
 import json
 for f in json.load(open('$WORK/manifest.json'))['files']:
     print('%s\t%s' % (f['projectID'], f['fileID']))
@@ -72,7 +72,7 @@ while IFS=$'\t' read -r pid fid; do
 
   # 1. HEAD-follow purely to learn the real filename from the final URL. Nothing is written.
   eff=$(curl -sIL --max-time 60 -o /dev/null -w '%{url_effective}' "$api")
-  name=$(python3 - "$eff" <<'PY'
+  name=$(${PYTHON} - "$eff" <<'PY'
 import os, sys, urllib.parse
 print(os.path.basename(urllib.parse.unquote(urllib.parse.urlparse(sys.argv[1]).path)))
 PY

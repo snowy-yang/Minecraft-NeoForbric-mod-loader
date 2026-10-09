@@ -50,7 +50,7 @@ run_server() {
 judge() {
   local phase="$1" gated="$2" what="$3"
   check "$phase: the server started" 'Done \(' "$RESULTS/$phase.log"
-  if python3 - "$RESULTS/$phase.json" "$phase" "$gated" <<'PY'
+  if ${PYTHON} - "$RESULTS/$phase.json" "$phase" "$gated" <<'PY'
 import json, sys
 report, phase, gated = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3] == 'true'
 print(f"[kernel]   {phase}: {report}")

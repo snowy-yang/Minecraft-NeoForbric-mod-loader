@@ -266,7 +266,7 @@ final class GameArtifacts {
 	}
 
 	private static String runtimeProblem(ZipFile zip, String family, String core, List<String> loader,
-			String pinned) {
+			String pinned) throws IOException {
 		if (zip.getEntry(core) == null) return "It does not contain " + family + looksLike(zip, family) + ".";
 		for (String marker : loader) {
 			if (zip.getEntry(marker) == null) {
@@ -282,7 +282,33 @@ final class GameArtifacts {
 		if (!built.equals(pinned)) {
 			return "It was built for " + family + " " + built + "; this installer needs " + pinned + ".";
 		}
+		// Every check above reads the central directory and the manifest, which a truncated or zeroed entry still
+		// satisfies. Inflate each class entry in the family's namespace once so a jar that opens but does not read
+		// back is reported damaged here, as the base's own net/minecraft/**/*.class read does, and not accepted.
+		String prefix = namespaceOf(core);
+		for (Enumeration<? extends ZipEntry> entries = zip.entries(); entries.hasMoreElements(); ) {
+			ZipEntry entry = entries.nextElement();
+			String name = entry.getName();
+			if (!name.startsWith(prefix) || !name.endsWith(".class")) continue;
+			try (InputStream in = zip.getInputStream(entry)) {
+				while (in.read() >= 0) { }
+			}
+		}
 		return null;
+	}
+
+	/**
+	 * The package a family's classes live under, derived from its core class: {@code net/neoforged/neoforge/common/
+	 * NeoForge.class} lives under {@code net/neoforged/}, which is where the loader marker
+	 * {@code net/neoforged/fml/loading/FMLLoader.class} lives too — one carrier, one namespace, so covering the
+	 * core's namespace covers everything the entry checks above have already accepted.
+	 */
+	private static String namespaceOf(String coreClass) {
+		int classFile = coreClass.lastIndexOf('/');
+		String pkg = classFile < 0 ? "" : coreClass.substring(0, classFile);
+		int domain = pkg.indexOf('/');
+		int namespace = pkg.indexOf('/', domain + 1);
+		return namespace < 0 ? pkg + '/' : pkg.substring(0, namespace) + '/';
 	}
 
 	/**

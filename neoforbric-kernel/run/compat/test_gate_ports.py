@@ -123,10 +123,12 @@ class GatePortTest(unittest.TestCase):
 
     def test_the_walk_sees_the_checked_in_gates(self):
         # A wrong directory finds nothing and passes all three rules above, so check it found the tree.
+        # The floors are the real counts, so a gate deleted without its rule going away fails here rather than
+        # silently narrowing every check above to a smaller tree.
         found = gates()
-        self.assertGreater(len(found), 50, f'only {len(found)} gates found under {RUN}')
-        self.assertGreater(sum(1 for gate, _ in found if gate.declared), 40)
-        self.assertGreater(sum(1 for _, code in found if STARTS_SERVER.search(code)), 40)
+        self.assertGreaterEqual(len(found), 48, f'only {len(found)} gates found under {RUN}')
+        self.assertGreaterEqual(sum(1 for gate, _ in found if gate.declared), 45)
+        self.assertGreaterEqual(sum(1 for _, code in found if STARTS_SERVER.search(code)), 39)
 
 
 class ControlTest(unittest.TestCase):

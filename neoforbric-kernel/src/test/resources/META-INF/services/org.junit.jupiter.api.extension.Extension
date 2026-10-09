@@ -1,1 +1,2 @@
 net.neoforbric.kernel.FixturePolicyExtension
+net.neoforbric.kernel.TempDirHandleReleaseExtension

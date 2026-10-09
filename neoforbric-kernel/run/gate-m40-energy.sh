@@ -33,7 +33,7 @@ if [ "${1:-}" = "--execute-phase" ]; then
     "$KERNEL/run/launch-kernel-server.sh" </dev/null
   code=$?
   [ "$code" -eq 0 ] || exit "$code"
-  python3 - "$result" "$phase" "$token" <<'PY'
+  ${PYTHON} - "$result" "$phase" "$token" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding='utf-8') as stream: result = json.load(stream)
 assert result['phase'] == sys.argv[2], result
@@ -52,7 +52,7 @@ fi
 TRANSFER_CANARY_ENERGY=1 TRANSFER_CANARY_OUT="$CANARIES" M40_REBORN_ENERGY="$REBORN" \
   bash "$KERNEL/run/build-transfer-world-canaries.sh" > "$RESULTS/build.log" 2>&1 || { cat "$RESULTS/build.log"; exit 1; }
 INPUTS="$CANARIES/m33-build-inputs.json"
-field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]["path"])' "$INPUTS" "$1"; }
+field() { ${PYTHON} -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]]["path"])' "$INPUTS" "$1"; }
 FAPI="$(field fabricApi)"; MERGED="$(field merged)"; NEO_RT="$(field neo)"
 COMPILE_GAME="$(field compileGame)"; REBORN="$(field rebornEnergy)"
 export MERGED NEO_RT
@@ -85,7 +85,7 @@ fresh_world() {
   rm -f "$RUNDIR/.neoforbric-gate.pid"
   rm -rf "$RUNDIR/world" "$RUNDIR/mods" "$RUNDIR/.neoforbric-kernel"
   mkdir -p "$RUNDIR/mods"
-  python3 -c 'import uuid; print(uuid.uuid4())' > "$RUNDIR/.energy-owned"
+  ${PYTHON} -c 'import uuid; print(uuid.uuid4())' > "$RUNDIR/.energy-owned"
   cp "$FAPI" "$CANARIES/neoforbrictransferfabric.jar" "$CANARIES/neoforbricenergyforge.jar" "$CANARIES/neoforbricenergyneo.jar" "$RUNDIR/mods/"
   if [ "$1" = yes ]; then cp "$REBORN" "$CANARIES/neoforbricenergyfabric.jar" "$RUNDIR/mods/"; fi
   seed_server_properties "$RUNDIR"
@@ -93,11 +93,11 @@ fresh_world() {
 }
 run_phase() {
   local phase="$1" bridge="$2" token pid i reborn=()
-  python3 -c 'import uuid; print(uuid.uuid4())' > "$RUNDIR/.energy-owned"
+  ${PYTHON} -c 'import uuid; print(uuid.uuid4())' > "$RUNDIR/.energy-owned"
   token="$(cat "$RUNDIR/.energy-owned")"
   [ -f "$RUNDIR/mods/$(basename "$REBORN")" ] && reborn=(--artifact "reborn-energy=$REBORN")
   rm -f "$RESULTS/$phase-inputs.log"   # port_was_free below must not read an earlier run's log
-  python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
+  ${PYTHON} "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
     --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
     --artifact "kernel=$BUILD/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar" \
     --artifact "kernel-runtime=$BUILD/libs/neoforbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
@@ -122,7 +122,7 @@ run_phase() {
 }
 assert_phase() {
   local phase="$1" expected="$2"
-  if python3 - "$RESULTS" "$phase" "$expected" "$(cat "$RUNDIR/.energy-owned")" <<'PY'
+  if ${PYTHON} - "$RESULTS" "$phase" "$expected" "$(cat "$RUNDIR/.energy-owned")" <<'PY'
 import hashlib, json, pathlib, sys
 root, phase, expected = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3] == 'pass'
 outcome = json.loads((root / (phase + '-inputs.result.json')).read_text())

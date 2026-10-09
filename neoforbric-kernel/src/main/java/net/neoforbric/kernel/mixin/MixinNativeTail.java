@@ -123,14 +123,14 @@ public final class MixinNativeTail {
 			if (split.inlineReturns() == 0) {
 				// Nothing returns before the blocks: every return IS one the old tail stood for.
 				AnnotationNode all = copy(node);
-				CarpetMixinAdapter.set(all, "value", "RETURN");
-				CarpetMixinAdapter.remove(all, "ordinal");
+				MixinBytecode.set(all, "value", "RETURN");
+				MixinBytecode.remove(all, "ordinal");
 				out.add(all);
 			} else if (many) {
 				for (int k = split.inlineReturns(); k <= split.inlineReturns() + split.blocks(); k++) {
 					AnnotationNode one = copy(node);
-					CarpetMixinAdapter.set(one, "value", "RETURN");
-					CarpetMixinAdapter.set(one, "ordinal", k);
+					MixinBytecode.set(one, "value", "RETURN");
+					MixinBytecode.set(one, "ordinal", k);
 					out.add(one);
 				}
 			} else {
@@ -143,9 +143,9 @@ public final class MixinNativeTail {
 		}
 		if (!changed) return false;
 		if (many) {
-			CarpetMixinAdapter.set(injector, "at", out);
+			MixinBytecode.set(injector, "at", out);
 		} else {
-			CarpetMixinAdapter.set(injector, "at", out.get(0));
+			MixinBytecode.set(injector, "at", out.get(0));
 		}
 		NeoForbricLog.info("[NeoForbric/EarlyReturns] %s: its TAIL still runs at all %d return(s) the folded body sent there — "
 				+ "the paths vanilla returns early from included, as on its own loader", where, split.blocks() + 1);

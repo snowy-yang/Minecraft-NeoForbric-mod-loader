@@ -229,7 +229,7 @@ final class CandidateContractScanner {
 				if (mod.getEcosystem() != claim.ecosystem() || !claim.modIds().contains(mod.getId())) continue;
 				dependencies.addAll(mod.getDependencies()); mixins.addAll(mod.getMixinConfigs());
 			}
-			exclusions.addAll(forgeExclusions(claim, jar, side));
+			exclusions.addAll(neoExclusions(claim, jar, side));
 			for (var entry : ModAnnotationScanner.scan(claim.jar())) {
 				if (entry.family != claim.ecosystem() || !claim.modIds().contains(entry.modId)) continue;
 				if (!entry.dists.isEmpty() && !entry.dists.contains(side == EnvType.SERVER ? "DEDICATED_SERVER" : "CLIENT")) continue;
@@ -269,9 +269,12 @@ final class CandidateContractScanner {
 	/**
 	 * NeoForge {@code type="incompatible"} (hard) and {@code "discouraged"} (soft) entries, read from the toml here
 	 * because the shared parser models only positive dependencies and reads both as optional ones.
+	 *
+	 * <p>Only reachable on the NeoForge branch above (the Fabric branch returns from the if), so the manifest read
+	 * is NeoForge's: a jar's other Forge-family declarations are not this claim's.
 	 */
-	private static List<Exclusion> forgeExclusions(DuplicateModArbiter.Claim claim, Inventory jar, EnvType side) throws IOException {
-		byte[] toml = jar.read(claim.ecosystem() == Ecosystem.NEOFORGE ? "META-INF/neoforge.mods.toml" : "META-INF/mods.toml");
+	private static List<Exclusion> neoExclusions(DuplicateModArbiter.Claim claim, Inventory jar, EnvType side) throws IOException {
+		byte[] toml = jar.read("META-INF/neoforge.mods.toml");
 		if (toml == null) return List.of();
 		com.electronwill.nightconfig.core.UnmodifiableConfig config;
 		try { config = new com.electronwill.nightconfig.toml.TomlParser().parse(new StringReader(new String(toml, java.nio.charset.StandardCharsets.UTF_8))); }

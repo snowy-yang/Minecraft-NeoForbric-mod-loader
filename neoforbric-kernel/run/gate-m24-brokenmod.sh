@@ -72,7 +72,7 @@ boot() { # boot <log> <policy> [expect-policy-stop]
 }
 
 required_finding() {
-  if python3 - "$COMPAT" <<'PY'
+  if ${PYTHON} - "$COMPAT" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
@@ -168,7 +168,7 @@ else
   # A file that appears only when something is wrong is a file whose presence already means something.
   echo "[kernel] PASS a clean boot writes no load report"
 fi
-if python3 - "$COMPAT" <<'PY'
+if ${PYTHON} - "$COMPAT" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)

@@ -4,6 +4,13 @@ set -uo pipefail
 
 KERNEL="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The interpreter every script here invokes as ${PYTHON}. A bare python3 is enough on Linux and WSL, but on
+# Windows it is a Microsoft Store shim: it prints "Python was not found; run without arguments to install from
+# the Microsoft Store" and exits 1, so every gate that shells out to python looks like it failed at its own
+# check rather than at finding an interpreter. The kernel build and its test harness already export PYTHON, so
+# honour it here and keep python3 as the default for the platforms where that is the real thing.
+PYTHON="${PYTHON:-python3}"
+
 # Where the staged game artifacts, the downloaded mod packs and the built canaries live. Fourteen gates read
 # from it, and NONE of it is in git -- it is all build output and downloads, so a fresh checkout has none of it.
 #
@@ -134,7 +141,7 @@ assert_eq() {
 # strip_ansi <raw-log> <plain-log> — preserve raw evidence and make a separate CSI-free assertion view.
 # Paper's console can insert color escapes between a player name and "failed" even when stdout is a file.
 strip_ansi() {
-  python3 - "$1" "$2" <<'PY'
+  ${PYTHON} - "$1" "$2" <<'PY'
 from pathlib import Path
 import re, sys
 source, destination = map(Path, sys.argv[1:])

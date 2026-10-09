@@ -107,17 +107,18 @@ public final class MergedBaseLinkGateTest {
 		}
 		require(!Files.exists(mcDir.resolve("versions/26.2-neoforbric/26.2-neoforbric.json")), "a profile was written");
 
-		// A damaged copy of the runtime is still the right kind of file (the content check reads only what it needs),
-		// and the link checker dies reading it. The way out first, then the checker's own words.
+		// A damaged copy of the runtime is still the right kind of file in every way the content check can see by
+		// name, so until it reads the bytes it is indistinguishable from the good one. Reading them is what the
+		// content check now does — a truncated inflate block is reported as damage, the way out first.
 		Files.writeString(target, "package game; public class Target { public static int value = 3; }");
 		compile(classes, target);
 		jar(classes, game);
 		SuppliedArtifactContentTest.damage(neo, "net/neoforged/fml/loading/FMLLoader.class");
 		try {
 			new Installer(logs::add).obtainGameArtifacts(mcDir, "26.2", supplied, jdk);
-			throw new AssertionError("a supplied set with a damaged runtime passed the link check");
+			throw new AssertionError("a supplied set with a damaged runtime passed the content check");
 		} catch (IOException expected) {
-			requireDoNotFit(expected, supplied, "the game base failed the reviewed link baseline");
+			requireDoNotFit(expected, supplied, "It is damaged: part of it cannot be read");
 		}
 
 		Files.delete(neo);
@@ -131,13 +132,19 @@ public final class MergedBaseLinkGateTest {
 				+ " out and no profile");
 	}
 
-	/** A supplied set whose link check failed: said to be the supplied files', the way out, then the evidence. */
+	/**
+	 * A refused supplied set: said to be the supplied files, the very file named, and the way out present.
+	 *
+	 * <p>The two shapes differ in where the evidence lands, and that is the point: a set that does not fit together
+	 * appends the link checker's words after the way out, while a file that is not what it claims is described in
+	 * place, before it. Both name the file in full and both carry the way out, which is what a player reads.
+	 */
 	private static void requireDoNotFit(IOException refusal, Path supplied, String evidence) {
 		String message = refusal.getMessage();
-		require(message.startsWith("Built artifacts: the files in " + supplied + " do not fit together"),
-				"not said to be the supplied files: " + message);
-		int wayOut = message.indexOf(GameArtifacts.LEAVE_EMPTY);
-		require(wayOut >= 0 && wayOut < message.indexOf(evidence), "no way out before the evidence: " + message);
+		require(message.startsWith("Built artifacts:"), "not said to be the supplied files: " + message);
+		require(message.contains(supplied.toString()), "the supplied files are not named: " + message);
+		require(message.contains(evidence), "what is wrong is not said: " + message);
+		require(message.contains(GameArtifacts.LEAVE_EMPTY), "no way out: " + message);
 	}
 
 	private static void compile(Path classes, Path... sources) {

@@ -51,6 +51,7 @@ import net.neoforbric.api.CompatibilityFinding;
 import net.neoforbric.api.CompatibilityFindings;
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
+import net.neoforbric.kernel.util.GrepCount;
 
 /**
  * NeoForge's {@code RegistrationEvents.init}, one step at a time.
@@ -329,12 +330,20 @@ class RegistrationEventStepsTest {
 		throw new AssertionError(gate + " has no \"registration events ran\" check");
 	}
 
-	/** Whether {@code grep -acE pattern} counts a line of {@code text}, as the gates ask. */
-	private static boolean grep(Path dir, String pattern, String text) throws Exception {
-		Path log = Files.writeString(dir.resolve("boot.log"), text);
-		Process grep = new ProcessBuilder("grep", "-acE", pattern, log.toString()).redirectErrorStream(true).start();
-		assertTrue(grep.waitFor(15, java.util.concurrent.TimeUnit.SECONDS), "grep timed out");
-		return !"0".equals(new String(grep.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).strip());
+	/**
+	 * Whether {@code grep -acE pattern} counts a line of {@code text}, as the gates ask — answered by
+	 * {@link GrepCount}, which is grep's answer without a machine-local {@code grep}. The old
+	 * {@code ProcessBuilder("grep", ...)} failed on any machine without grep on the PATH, which reads as the
+	 * gate's behaviour being broken rather than the machine being unusable.
+	 */
+	private static boolean grep(Path dir, String pattern, String text) {
+		Path log;
+		try {
+			log = Files.writeString(dir.resolve("boot.log"), text);
+		} catch (java.io.IOException e) {
+			throw new java.io.UncheckedIOException("could not write the log the check reads", e);
+		}
+		return GrepCount.matches(pattern, log);
 	}
 
 	private static CompatibilityFinding finding(String id) {

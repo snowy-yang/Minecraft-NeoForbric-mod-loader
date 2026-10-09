@@ -44,7 +44,6 @@ import net.neoforbric.kernel.transform.ChunkExecutorGuardInjector;
 import net.neoforbric.kernel.transform.ClientPackHookInjector;
 import net.neoforbric.kernel.transform.ClientSmokeTickInjector;
 import net.neoforbric.kernel.transform.CommonNetworkInteropInjector;
-import net.neoforbric.kernel.transform.SodiumConfigUserBridgeInjector;
 import net.neoforbric.kernel.transform.DataPackHookInjector;
 import net.neoforbric.kernel.transform.DuplicateLambdaPruneInjector;
 import net.neoforbric.kernel.transform.NeoForbricMergedBaseCompatTransformer;
@@ -53,7 +52,6 @@ import net.neoforbric.kernel.transform.GuestMixinPluginGuard;
 import net.neoforbric.kernel.transform.HudElementBridgeInjector;
 import net.neoforbric.kernel.transform.LifecycleHookInjector;
 import net.neoforbric.kernel.transform.MergedBaseFrameRecomputer;
-import net.neoforbric.kernel.transform.PortingLayerAbiInjector;
 import net.neoforbric.kernel.transform.LoaderProbeRewriter;
 import net.neoforbric.kernel.transform.MethodBodyNeuter;
 import net.neoforbric.kernel.transform.NeoEnumExtensionInjector;
@@ -395,26 +393,6 @@ public final class KernelBoot {
 		// One mod's mixin config plugin must not be able to abort config preparation for every other mod. Mixin
 		// guards plugin construction but not the calls, and a throw there escapes select(). See GuestMixinPluginGuard.
 		chain.register(TransformPhase.COREMOD, new GuestMixinPluginGuard());
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.IrisEarlyGamePathTransformer());
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CorpseNameTagAdapter(name -> {
-			try {
-				String binary = name.replace('/', '.');
-				if (loader.isClassLoadedByName(binary)) {
-					// Inspect an already-defined class without initializing it; late mixins may have restored a field.
-					Class<?> type = Class.forName(binary, false, loader);
-					org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode(); node.name = name;
-					for (var field : type.getDeclaredFields()) node.fields.add(new org.objectweb.asm.tree.FieldNode(
-							field.getModifiers(), field.getName(), org.objectweb.asm.Type.getDescriptor(field.getType()), null, null));
-					return node;
-				}
-				try (var in = loader.getGameResourceAsStream(name + ".class")) {
-					if (in == null) return null;
-					org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
-					new org.objectweb.asm.ClassReader(in).accept(node, org.objectweb.asm.ClassReader.SKIP_CODE);
-					return node;
-				}
-			} catch (ReflectiveOperationException | java.io.IOException | LinkageError unavailable) { return null; }
-		}));
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.FabricItemContractTransformer(name -> {
 			try (var in = loader.getGameResourceAsStream(name + ".class")) { return in != null; }
 			catch (java.io.IOException unavailable) { return false; }
@@ -531,18 +509,6 @@ public final class KernelBoot {
 		if (net.neoforbric.kernel.transform.MergedRecordOptionalDefaults.enabled()) {
 			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.MergedRecordOptionalDefaults());
 		}
-		// Every merged caller builds custom-payload codecs with NeoForge's overload, so a mod hooking vanilla's
-		// CustomPacketPayload.codec was never called: Carpet's carpet:hello could not be encoded and a dedicated
-		// server running it disconnected every player at login. Builds go through vanilla's overload again.
-		if (net.neoforbric.kernel.transform.PayloadCodecFunnelInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.PayloadCodecFunnelInjector());
-		}
-		// …and a payload on a channel only another ecosystem negotiated is RECEIVED down vanilla's path, where its mod
-		// listens, not by NeoForge's dispatcher, which disconnected Carpet's client on carpet:hello.
-		if (net.neoforbric.kernel.transform.ForeignPayloadReceiveInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.ForeignPayloadReceiveInjector());
-		}
-
 		// …and keep the packs it serves OUT of the player's resource-pack screen. Pack.isHidden survived the
 		// merge; the screen-side filter that reads it did not.
 		chain.register(TransformPhase.COREMOD,
@@ -557,13 +523,6 @@ public final class KernelBoot {
 		chain.register(TransformPhase.COREMOD, new DataPackHookInjector());
 
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.ServerReloadListenerNamesInjector());
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CreateWorkerWaitInjector());
-		if (loader.getResource("com/zurrtum/create/mixin/LivingEntityMixin.class") != null) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CreateBreathingInjector());
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CreateSoundQueryInjector());
-			if (side == Side.CLIENT) chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CreateHudContextInjector());
-		}
-
 
 		// A Fabric mod's registry reads its data where native Fabric reads it. The merged Registries body is
 		// NeoForge's, which prefixes the namespace itself; Fabric prefixes in a return-value mixin instead, and
@@ -645,7 +604,6 @@ public final class KernelBoot {
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.UntrackedFluidEyeQueryInjector());
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.AxeStripCallbacksInjector());
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CompatPluginPlatformInjector());
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.SpectreConfigContractInjector());
 		// Vanilla's pre-armour read of actuallyHurt's damage goes back where vanilla has it,
 		// so a Fabric mod rewriting the damage there (TaCZ) rewrites what NeoForge applies instead of throwing on every hit.
 		if (net.neoforbric.kernel.transform.VanillaDamageReadInjector.enabled()) {
@@ -701,10 +659,6 @@ public final class KernelBoot {
 		// Each family's ModList.isLoaded can only see its own family's mods, and that answer is a compatibility
 		// branch far more often than a display string — a wrong "no" disables an integration in silence.
 		chain.register(TransformPhase.COREMOD, new ForeignModPresenceInjector());
-		// A Fabric "porting layer" ships its own net.neoforged.* so Fabric mods can use that API; under NeoForbric the
-		// carrier's copy wins, and the port's own compiled call sites then meet an API it was not built against.
-		// PortingLayerAudit reports every such skew; this adapts the one that is fatal.
-		chain.register(TransformPhase.COREMOD, new PortingLayerAbiInjector());
 
 		// Client only: NeoForge won Hud.extractRenderState, so the call sites fabric-rendering-v1's HudMixin anchors
 		// on no longer exist — as METHOD REFERENCES in the layer manager they exist as no bytecode at all, so no
@@ -761,12 +715,11 @@ public final class KernelBoot {
 		// Arbitrate the c:version / c:register common-networking channel that Fabric and NeoForge both claim — without
 		// it a tri-in-one client is kicked "invalid packet" when Fabric's addon is handed a NeoForge payload. Matches
 		// only the Fabric addon + the server config listener, so it is inert until those classes load.
-		// -Dneoforbric.commonNetworkInterop=off is how the two halves of this shim get told apart. Both are needed on a
-		// tri-in-one instance and they fail in opposite directions, so a single switch that removes both is the only
-		// honest way to ask "is the arbitration the cause?" of a networking symptom.
+		// -Dneoforbric.commonNetworkInterop=off is how this shim gets told apart. It is needed on a tri-in-one
+		// instance and it fails in both directions, so a single switch that removes it is the only honest way to ask
+		// "is the arbitration the cause?" of a networking symptom.
 		if (!"off".equalsIgnoreCase(System.getProperty("neoforbric.commonNetworkInterop", "on"))) {
 			chain.register(TransformPhase.COREMOD, new CommonNetworkInteropInjector());
-			chain.register(TransformPhase.COREMOD, new SodiumConfigUserBridgeInjector());
 		} else {
 			NeoForbricLog.warn("[NeoForbric/Net] common-networking arbitration DISABLED — a tri-in-one client will be "
 					+ "kicked \"invalid packet\" when Fabric's addon is handed a NeoForge payload");

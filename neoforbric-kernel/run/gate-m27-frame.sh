@@ -27,7 +27,7 @@ reap_stale_server "$RUNDIR"
 mkdir -p "$RUNDIR/quickPlay" "$RUNDIR/screenshots"
 rm -f "$RUNDIR/logs/latest.log"
 : > "$LOG"
-python3 - "$STARTED" <<'PY' || exit 3
+${PYTHON} - "$STARTED" <<'PY' || exit 3
 from pathlib import Path
 import sys, time
 Path(sys.argv[1]).write_text(str(time.time_ns()))
@@ -49,7 +49,7 @@ check "clean disconnect" 'ClientSmoke\] clean disconnect observed' "$LOG"
 check_absent "screenshot capture did not throw" 'could not take a screenshot' "$LOG"
 
 # FRAME_SELECTION_BEGIN — also executed against old/new fixture files by GateFrameContractTest.
-FRAME=$(python3 - "$RUNDIR/screenshots" "$STARTED" <<'PY'
+FRAME=$(${PYTHON} - "$RUNDIR/screenshots" "$STARTED" <<'PY'
 from pathlib import Path
 import sys
 started = int(Path(sys.argv[2]).read_text())
@@ -68,7 +68,7 @@ if [ -n "${M27_FRAME:-}" ]; then
   echo "[kernel] diagnostic frame override: $FRAME"
 fi
 if [ -n "$FRAME" ] && [ -f "$FRAME" ]; then
-  python3 "$KERNEL/run/compat/frame-verdict.py" "$FRAME" > "$FRAME_LOG" 2>&1 || FAIL=1
+  ${PYTHON} "$KERNEL/run/compat/frame-verdict.py" "$FRAME" > "$FRAME_LOG" 2>&1 || FAIL=1
   cat "$FRAME_LOG"
   check "the captured frame contains drawing" '(^|[[:space:]])verdict=DREW([[:space:]]|$)' "$FRAME_LOG"
 else

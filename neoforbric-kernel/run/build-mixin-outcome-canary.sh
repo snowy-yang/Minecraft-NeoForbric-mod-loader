@@ -6,7 +6,7 @@ canary_scratch mixin-outcome
 kernel_classpath
 export M36_BUILD_CP="$KERNEL_CP"
 export M36_WORK="$WORK" M36_KERNEL="$KERNEL" M36_OLD="$OLD"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M36_KERNEL', 'M36_OLD', 'M36_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))

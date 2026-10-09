@@ -4,8 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
-import net.neoforbric.kernel.transform.CreateHudContextInjector;
-import net.neoforbric.kernel.transform.CreateSoundQueryInjector;
 import net.neoforbric.kernel.transform.DuplicateLambdaPruneInjector;
 import net.neoforbric.kernel.transform.InterfaceDefaultConflictRepair;
 import net.neoforbric.kernel.transform.ItemUseOnInjector;
@@ -43,8 +41,6 @@ class KernelBootChainTest {
 	}
 
 	@Test void refusesWhatItCannotReproduceFaithfully() {
-		assertRefused(CreateSoundQueryInjector.class, "only under a condition other than its own enabled()");
-		assertRefused(CreateHudContextInjector.class, "only under a condition other than its own enabled()");
 		assertRefused(SpawnPositionCallsInjector.class, "constructed with arguments");
 		assertRefused(TransformChain.class, "is not registered as chain.register(PHASE, new X(...))");
 		assertRefused(InterfaceDefaultConflictRepair.class, "never constructs");

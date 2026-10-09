@@ -146,24 +146,33 @@ class PrepareWorldTest {
         assertEquals("generated terrain", Files.readString(copied.resolve("region-marker.txt")));
     }
 
-    @Test void theClientGateAcknowledgesItsActualZeroModSaveThroughTheSharedTool() throws Exception {
-        String script = Files.readString(Path.of("run/gate-m26-forgeclient.sh"));
-        int begin = script.indexOf("# WORLD_CONFIRM_BEGIN");
-        int end = script.indexOf("# WORLD_CONFIRM_END", begin);
-        assertTrue(begin >= 0 && end > begin);
-        Path world = temporary.resolve("saves/test world");
-        Files.createDirectories(world);
-        Path save = world.resolve("level.dat");
-        Files.write(save, gzip(fixture(0, true, 1, false)));
-        ProcessBuilder builder = new ProcessBuilder("bash", "-c", script.substring(begin, end));
-        builder.environment().put("KERNEL", Path.of("").toAbsolutePath().toString());
-        builder.environment().put("RUNDIR", temporary.toString());
-        builder.environment().put("WORLD", "test world");
-        Path log = temporary.resolve("gate-confirm.log");
-        Process process = builder.redirectErrorStream(true).redirectOutput(log.toFile()).start();
-        assertTrue(process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS));
-        assertEquals(0, process.exitValue(), Files.readString(log));
-        assertArrayEquals(fixture(1, true, 1, false), gunzip(Files.readAllBytes(save)));
+    @Test void theClientDriverAcknowledgesTheSaveItPlaysThroughTheSharedHelper() throws Exception {
+        // The client used to carry its own copy of this logic in a Forge-era gate script. There is now one
+        // shared helper, and every driver that plays a saved world calls it: extract the call from the shared
+        // client driver rather than trusting a comment saying it does.
+        Path save = temporary.resolve("saves/test world");
+        Files.createDirectories(save);
+        Path level = save.resolve("level.dat");
+        Files.write(level, gzip(fixture(0, true, 1, false)));
+        var result = DriverTools.run(Map.of(), "-c", """
+                import ast,pathlib,sys
+                win=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(win));import common
+                tree=ast.parse((win/'run-client-test.py').read_text())
+                body,index=next((body,i) for body in ast.walk(tree) if isinstance(getattr(n,'body',None),list)
+                    for i,n in enumerate(body)
+                    if isinstance(n,ast.FunctionDef) and n.name=='main')
+                body=body.body
+                statement=next(n for n in body if isinstance(n,ast.Expr)
+                    and isinstance(n.value,ast.Call) and getattr(n.value.func,'id',None)=='prepare_world')
+                save=pathlib.Path(sys.argv[2])
+                configuration={'world':save.name}
+                scope=dict(instance=save.parent.parent,world=save.name,configuration=configuration,
+                           common=common,prepare_world=common.prepare_world,pathlib=pathlib)
+                exec(compile(ast.Module(body=[statement],type_ignores=[]),'client-ack','exec'),scope)
+                assert (save/'level.dat').stat().st_size > 0
+                """, DriverTools.COMPAT.resolve("win").toString(), save.toString());
+        assertEquals(0, result.exit(), result.output());
+        assertArrayEquals(fixture(1, true, 1, false), gunzip(Files.readAllBytes(level)));
     }
 
     @Test void theCarrierReadsThisFlagAndUsesItToSuppressOnlyTheExperimentalBackupPrompt() throws Exception {

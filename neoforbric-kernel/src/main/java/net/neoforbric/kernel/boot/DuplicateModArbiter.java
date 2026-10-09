@@ -997,9 +997,8 @@ public final class DuplicateModArbiter {
 
 	/** Parses one ecosystem name, warning (and returning null) rather than throwing on anything unrecognised. */
 	private static Ecosystem ecosystem(String raw, String where) {
-		// The file this reads is the PLAYER'S. It has always spelled traditional Forge "minecraftforge", which is
-		// why parsing goes through Ecosystem.parse rather than valueOf — the constant is FORGE, but an override
-		// someone wrote months ago must still read back.
+		// The file this reads is the PLAYER'S, so it can spell anything: Ecosystem.parse is lenient about case and
+		// answers null for a name that names neither ecosystem rather than throwing on one line of an override.
 		Ecosystem parsed = Ecosystem.parse(raw);
 		if (parsed == null) {
 			NeoForbricLog.warn("[NeoForbric/DupeId] %s: '%s' is not a loader — use fabric or neoforge",

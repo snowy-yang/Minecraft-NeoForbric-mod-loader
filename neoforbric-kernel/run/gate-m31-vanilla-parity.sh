@@ -110,7 +110,7 @@ step "compare the two saved overworlds"
 if [ ! -d "$DIR_V/$REGION" ] || [ ! -d "$DIR_F/$REGION" ]; then
   echo "[kernel] FAIL one of the arms saved no overworld region — nothing to compare"; FAIL=1
 else
-  python3 "$KERNEL/run/compat/world-parity.py" "$DIR_V/$REGION" "$DIR_F/$REGION" > "$REPORT" 2>&1
+  ${PYTHON} "$KERNEL/run/compat/world-parity.py" "$DIR_V/$REGION" "$DIR_F/$REGION" > "$REPORT" 2>&1
   cat "$REPORT"
 fi
 

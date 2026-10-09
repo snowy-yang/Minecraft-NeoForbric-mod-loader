@@ -60,9 +60,9 @@ class MixinRetargetAbsorbedCallTest {
 		assertEquals(HOOK, plan.rewrites().get(0).to());
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(MixinRetarget.rewritten(mixin, plan), resolver).verdict());
 
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
-		assertEquals(1, MixinRetarget.plan(MixinFit.parse(mixin), resolver).rewrites().size(),
-				"MinecraftForge's jar sets dest as its last act too, after its own hook");
+		// MinecraftForge's jar used to set dest as its last act too, after its own hook, so a NeoForge-family mod
+		// needed the same move. That carrier is no longer staged: the one carrier Jar this loader runs is the
+		// NeoForge runtime, and its mods see the hook natively — one ecosystem, one answer.
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty(), "NeoForge's mods see the hook natively");
 	}

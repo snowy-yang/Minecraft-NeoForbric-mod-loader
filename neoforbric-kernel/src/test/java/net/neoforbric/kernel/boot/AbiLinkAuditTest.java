@@ -74,8 +74,8 @@ class AbiLinkAuditTest {
 	void aClassTheJarShipsItselfIsNotAFinding(@TempDir Path dir) throws Exception {
 		Path mod = dir.resolve("port.jar");
 		try (OutputStream out = Files.newOutputStream(mod); ZipOutputStream zip = new ZipOutputStream(out)) {
-			put(zip, "a/b/Uses", caller("a/b/Uses", "net/minecraftforge/common/ForgeConfigSpec"));
-			put(zip, "net/minecraftforge/common/ForgeConfigSpec", empty("net/minecraftforge/common/ForgeConfigSpec"));
+			put(zip, "a/b/Uses", caller("a/b/Uses", PRESENT));
+			put(zip, PRESENT, empty(PRESENT));
 		}
 		assertTrue(AbiLinkAudit.audit(List.of(mod), AbiLinkAudit.classesOf(List.of(mod))).isEmpty(),
 				"a Fabric port of a Forge library ships the classes its dependants name");
@@ -87,8 +87,12 @@ class AbiLinkAuditTest {
 		assertTrue(AbiLinkAudit.audit(List.of(mod), AbiLinkAudit.classesOf(List.of(mod))).isEmpty(),
 				"CustomSkinLoader's fml/loading references are not a wrong-Forge compile");
 		assertTrue(AbiLinkAudit.inScope("net/neoforged/neoforge/common/NeoForge"));
-		assertTrue(AbiLinkAudit.inScope("net/minecraftforge/fml/common/Mod"));
-		assertTrue(!AbiLinkAudit.inScope("net/minecraftforge/fml/relauncher/Side"));
+		assertTrue(!AbiLinkAudit.inScope("net/neoforged/fml/loading/FMLLoader"),
+				"the loading layer the kernel replaces is out of scope");
+		assertTrue(!AbiLinkAudit.inScope("net/neoforged/neoforgespi/locating/LocatingService"),
+				"and so is the locating SPI");
+		assertTrue(!AbiLinkAudit.inScope("net/minecraftforge/fml/common/Mod"),
+				"traditional MinecraftForge is not a family this instance carries, so it is not judged here");
 		assertTrue(!AbiLinkAudit.inScope("net/minecraft/world/level/Level"), "vanilla is not judged");
 	}
 

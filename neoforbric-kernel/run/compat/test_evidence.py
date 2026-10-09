@@ -145,34 +145,19 @@ class EvidenceTest(unittest.TestCase):
         return {"META-INF/MANIFEST.MF": f"Manifest-Version: 1.0\nImplementation-Title: {title}\n"
                                         f"Implementation-Version: {version}\n\nName: x/\nImplementation-Version: 0\n"}
 
-    def release_artifacts(self, neo_version="26.2.0.88", provenance=True, **provenance_changes):
-        """A complete, consistent release set: pinned readings, staged build inputs, merged-base provenance."""
+    def release_artifacts(self, neo_version="26.2.0.88"):
+        """A complete, consistent release set: the pinned readings and the staged inputs they attest."""
         game = {"version.json": json.dumps({"id": "26.2"})}
-        artifacts = {name: self.jar(name + ".jar", dict(game, **{"marker": name}))
-                     for name in ("vanilla", "forge-patched", "neo-patched", "merged")}
-        artifacts["forge-runtime"] = self.jar("forge-runtime.jar", self.carrier("MinecraftForge", "65.0.1"))
-        artifacts["forge-interop"] = self.jar("forge-interop.jar", dict(self.carrier("MinecraftForge", "65.0.1"), i="1"))
-        artifacts["neo-runtime"] = self.jar("neo-runtime.jar", self.carrier("NeoForge", neo_version))
-        for name in ("kernel", "kernel-runtime", "merge-tools"):
-            artifacts[name] = self.jar(name + ".jar", {"marker": name})
+        artifacts = {"game-base": self.jar("game-base.jar", dict(game, **{"marker": "game-base"})),
+                     "neo-runtime": self.jar("neo-runtime.jar", self.carrier("NeoForge", neo_version)),
+                     "kernel": self.jar("kernel.jar", {"marker": "kernel"}),
+                     "kernel-runtime": self.jar("kernel-runtime.jar", {"marker": "kernel-runtime"})}
+        # Each role's staged copy must be the very bytes the release accepts, or the unit tests would be
+        # exercised against one base while the release attests another.
         for role, relative in evidence.STAGED_BUILD_INPUTS.items():
             target = self.staged / "run" / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(artifacts[role].read_bytes())
-        tool = self.source / evidence.MERGE_TOOL_SOURCES / "MergedBaseBuilder.java"
-        if not tool.exists():
-            tool.parent.mkdir(parents=True)
-            tool.write_text("class MergedBaseBuilder {}")
-            self.run_git("add", ".")
-            self.run_git("-c", "user.name=Test", "-c", "user.email=rt.ge.jerry@gmail.com", "commit", "-qm", "tool")
-        if provenance:
-            record = {"schema": 1, "linkCheck": "enforce", "source": {"commit": "x", "dirty": False},
-                      "toolSources": {"MergedBaseBuilder.java": evidence.digest(tool)},
-                      "inputs": {role: {"sha256": evidence.digest(artifacts[role])} for role in evidence.PROVENANCE_INPUTS},
-                      "outputs": {role: {"sha256": evidence.digest(artifacts[role])} for role in ("merged", "forge-interop")}}
-            for key, value in provenance_changes.items():
-                record[key] = value
-            Path(str(artifacts["merged"]) + ".provenance.json").write_text(json.dumps(record))
         return artifacts
 
     def test_release_requires_clean_source_including_new_files(self):
@@ -185,9 +170,7 @@ class EvidenceTest(unittest.TestCase):
 
     def test_release_reads_the_pinned_versions_out_of_the_artifacts(self):
         recorded = evidence.capture(self.source, self.release_artifacts(), [self.mods], self.report, release=True)
-        self.assertEqual({"vanilla": "26.2", "forge-patched": "26.2", "neo-patched": "26.2", "merged": "26.2"},
-                         recorded["platform"]["readings"]["minecraft"])
-        self.assertEqual("26.2-65.0.1", recorded["platform"]["readings"]["forge"]["forge-interop"])
+        self.assertEqual({"game-base": "26.2"}, recorded["platform"]["readings"]["minecraft"])
         self.assertEqual("26.2.0.88", recorded["platform"]["readings"]["neoforge"]["neo-runtime"])
         wrong = self.release_artifacts(neo_version="26.2.0.38-beta")
         with self.assertRaisesRegex(ValueError, "not the pinned platform: neo-runtime=26.2.0.38-beta"):
@@ -199,8 +182,8 @@ class EvidenceTest(unittest.TestCase):
 
     def test_an_unreadable_platform_artifact_is_not_a_pinned_one(self):
         artifacts = self.release_artifacts()
-        artifacts["vanilla"] = self.artifact
-        with self.assertRaisesRegex(ValueError, "vanilla=unreadable"):
+        artifacts["game-base"] = self.artifact
+        with self.assertRaisesRegex(ValueError, "game-base=unreadable"):
             evidence.capture(self.source, artifacts, [self.mods], self.report, release=True)
 
     def test_file_jar_version_is_resolved_from_the_same_archive_and_the_raw_value_kept(self):
@@ -214,52 +197,40 @@ class EvidenceTest(unittest.TestCase):
 
     def test_release_rejects_a_candidate_the_build_and_its_tests_do_not_read(self):
         artifacts = self.release_artifacts()
-        staged = self.staged / "run" / evidence.STAGED_BUILD_INPUTS["merged"]
+        staged = self.staged / "run" / evidence.STAGED_BUILD_INPUTS["game-base"]
         staged.write_bytes(b"the reference base the unit tests actually read")
-        with self.assertRaisesRegex(ValueError, "attests other jars than the build tests: merged"):
+        with self.assertRaisesRegex(ValueError, "attests other jars than the build tests: game-base"):
             evidence.capture(self.source, artifacts, [self.mods], self.report, release=True)
         staged.unlink()
-        with self.assertRaisesRegex(ValueError, "merged: .*missing"):
+        with self.assertRaisesRegex(ValueError, "game-base: .*missing"):
             evidence.capture(self.source, artifacts, [self.mods], self.report, release=True)
         # Without --release the divergence is recorded, and verify notices a staged jar replaced mid-run.
-        staged.write_bytes(artifacts["merged"].read_bytes())
+        staged.write_bytes(artifacts["game-base"].read_bytes())
         recorded = evidence.capture(self.source, {"kernel": self.artifact}, [self.mods], self.report)
-        self.assertEqual(str(staged.resolve()), recorded["stagedBuildInputs"]["merged"]["path"])
+        self.assertEqual(str(staged.resolve()), recorded["stagedBuildInputs"]["game-base"]["path"])
         staged.write_bytes(b"swapped")
         with self.assertRaisesRegex(ValueError, "staged build input changed"):
             evidence.verify(self.report)
 
-    def test_release_requires_the_merged_base_provenance_to_match(self):
-        with self.assertRaisesRegex(ValueError, "requires the merged base's build provenance"):
-            evidence.capture(self.source, self.release_artifacts(provenance=False), [self.mods], self.report, release=True)
-        for change, message in (({"linkCheck": "warn"}, "link check was 'warn'"),
-                                ({"source": {"commit": "x", "dirty": True}}, "uncommitted tree"),
-                                ({"toolSources": {"MergedBaseBuilder.java": "0" * 64}}, "differs from the attested source"),
-                                ({"outputs": {}}, "merged is not the jar this provenance's build wrote"),
-                                ({"inputs": {}}, "vanilla is not the vanilla input")):
-            with self.subTest(change=change), self.assertRaisesRegex(ValueError, message):
-                evidence.capture(self.source, self.release_artifacts(**change), [self.mods], self.report, release=True)
+    def test_release_rejects_a_runtime_other_than_the_one_the_tests_read(self):
+        artifacts = self.release_artifacts()
+        staged = self.staged / "run" / evidence.STAGED_BUILD_INPUTS["neo-runtime"]
+        staged.write_bytes(b"some other carrier")
+        with self.assertRaisesRegex(ValueError, "attests other jars than the build tests: neo-runtime"):
+            evidence.capture(self.source, artifacts, [self.mods], self.report, release=True)
 
-    def test_the_merge_provenance_writer_is_what_a_release_accepts(self):
-        artifacts = self.release_artifacts(provenance=False)
-        tool = self.source / evidence.MERGE_TOOL_SOURCES / "MergedBaseBuilder.java"
-        target = Path(str(artifacts["merged"]) + ".provenance.json")
-        inputs = {role: artifacts[role] for role in evidence.PROVENANCE_INPUTS}
-        produced = {role: artifacts[role] for role in ("merged", "forge-interop")}
-        written = evidence.write_merge_provenance(self.source, target, inputs, produced, [tool], "enforce")
-        self.assertFalse(written["source"]["dirty"])
-        recorded = evidence.capture(self.source, artifacts, [self.mods], self.report, release=True)
-        self.assertEqual("enforce", recorded["mergedProvenance"]["summary"]["linkCheck"])
-        evidence.verify(self.report)
-        tool.write_text("class MergedBaseBuilder { /* uncommitted */ }")
-        self.assertTrue(evidence.write_merge_provenance(self.source, target, inputs, produced, [tool], "enforce")
-                        ["source"]["dirty"])
+    def test_a_release_is_not_accepting_a_role_no_release_uses(self):
+        artifacts = self.release_artifacts()
+        artifacts.pop("kernel-runtime")
+        with self.assertRaisesRegex(ValueError, "release evidence missing artifacts: kernel-runtime"):
+            evidence.capture(self.source, artifacts, [self.mods], self.report, release=True)
 
     def test_a_release_manifest_without_the_new_bindings_does_not_verify(self):
         evidence.capture(self.source, self.release_artifacts(), [self.mods], self.report, release=True)
         saved = json.loads(self.report.read_text())
         for key, message in (("stagedBuildInputs", "jars the build and its tests read"),
-                             ("mergedProvenance", "no merged base provenance")):
+                             ("artifacts", "no artifacts recorded"),
+                             ("source", "no source recorded")):
             with self.subTest(key=key):
                 self.report.write_text(json.dumps({k: v for k, v in saved.items() if k != key}))
                 with self.assertRaisesRegex(ValueError, message):

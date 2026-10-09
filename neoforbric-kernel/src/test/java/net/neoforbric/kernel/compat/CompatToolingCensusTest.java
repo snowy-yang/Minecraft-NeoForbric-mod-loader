@@ -2,6 +2,8 @@ package net.neoforbric.kernel.compat;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import net.neoforbric.kernel.util.PythonInterpreter;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -27,7 +29,7 @@ class CompatToolingCensusTest {
 			}
 			var command = script.toString().endsWith(".sh")
 					? List.of("bash", "-n", script.toAbsolutePath().toString())
-					: List.of("python3", "-c", "import py_compile,sys; py_compile.compile(sys.argv[1],cfile=sys.argv[2],doraise=True)",
+					: List.of(PythonInterpreter.command(), "-c", "import py_compile,sys; py_compile.compile(sys.argv[1],cfile=sys.argv[2],doraise=True)",
 						script.toAbsolutePath().toString(), temporary.resolve("syntax.pyc").toString());
 			Path log = temporary.resolve("syntax.log");
 			Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();

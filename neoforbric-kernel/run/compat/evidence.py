@@ -104,6 +104,9 @@ def archive_metadata(data, origin, depth=0):
                 raise ValueError(f"cannot inventory {origin}::fabric.mod.json: {invalid}") from invalid
             declarations.append({"ecosystem": "FABRIC", "id": meta["id"], "version": str(meta["version"])})
             nested.update(entry["file"] for entry in meta.get("jars", []))
+        # "FORGE" here names the manifest FLAVOUR a jar declares with (the traditional MinecraftForge
+        # META-INF/mods.toml), not an ecosystem this loader runs: real mods still ship it, so the inventory
+        # records what the jar says about itself rather than what this instance can load.
         for name, family in [("META-INF/mods.toml", "FORGE"), ("META-INF/neoforge.mods.toml", "NEOFORGE")]:
             if name in names:
                 meta = tomllib.loads(jar.read(name).decode("utf-8"))
@@ -255,6 +258,9 @@ def verify(path):
     saved = json.loads(path.read_text())
     if saved.get("schema") != 1:
         raise ValueError("unsupported evidence schema")
+    for key in ("source", "artifacts", "mods"):
+        if not isinstance(saved.get(key), list if key == "mods" else dict):
+            raise ValueError(f"incomplete evidence manifest: no {key} recorded")
     source = saved["source"]
     if source_record(source["root"], {path}) != source:
         raise ValueError("source revision or contents changed since capture")

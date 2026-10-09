@@ -93,9 +93,7 @@ public final class ModAnnotationScanner {
 		}
 	}
 
-	/** Traditional MinecraftForge {@code @Mod} descriptor (the primary target). */
-	public static final String MOD_DESC_MINECRAFTFORGE = "Lnet/minecraftforge/fml/common/Mod;";
-	/** NeoForge {@code @Mod} descriptor (the parked NeoForge path). */
+	/** NeoForge {@code @Mod} descriptor — the one family this loader runs, and the only one it recognises. */
 	public static final String MOD_DESC_NEOFORGE = "Lnet/neoforged/fml/common/Mod;";
 	/** The Forge-family {@code @Mod} annotation shape ({@code String value()}). */
 	private static final java.util.Map<String, Ecosystem> MOD_DESCRIPTORS = java.util.Map.of(

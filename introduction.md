@@ -960,32 +960,29 @@ java -jar neoforbric-kernel-installer.jar --doctor [--dir DIR] [--jdk PATH]
 `ArtifactBuilder.build` runs under `<mcDir>/.neoforbric-build/`, resuming at the first unfinished step:
 
 ```
-forge userdev ─┬→ forge-runtime ───────────────┬→ patched-mc-forge ─┐
-               └───────────────────────────────┘                    ├→ patched-mc-merged
-neoforge userdev ─┬→ neoforge-runtime ──────────────────────────────┤
-                  └→ NFRT → patched-mc-neoforge ────────────────────┘
-vanilla 26.2.jar ───────────────────────────────────────────────────┘
-forge-runtime ────────────────────────────────→ forge-runtime-interop   (what is staged)
+neoforge userdev ─┬→ neoforge-runtime.jar ─────────────┐   (NeoForgeRuntimeBuilder)
+                  └→ NFRT → patched-mc-neoforge-26.2.jar ┘   (NfrtRunner, gameJarNoRecomp)
+                                                                │
+                                                       link check ─→ a set that does not link fails the install
 ```
 
-- `ForgeRuntimeBuilder`, `PatchedMcBuilder` (Forge's `installertools`/`mergetool`/`binarypatcher` as child JVMs,
-  Forge's `AccessTransformerEngine` in-process), `NeoForgeRuntimeBuilder`, `NfrtRunner` (NeoFormRuntime, result
-  `gameJarNoRecomp` — binary patches, no decompiler, no `javac`).
+- `NeoForgeRuntimeBuilder` unpacks the NeoForge userdev jar the installer downloaded and assembles the runtime the
+  profile loads: the `-universal` jar plus the libraries its userdev config declares, as one nested jar.
+- `NfrtRunner` runs NeoFormRuntime (`Pins.NFRT = "2.0.18"`, result `Pins.NFRT_RESULT = "gameJarNoRecomp"` — binary
+  patches, no decompiler, no `javac`) and its result **is** the game base: nothing is layered on top of it afterwards.
 - `MergedBaseTool` unpacks `neoforbric-merge-tools.jar` from the installer's resources and runs
-  `net.neoforbric.tools.MergedBaseBuilder` (`-Xmx4g`), `RuntimeInteropPatcher`, then `MergedLinkChecker` against the
-  packaged reviewed baseline. **An install fails unless the link check reports `new 0`.**
+  `net.neoforbric.tools.MergedLinkChecker` against the packaged reviewed baseline. **An install fails unless the
+  link check reports `new 0`.**
 - `--artifacts DIR` ("Built artifacts (leave empty)" in the window) is for developers only and skips the build.
-  `GameArtifacts` takes the three jars from that directory alone and opens each before anything is downloaded or
-  written: the merged base must be Minecraft 26.2 whose `net/minecraft/` classes refer to both
-  `net/minecraftforge/` and `net/neoforged/`; each runtime must hold its family's core class and its mod loader
-  (`FMLLoader`, `IModInfo`), and name the pinned version as its manifest's main `Implementation-Version`
-  (`Pins.NEOFORGE`; for MinecraftForge the FML half of `Pins.FORGE`, `65.0.1`); and the MinecraftForge runtime
-  must be the interop-patched one, whose `NamespacedWrapper$3` declares `contents()`. Only then the link check,
-  which on its own passes any jar that refers to nothing outside itself (issue #13); a supplied set that fails it
-  is reported as files that do not fit together, with the same way out.
-- `Pins`: `MINECRAFT = "26.2"` (the only supported version), `FORGE = "26.2-65.0.1"`, `NEOFORGE = "26.2.0.88"`,
-  `NFRT = "2.0.18"`, `NFRT_RESULT = "gameJarNoRecomp"`, each with its reason in the source. `BuildStamp` keys every
-  cached artifact to the pin set, so a pin bump cannot be served from cache.
+  `GameArtifacts` takes the two jars from that directory alone and opens each before anything is downloaded or
+  written: the base must be Minecraft 26.2 and must be NeoForge-patched — its `net/minecraft/` classes refer to
+  `net/neoforged/` — and the runtime must hold NeoForge's own core class and its mod loader (`FMLLoader`,
+  `IModInfo`), naming the pinned version as its manifest's main `Implementation-Version` (`Pins.NEOFORGE`). Only
+  then the link check, which on its own passes any jar that refers to nothing outside itself (issue #13); a
+  supplied set that fails it is reported as files that do not fit together, with the same way out.
+- `Pins`: `MINECRAFT = "26.2"` (the only supported version), `NEOFORGE = "26.2.0.88"`, `NFRT = "2.0.18"`,
+  `NFRT_RESULT = "gameJarNoRecomp"`, each with its reason in the source. `BuildStamp` keys every cached artifact to
+  the pin set, so a pin bump cannot be served from cache.
 - `JdkLocator` needs Java ≥ 21 for the build tools (NeoFormRuntime is class-file 65); it tries the running JVM,
   then the launcher's runtimes, then the system, and never downloads a JDK. The game itself needs Java 25.
 
@@ -994,15 +991,16 @@ forge-runtime ──────────────────────
 `Installer` writes `versions/26.2-neoforbric/26.2-neoforbric.json`:
 
 - `inheritsFrom: "26.2"`, `mainClass: net.neoforbric.kernel.boot.KernelClientLaunch`, no JVM arguments;
-- game arguments `--gameJar <merged>`, `--runtimeJar <forge-runtime><sep><neoforge-runtime>` (one flag),
+- game arguments `--gameJar <patched-mc-neoforge>`, `--runtimeJar <neoforge-runtime>`,
   `--libraryPath <every vanilla library for this platform>`;
 - `libraries`: the bundled NeoForbric jars and the kernel's third-party dependencies (from the kernel's own
-  `printBootClasspath`), plus the three game artifacts staged as `net.neoforbric:patched-mc-merged`,
-  `net.neoforbric:forge-runtime`, `net.neoforbric:neoforge-runtime`;
+  `printBootClasspath`), plus the two game artifacts staged as `net.neoforbric:patched-mc-neoforge`,
+  `net.neoforbric:neoforge-runtime`;
 - a `neoforbric` block, metadata only, declaring `net.fabricmc:fabric-loader:0.19.3` so launchers that detect a
   loader by searching the JSON's text treat the instance as modded (and give it its own mods folder).
 
-Mods for all three ecosystems go in `<mcDir>/mods` (or `versions/26.2-neoforbric/mods` under an isolating launcher).
+Mods for both ecosystems (Fabric and NeoForge) go in `<mcDir>/mods` (or `versions/26.2-neoforbric/mods` under an
+isolating launcher).
 
 ### 13.3 Where NeoForbric's own jars come from
 
@@ -1020,16 +1018,14 @@ version is installed, pins, which artifacts are present or will be built, expect
 
 ## 14. What `neoforbric-loader/` is still for
 
-- **The merge tools.** `neoforbric-loader/src/tools/java/net/neoforbric/tools/` — `MergedBaseBuilder`,
-  `MergedLinkChecker`, `RuntimeInteropPatcher`, plus `AdditiveMethodMerger`, `MergeabilityCensus`,
-  `LostHookAttribution`, `EffectiveHookEvidence` — built by `:mergeToolsJar` into `neoforbric-merge-tools-0.1.0.jar`,
-  which the installer ships and runs. The reviewed link baseline is
-  `neoforbric-loader/src/test/resources/merge/link-check-baseline.txt`.
-- **The developer pipeline.** `run/build-patched-forge.sh`, `assemble-minecraftforge-runtime.sh`,
-  `assemble-neoforge-runtime.sh`, `build-merged-base.sh`, `check-merged-links.sh` produce the staged artifacts
-  under `neoforbric-loader/run/{merged-base,forge-runtime,neoforge-runtime}/` that the kernel's game side compiles
-  against and every gate runs on. `NEOFORBRIC_OLD` (or `-Pneoforbric.stagedRoot`) points another worktree at them. The
-  committed `run/merged-base/merge-conflicts.txt` is the merge's report.
+- **The merge tools.** `neoforbric-loader/src/tools/java/net/neoforbric/tools/` — `MergedLinkChecker` — built by
+  `:mergeToolsJar` into `neoforbric-merge-tools-0.1.0.jar`, which the installer ships and runs. The reviewed link
+  baseline is `neoforbric-loader/src/test/resources/merge/link-check-baseline.txt`.
+- **The developer pipeline.** `run/assemble-neoforge-runtime.sh` produces the staged `neoforge-runtime` under
+  `neoforbric-loader/run/neoforge-runtime/` that the kernel's game side compiles against and every gate runs on;
+  `run/launch-server-26.2.sh` and `run/launch-client-26.2.sh` boot it. `NEOFORBRIC_OLD` (or
+  `-Pneoforbric.stagedRoot`) points another worktree at a staged root. The game base itself is downloaded and
+  built by the installer (`Pins.NEOFORGE` userdev + NeoFormRuntime), never committed.
 - **Test inputs.** The canary mod sources in `run/livemod-src*`/`testmod-src` (`build-testmods.sh`), and the
   mod sets in its run directories that gate-m0's discovery oracle reads.
 - **Installer payload.** The installer's bundle manifest still includes `net.neoforbric:neoforbric-loader` and
@@ -1098,8 +1094,8 @@ cd neoforbric-kernel
 java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report out.json
 ```
 
-- **Staged artifacts.** The game side compiles against `neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar`,
-  `…/forge-runtime/forge-runtime.jar`, `…/neoforge-runtime/neoforge-runtime.jar`, plus brigadier, datafixerupper
+- **Staged artifacts.** The game side compiles against `neoforbric-loader/run/neoforge-base/patched-mc-neoforge-26.2.jar`
+  and `…/neoforge-runtime/neoforge-runtime.jar`, plus brigadier, datafixerupper
   and gson from a local Minecraft install, a fabric-api jar for the transfer modules (`-Pneoforbric.fabricApi`), and
   Team Reborn Energy 5.0.0 pinned by SHA-256 (`run/energy-api/energy-5.0.0.jar` or `-Pneoforbric.rebornEnergy`).
   Without the staged jars `compileRuntimeJava` is skipped and `jar` produces a boot jar with no game side — which
@@ -1184,7 +1180,7 @@ developer reaches for:
 
 | Property | Effect |
 | --- | --- |
-| `neoforbric.multiLoaderPreference` | per-jar ecosystem order, default `neoforge,minecraftforge,fabric` |
+| `neoforbric.multiLoaderPreference` | per-jar ecosystem order, default `neoforge,fabric` |
 | `neoforbric.dupeIdPreference`, `neoforbric.nestedDupePreference` | cross-jar order for top-level / nested duplicates |
 | `neoforbric.modOwner` | `id=loader,…` pins; also `<rundir>/neoforbric-mods.txt` |
 | `neoforbric.crossJarArbitration` | `off`: two jars with one id both load |
@@ -1255,12 +1251,12 @@ Break one and the failure usually surfaces far from the cause.
 
 - **Minecraft 26.2 only**, Mojmap identity namespace. There is no remapping step: a jar compiled against another
   namespace is not translated (`kernel/mapping/` is carried over from the weld and is not on the boot path).
-- **The merged base is NeoForge's game with MinecraftForge spliced in.** Where both patched a method, one body
-  survived (1 000 method conflicts in the committed report); what the loser's mods lose is repaired case by case —
-  transformers, adapters, bridges — and what is not repaired is reported by `DeadEventAudit`,
-  `HookCallSiteCensus`, `FieldDriftAudit`, `AbiLinkAudit`, `CapabilityUseAudit`. Structural conflicts (two real
-  superclasses for `Entity`) have no bytecode-level resolution; MinecraftForge capabilities are composed back in by
-  transformer.
+- **The game base is NeoForge's game, unmerged.** NFRT's binary-patched result is used as-is: no second ecosystem is
+  spliced into it, so there are no conflict resolutions to report. What a mod loses because NeoForbric cannot supply
+  it is reported instead — `DeadEventAudit`, `HookCallSiteCensus`, `FieldDriftAudit`, `AbiLinkAudit`,
+  `CapabilityUseAudit` — and where a repair exists it is one general rule, not a case named after a mod. A jar
+  declaring itself a MinecraftForge mod (`META-INF/mods.toml` only) is one no loader here runs; `CapabilityUseAudit`
+  names those that ask for a capability system this instance does not carry.
 - **`PARTIAL` mixins apply by default** — half-application is kept, visible, in preference to dropping working
   hooks.
 - **One class, one copy.** When two ecosystems' builds of a mod compete, one wins; the losing ecosystem sees a

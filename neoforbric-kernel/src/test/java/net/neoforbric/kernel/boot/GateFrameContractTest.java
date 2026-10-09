@@ -3,6 +3,8 @@ package net.neoforbric.kernel.boot;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import net.neoforbric.kernel.util.PythonInterpreter;
+
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -72,7 +74,7 @@ class GateFrameContractTest {
 		int body = script.indexOf("<<'PY'\n", begin) + "<<'PY'\n".length();
 		int end = script.indexOf("\nPY\n", body);
 		assertTrue(begin >= 0 && body > begin && end > body, "missing executable frame-selection contract");
-		return run(new ProcessBuilder("python3", "-c", script.substring(body, end),
+		return run(new ProcessBuilder(PythonInterpreter.command(), "-c", script.substring(body, end),
 				temporary.resolve("screenshots").toString(), marker.toString()));
 	}
 

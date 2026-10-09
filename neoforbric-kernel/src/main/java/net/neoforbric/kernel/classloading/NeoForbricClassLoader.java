@@ -252,7 +252,10 @@ public final class NeoForbricClassLoader extends URLClassLoader {
 
 		if (url != null) {
 			try {
-				return url.openStream();
+				// Uncached for the same reason as read(): a cached jar: connection pins the file.
+				java.net.URLConnection connection = url.openConnection();
+				connection.setUseCaches(false);
+				return connection.getInputStream();
 			} catch (IOException e) {
 				return null;
 			}
@@ -261,9 +264,24 @@ public final class NeoForbricClassLoader extends URLClassLoader {
 		return parent.getResourceAsStream(name);
 	}
 
+	/**
+	 * Reads a resource from an owned jar without pinning that jar in the JVM-global {@code jar:} cache.
+	 *
+	 * <p>{@code URL.openStream()} uses a cached connection by default, and for a {@code jar:} URL the JDK's
+	 * {@code JarFileFactory} keeps the {@code JarFile} — an open file handle — in a static map keyed by the URL.
+	 * That cache outlives {@link #close()}: once a jar has been read that way, no Windows process can delete
+	 * the file again for the life of the JVM, not even a {@code URLClassLoader} that was properly closed. The
+	 * kernel reads every class it defines through here, so without this the game's own jars and every mod jar
+	 * are undeletable for the whole run — visible as tests whose {@code @TempDir} cannot be cleaned up after
+	 * their loaders were closed, and on a real install as a jar the user cannot remove while the game runs.
+	 */
 	private static byte[] read(URL resource) {
-		try (InputStream in = resource.openStream()) {
-			return in.readAllBytes();
+		try {
+			java.net.URLConnection connection = resource.openConnection();
+			connection.setUseCaches(false);
+			try (InputStream in = connection.getInputStream()) {
+				return in.readAllBytes();
+			}
 		} catch (IOException e) {
 			return null;
 		}
@@ -508,8 +526,12 @@ public final class NeoForbricClassLoader extends URLClassLoader {
 			String jar = bang < 0 ? null : url.substring(0, bang);
 			LoaderProbePolicy.Family owner = jar == null || !universalJars.contains(jar) ? null : jarFamilies.get(jar);
 			served.add(owner == null ? resource : UniversalJarServices.serve(resource, name, owner, internal -> {
-				try (java.io.InputStream in = new URL(jar + "!/" + internal + ".class").openStream()) {
-					return in.readAllBytes();
+				try {
+					java.net.URLConnection connection = new URL(jar + "!/" + internal + ".class").openConnection();
+					connection.setUseCaches(false); // uncached: a jar: connection pins the file, see read()
+					try (java.io.InputStream in = connection.getInputStream()) {
+						return in.readAllBytes();
+					}
 				} catch (IOException absent) {
 					return null;
 				}

@@ -2,7 +2,7 @@
 # WINSH/WINFILE are executable commands, parsed with shlex (never eval'd).
 # A transfer succeeds only after an independent SHA-256/size check on both endpoints.
 compat_transport() {
-  python3 - "$@" <<'PY'
+  ${PYTHON:-python3} - "$@" <<'PY'
 import hashlib, os, pathlib, re, shlex, subprocess, sys, tempfile, uuid
 
 # 240 s per remote call suits a LAN. COMPAT_CALL_TIMEOUT raises it for a relayed tunnel that stalls for minutes at a

@@ -6,7 +6,7 @@ set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 canary_scratch creative-search
 export M54_WORK="$WORK" M54_KERNEL="$KERNEL"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, work = (pathlib.Path(os.environ[key]) for key in ('M54_KERNEL', 'M54_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))

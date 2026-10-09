@@ -201,10 +201,6 @@ public final class MixinRetarget {
 				if (oneTarget && own.isEmpty()) own.addAll(substitutedCalls(mixin.name, handler, injector, selectors, target, resolver));
 				// …or the method the mod names, or the one it anchors in, is a vanilla private the carrier replaced outright.
 				if (oneTarget && own.isEmpty()) own.addAll(replacedCalls(mixin.name, handler, injector, selectors, target));
-				if (oneTarget && own.isEmpty()) {
-					Rewrite blockUpdate = C2meBlockUpdateRetarget.plan(mixin.name, handler, injector, selectors, target);
-					if (blockUpdate != null) own.add(blockUpdate);
-				}
 				rewrites.addAll(own);
 			}
 		}

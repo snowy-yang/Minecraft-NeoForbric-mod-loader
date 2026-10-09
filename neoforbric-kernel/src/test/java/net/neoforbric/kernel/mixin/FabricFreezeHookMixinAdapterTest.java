@@ -49,7 +49,6 @@ class FabricFreezeHookMixinAdapterTest {
 	private static final String PACKAGE = "test/freeze/";
 	private static final String HEAD = FabricFreezePointInjector.HEAD_HOOK;
 	private static final String TAIL = FabricFreezePointInjector.TAIL_HOOK;
-	private static final String CREATE_MIXIN = "com/zurrtum/create/mixin/BuiltInRegistriesMixin";
 
 	/** The handler every one-injector mixin below declares, unless its case is the handler itself. */
 	private static final String HANDLER = "static void observe(CallbackInfo ci)";
@@ -358,19 +357,6 @@ class FabricFreezeHookMixinAdapterTest {
 		assertEquals(1, FabricFreezeHookMixinAdapter.adapt(mixin, hooked()));
 		assertEquals(Map.of("before", List.of(HEAD + "()V"), "inside", List.of("freeze()V")), injected(mixin));
 		assertEquals(List.of(mixin.name + "#before -> " + HEAD), rows(mixin));
-	}
-
-	/** The released jar, so a Create Fly that changes either injector is noticed here and not at boot. */
-	@Test
-	void releasedCreateFlyMovesOnInitializeToTheHeadHookAndAfterFreezeToTheTailHook() throws Exception {
-		ClassNode mixin = CreateGuestMixinFixture.mixin(CREATE_MIXIN);
-		MixinStubRebind.noteEcosystem(CREATE_MIXIN, Ecosystem.FABRIC);
-		Map<String, String> bodies = bodies(mixin);
-		assertEquals(2, FabricFreezeHookMixinAdapter.adapt(mixin, hooked()));
-		assertEquals(Map.of("onInitialize", List.of(HEAD + "()V"), "afterFreeze", List.of(TAIL + "()V")), injected(mixin));
-		assertEquals(bodies, bodies(mixin));
-		assertEquals(List.of(CREATE_MIXIN + "#afterFreeze -> " + TAIL, CREATE_MIXIN + "#onInitialize -> " + HEAD), rows(mixin));
-		assertEquals(0, FabricFreezeHookMixinAdapter.adapt(mixin, hooked()));
 	}
 
 	static Stream<String> moving() {

@@ -131,8 +131,14 @@ public final class UniversalJarServices {
 	 */
 	static URL serve(URL resource, String serviceFile, LoaderProbePolicy.Family owner, Function<String, byte[]> classInJar) {
 		String text;
-		try (InputStream in = resource.openStream()) {
-			text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+		try {
+			// Uncached on purpose: a cached jar: connection pins the JarFile in the JVM-global JarFileFactory
+			// cache, which outlives the loader and makes the jar undeletable on Windows for the whole run.
+			URLConnection connection = resource.openConnection();
+			connection.setUseCaches(false);
+			try (InputStream in = connection.getInputStream()) {
+				text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			}
 		} catch (IOException unreadable) {
 			return resource;
 		}

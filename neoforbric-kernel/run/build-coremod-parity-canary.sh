@@ -7,7 +7,7 @@ set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 canary_scratch coremod-parity
 export M42_WORK="$WORK" M42_KERNEL="$KERNEL" M42_OLD="$OLD"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M42_KERNEL', 'M42_OLD', 'M42_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))

@@ -6,7 +6,7 @@ set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 canary_scratch interaction-events
 export M44_WORK="$WORK" M44_KERNEL="$KERNEL" M44_OLD="$OLD"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import hashlib, json, os, pathlib, subprocess, zipfile
 kernel, old, work = (pathlib.Path(os.environ[key]) for key in ('M44_KERNEL', 'M44_OLD', 'M44_WORK'))
 mc = pathlib.Path(os.environ.get('MC_DIR', pathlib.Path.home() / 'Library/Application Support/minecraft'))

@@ -56,7 +56,7 @@ run_server() {
 judge() {
   local phase="$1" rule="$2" what="$3"
   check "$phase: the server started" 'Done \(' "$RESULTS/$phase.log"
-  if python3 - "$RESULTS/$phase.json" "$phase" "$rule" <<'PY'
+  if ${PYTHON} - "$RESULTS/$phase.json" "$phase" "$rule" <<'PY'
 import json, sys
 report, phase, rule = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
 assert report['phase'] == phase, report['phase']
@@ -75,7 +75,7 @@ PY
 # resolved <phase> — fabric-transfer's three hopper rows are RESOLVED and nothing confirmed-required stands.
 resolved() {
   local phase="$1"
-  if python3 - "$RESULTS/$phase-compatibility.json" <<'PY'
+  if ${PYTHON} - "$RESULTS/$phase-compatibility.json" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))
 assert report['confirmedRequired'] == 0, report['confirmedRequired']

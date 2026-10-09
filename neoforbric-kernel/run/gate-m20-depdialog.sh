@@ -122,7 +122,7 @@ forks() { local n; n=$(grep -acE "NeoForbric/Deps\] -Dneoforbric.dependencyDialo
 
 # report_field <json> <python-expr over report> — prints the value, or "missing" when there is no fresh report.
 report_field() {
-  python3 - "$1" "$2" <<'PY'
+  ${PYTHON} - "$1" "$2" <<'PY'
 import json, sys
 try:
     with open(sys.argv[1], encoding="utf-8") as stream:

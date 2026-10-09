@@ -11,4 +11,4 @@ args=(--kernel "$KERNEL" --staged "$RUN_OLD" --fixture "${M34_FIXTURE:-$KERNEL/r
 [ -z "${MERGED:-}" ] || args+=(--merged "$MERGED")
 [ -z "${FORGE_RT:-}" ] || args+=(--forge "$FORGE_RT")
 [ -z "${NEO_RT:-}" ] || args+=(--neo "$NEO_RT")
-exec python3 "$KERNEL/run/compat/soak-run.py" "${args[@]}" "$@"
+exec ${PYTHON} "$KERNEL/run/compat/soak-run.py" "${args[@]}" "$@"

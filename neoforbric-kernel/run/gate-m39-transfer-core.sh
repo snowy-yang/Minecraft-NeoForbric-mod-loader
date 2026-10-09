@@ -21,7 +21,7 @@ kernel_jar
 TRANSFER_LOG="$BUILD/gate-m39-transfer-test.log"
 transfer_rc=0
 "$KERNEL/gradlew" --offline -p "$KERNEL" -Pneoforbric.requireTransfer=true cleanTransferTest transferTest >"$TRANSFER_LOG" 2>&1 || transfer_rc=$?
-if python3 - "$KERNEL" "$transfer_rc" <<'PY'
+if ${PYTHON} - "$KERNEL" "$transfer_rc" <<'PY'
 import glob, os, re, sys, xml.etree.ElementTree as ET
 kernel, rc = sys.argv[1], int(sys.argv[2])
 declared = set()
@@ -48,7 +48,7 @@ BASE="$BUILD/verification/m39-transfer-core"
 mkdir -p "$BASE"
 RUNDIR="$(mktemp -d "$BASE/run-XXXXXX")"
 mkdir -p "$RUNDIR/mods"
-python3 - "$KERNEL" "$RUNDIR" <<'PY'
+${PYTHON} - "$KERNEL" "$RUNDIR" <<'PY'
 import pathlib,sys,zipfile,shutil
 kernel,run=map(pathlib.Path,sys.argv[1:]);classes=kernel/'build/classes/java/transferTest'
 files=sorted(p for p in (classes/'net/neoforbric/kernel/transfer').glob('*.class') if p.name.startswith(('ForgeTransferCanary','ForgeTransferGameScenarios')))
@@ -63,7 +63,7 @@ printf '\nlevel-type=minecraft:flat\ngenerate-structures=false\n' >> "$RUNDIR/se
 LOG="$RUNDIR/inputs.log"
 # set -e ends the gate on this line when the server run fails -- and a server that lost its port fails it, because
 # the feeder's "stop" then lands on a closed pipe -- so name a lost port here, before anything else is read.
-python3 "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
+${PYTHON} "$KERNEL/run/compat/evidence.py" run --source "$KERNEL/.." \
   --artifact "merged=$MERGED" --artifact "neo-runtime=$NEO_RT" \
   --artifact "kernel=$BUILD/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar" \
   --artifact "kernel-runtime=$BUILD/libs/neoforbric-kernel-runtime-0.1.0-SNAPSHOT.jar" \
@@ -74,7 +74,7 @@ check "all fourteen storage scenarios and the native diagnostic proof ran" 'Tran
 check_absent "no real carrier scenario failed" 'TransferCanary\] FAIL' "$LOG"
 check "the actual server ticked and accepted stop" 'Stopping the server|commands\.stop\.stopping' "$LOG"
 check "the actual world was saved" 'All dimensions are saved' "$LOG"
-python3 - "$RUNDIR" <<'PY'
+${PYTHON} - "$RUNDIR" <<'PY'
 import json,pathlib,sys
 run=pathlib.Path(sys.argv[1]);evidence=json.loads((run/'inputs.result.json').read_text());report=json.loads((run/'.neoforbric-kernel/compatibility-report.json').read_text())
 assert evidence['inputsUnchanged'] and evidence['commandPassed'],evidence

@@ -127,7 +127,7 @@ step "a JarJar range decides the build; an override that breaks it is refused, n
 # so above the preference picked Fabric. Raise the NeoForge parent's range past the Fabric build's 1.0.0 in the
 # gate-owned copy only: now the constraint, not the preference, must choose -- and a pin to the build the range
 # excludes is an unsatisfiable combination that strict policy must refuse rather than silently load.
-python3 - "$RUNDIR/mods/neoforbricnestneo.jar" <<'PY_RANGE'
+${PYTHON} - "$RUNDIR/mods/neoforbricnestneo.jar" <<'PY_RANGE'
 import json,pathlib,sys,zipfile
 path=pathlib.Path(sys.argv[1]);temporary=path.with_suffix('.tmp')
 with zipfile.ZipFile(path) as source,zipfile.ZipFile(temporary,'w') as output:

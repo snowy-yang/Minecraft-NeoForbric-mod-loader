@@ -72,7 +72,7 @@ public final class InstallerWindowInputTest {
 		log = install("\"" + mcDir + "\"", " \"" + wrong + "\" ");
 		requireFailed(log, "Install failed: Built artifacts: these files are not the game files NeoForbric needs");
 		require(log.contains("Minecraft directory: " + mcDir), "the game directory was not the unquoted folder: " + log);
-		require(String.join("\n", log).contains(wrong.resolve("neoforge-runtime.jar").toString()),
+		require(String.join("\n", log).contains(wrong.resolve("neoforge-runtime/neoforge-runtime.jar").toString()),
 				"the refusal does not name the files in the unquoted folder: " + log);
 		require(!Files.exists(mcDir.resolve("versions")), "something was written for a refused set");
 		checks += 3;

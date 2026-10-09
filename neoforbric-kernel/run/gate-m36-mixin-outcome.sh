@@ -7,7 +7,7 @@ GATE_PORT="${GATE_PORT:-25596}"
 export KERNEL BUILD OLD GATE_PORT
 kernel_jar
 bash "$KERNEL/run/build-mixin-outcome-canary.sh"
-python3 - <<'PY'
+${PYTHON} - <<'PY'
 import json, os, pathlib, shutil, subprocess, time, uuid, signal
 kernel=pathlib.Path(os.environ['KERNEL']);root=kernel.parent
 run=kernel/'run/server-mixin-outcome-m36';results=kernel/'build/verification/m36-outcome';results.mkdir(parents=True,exist_ok=True)
@@ -22,7 +22,7 @@ for phase,mode,policy,required in [('required-strict','required','strict',True),
  (run/'server.properties').write_text(f'server-ip=127.0.0.1\nserver-port={port}\nonline-mode=false\nlevel-name=world\nmax-tick-time=-1\npause-when-empty-seconds=0\nview-distance=2\nsimulation-distance=2\n')
  env=os.environ.copy();env.update(RUNDIR=str(run),NEOFORBRIC_COMPAT_POLICY=policy,NEOFORBRIC_JVM=f'-Dneoforbric.outcomeMode={mode} -Dneoforbric.mixinAtWiden=' + ('off' if phase=='widened-off' else 'on'))
  for key,role in [('MERGED','merged'),('FORGE_RT','forge'),('NEO_RT','neo')]:env[key]=inputs[role]['path']
- command=['python3',str(kernel/'run/compat/evidence.py'),'run','--source',str(root),'--mods',str(run/'mods'),'--output',str(results/(phase+'.json'))]
+ command=['${PYTHON}',str(kernel/'run/compat/evidence.py'),'run','--source',str(root),'--mods',str(run/'mods'),'--output',str(results/(phase+'.json'))]
  for role,path in [('merged',env['MERGED']),('forge-interop',env['FORGE_RT']),('neo-runtime',env['NEO_RT']),('kernel',str(kernel/'build/libs/neoforbric-kernel-0.1.0-SNAPSHOT.jar')),('kernel-runtime',str(kernel/'build/libs/neoforbric-kernel-runtime-0.1.0-SNAPSHOT.jar'))]:command+=['--artifact',role+'='+path]
  command+=['--','bash',str(kernel/'run/launch-kernel-server.sh')]
  (results/(phase+'.log')).unlink(missing_ok=True)  # the lost-port check below must not read an earlier run's log
