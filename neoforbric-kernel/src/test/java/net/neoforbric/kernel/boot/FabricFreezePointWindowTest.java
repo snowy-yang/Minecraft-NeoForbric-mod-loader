@@ -119,10 +119,10 @@ class FabricFreezePointWindowTest {
 
 		Walk run = walk(method, method.instructions.getFirst(), Set.of(MAINS, CLIENTS, HEAD, CLOSE_WINDOW, TAIL), null, false);
 
+		// The window close is unconditional now: it sits in the finally, so the freeze that closes the window is
+		// always attempted (the close itself swallows a reopen that never happened) and there is exactly one exit.
 		assertEquals(Set.of(
-				List.of(MAINS, CLIENTS, HEAD, CLOSE_WINDOW, TAIL, RETURN),
-				// The window was never reopened (unfreeze threw): nothing to close, both halves still run.
-				List.of(MAINS, CLIENTS, HEAD, TAIL, RETURN)), run.exits(),
+				List.of(MAINS, CLIENTS, HEAD, CLOSE_WINDOW, TAIL, RETURN)), run.exits(),
 				"onClientEntrypoints, run through: the HEAD half after the client entrypoints and before the freeze "
 						+ "that closes their window, the TAIL half after it");
 	}
@@ -139,12 +139,13 @@ class FabricFreezePointWindowTest {
 
 		Walk out = walk(method, clients, Set.of(HEAD, CLOSE_WINDOW, TAIL), null, true);
 
+		// One close on every way out: the close sits in the finally now, so even the copy a throw takes runs it
+		// between the two halves.
 		assertEquals(Set.of(
 				List.of(HEAD, CLOSE_WINDOW, TAIL, RETURN),
-				List.of(HEAD, TAIL, RETURN),
-				List.of(HEAD, CLOSE_WINDOW, TAIL, THROW),
-				List.of(HEAD, TAIL, THROW)), out.exits(),
-				"every path from runClientEntrypoints to the end of onClientEntrypoints, a throwing one included");
+				List.of(HEAD, CLOSE_WINDOW, TAIL, THROW)), out.exits(),
+				"every path from runClientEntrypoints to the end of onClientEntrypoints, a throwing one included, "
+						+ "runs the HEAD half, the window's close and the TAIL half in that order");
 		List<AbstractInsnNode> sites = calls(method, "fabricFreezePoint");
 		assertTrue(sites.size() >= 4, "the freeze point is called from a finally, which javac copies: " + sites.size());
 		assertTrue(out.visited().containsAll(sites), "a copy of the finally was never walked, so never checked");

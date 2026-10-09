@@ -23,24 +23,19 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
 
 /**
- * The neuter KernelBoot registers, as {@link KernelBoot#neuters} builds it for each side. MinecraftForge's
- * {@code FluidInteractionRegistry.canInteract} must not be on it with the fluid repair on: a MinecraftForge mod's fluid
- * rules run through that method, and a neuter there silenced them while every other test and gate stayed green.
+ * The neuter KernelBoot registers, as {@link KernelBoot#neuters} builds it for each side. The fluid interaction
+ * registry's {@code canInteract} must never be on it: the Forge-era neuter that emptied it (the merged base's
+ * fallback while the fluid repair was off) went with MinecraftForge support, and a neuter there now would silence
+ * NeoForge's own fluid rules — lava and water would stop reacting — while every other test and gate stayed green.
  */
 class KernelBootNeutersTest {
 	private static final String REGISTRY = ForeignType.FLUID_INTERACTION_REGISTRY.binary(Ecosystem.NEOFORGE);
 	private static final String CAN_INTERACT = "(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Z";
 	private static final Path FORGE_CARRIER = TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar");
 
-	@Test void withTheRepairOnNoSideNeutersMinecraftForgesFluidRegistry() {
+	@Test void noSideNeutersTheFluidInteractionRegistry() {
 		for (KernelBoot.Side side : KernelBoot.Side.values()) {
 			assertFalse(owners(KernelBoot.neuters(side)).contains(REGISTRY), side + ": " + owners(KernelBoot.neuters(side)));
-		}
-	}
-
-	@Test void withTheRepairOffEverySideNeutersItAgain() {
-		for (KernelBoot.Side side : KernelBoot.Side.values()) {
-			assertTrue(owners(KernelBoot.neuters(side)).contains(REGISTRY), side.toString());
 		}
 	}
 

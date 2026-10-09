@@ -158,14 +158,11 @@ class PrepareWorldTest {
                 import ast,pathlib,sys
                 win=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(win));import common
                 tree=ast.parse((win/'run-client-test.py').read_text())
-                body,index=next((body,i) for body in ast.walk(tree) if isinstance(getattr(n,'body',None),list)
-                    for i,n in enumerate(body)
-                    if isinstance(n,ast.FunctionDef) and n.name=='main')
-                body=body.body
+                body=next(n.body for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='main')
                 statement=next(n for n in body if isinstance(n,ast.Expr)
                     and isinstance(n.value,ast.Call) and getattr(n.value.func,'id',None)=='prepare_world')
                 save=pathlib.Path(sys.argv[2])
-                configuration={'world':save.name}
+                configuration={'world':save.name,'pid_file':str(save.parent.parent/'.neoforbric-sweep.pid')}
                 scope=dict(instance=save.parent.parent,world=save.name,configuration=configuration,
                            common=common,prepare_world=common.prepare_world,pathlib=pathlib)
                 exec(compile(ast.Module(body=[statement],type_ignores=[]),'client-ack','exec'),scope)

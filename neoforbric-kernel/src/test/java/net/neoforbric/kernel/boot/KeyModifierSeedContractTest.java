@@ -28,6 +28,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import net.neoforbric.kernel.util.PythonInterpreter;
+
 /**
  * gate-m9 re-seeds a MinecraftForge modifier binding into its {@code options.txt} on every run, and that step is
  * load-bearing: the client SAVES defaults over the file after failing to read it, so the very failure the gate
@@ -79,6 +81,9 @@ class KeyModifierSeedContractTest {
 		assertTrue(begin >= 0 && end > begin, "missing executable key-modifier seeding contract in gate-m9");
 		String body = script.substring(begin, end).replace("$RUNDIR/options.txt", options.toString());
 		ProcessBuilder builder = new ProcessBuilder("bash", "-c", body);
+		// The block invokes ${PYTHON}, as every script under run/ does once lib.sh has given it a value; this runs
+		// the block without lib.sh, so it hands it the value lib.sh would have.
+		builder.environment().put(PythonInterpreter.PYTHON_VARIABLE, PythonInterpreter.command());
 		builder.redirectErrorStream(true);
 		return builder.start();
 	}

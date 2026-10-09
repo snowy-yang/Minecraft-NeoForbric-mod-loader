@@ -27,6 +27,8 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import net.neoforbric.kernel.util.PythonInterpreter;
+
 /**
  * gate-m9 asserts no load-report row says the same thing twice, and that check has to be able to see one.
  *
@@ -101,6 +103,9 @@ class LoadReportDedupContractTest {
 				.replace("$RUNDIR/.neoforbric-kernel/load-report.txt", report.toString())
 				.replace("[ $? -eq 0 ] || FAIL=1", "");
 		ProcessBuilder builder = new ProcessBuilder("bash", "-c", "set -e\n" + body);
+		// The block invokes ${PYTHON}, as every script under run/ does once lib.sh has given it a value; this runs
+		// the block without lib.sh, so it hands it the value lib.sh would have.
+		builder.environment().put(PythonInterpreter.PYTHON_VARIABLE, PythonInterpreter.command());
 		builder.redirectErrorStream(true);
 		return builder.start();
 	}

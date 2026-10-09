@@ -55,6 +55,9 @@ class TransferGateContractTest {
 		process.environment().put("ARGS", args.toString());
 		process.environment().put("CANNED", canned.toString());
 		process.environment().put("RC", Integer.toString(rc));
+		// The section invokes ${PYTHON}, as every script under run/ does once lib.sh has given it a value; this
+		// runs the section without lib.sh, so it hands it the value lib.sh would have.
+		process.environment().put("PYTHON", System.getenv().getOrDefault("PYTHON", "python3"));
 		process.redirectErrorStream(true);
 		Process started = process.start();
 		assertTrue(started.waitFor(60, TimeUnit.SECONDS), "the gate section hung");

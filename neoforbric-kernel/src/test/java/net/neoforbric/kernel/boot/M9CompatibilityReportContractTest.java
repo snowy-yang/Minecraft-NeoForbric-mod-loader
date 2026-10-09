@@ -18,6 +18,9 @@ class M9CompatibilityReportContractTest {
   String script=Files.readString(Path.of("run/gate-m9-client.sh"));String begin="# M9_COMPATIBILITY_REPORT_BEGIN",end="# M9_COMPATIBILITY_REPORT_END";
   String section=script.substring(script.indexOf(begin)+begin.length(),script.indexOf(end));
   ProcessBuilder builder=new ProcessBuilder("bash","-c","FAIL=0\n"+section+"\nexit \"$FAIL\"");builder.environment().put("RUNDIR",root.toString());builder.environment().put("COMPAT_STARTED_NS",Long.toString(start));
+  // The section invokes ${PYTHON}, as every script under run/ does once lib.sh has given it a value; this runs
+  // the section without lib.sh, so it hands it the value lib.sh would have.
+  builder.environment().put(net.neoforbric.kernel.util.PythonInterpreter.PYTHON_VARIABLE,net.neoforbric.kernel.util.PythonInterpreter.command());
   Process p=builder.redirectErrorStream(true).redirectOutput(root.resolve("gate-check.log").toFile()).start();assertTrue(p.waitFor(20,java.util.concurrent.TimeUnit.SECONDS));return p.exitValue();
  }
 }

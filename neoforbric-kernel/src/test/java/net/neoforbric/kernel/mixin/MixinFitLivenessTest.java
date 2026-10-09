@@ -44,7 +44,7 @@ class MixinFitLivenessTest {
 		assertEquals(MixinFit.Verdict.PARTIAL, fit.verdict(), fit.unresolved().toString());
 		assertEquals(1, fit.resolved(), "the @At member is still there");
 		assertEquals(List.of("@Inject target Hud.extractHotbarAndDecorations never runs: nothing in the merged game calls it; "
-				+ "vanilla and MinecraftForge call it from Hud.extractRenderState"), fit.unresolved());
+				+ "vanilla calls it from Hud.extractRenderState"), fit.unresolved());
 		assertTrue(!fit.shouldSuppress(), "soft: reported, never dropped");
 	}
 
@@ -90,14 +90,15 @@ class MixinFitLivenessTest {
 		assertEquals(MixinFit.Verdict.FIT, fit.verdict(), fit.unresolved().toString());
 	}
 
-	/** NeoForge's own game never had the method, so a NeoForge mod was not promised a caller; nor is a mod nobody owns. */
+	/** A mod whose own game never called it was promised no caller; nor is a mod nobody owns. */
 	@Test
 	void onlyTheEcosystemsWhoseGameCallsItAreJudged() {
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(redirect(HUD, HOTBAR, HAS_EXPERIENCE), resolver(Map.of(HUD, hud(false)))).verdict());
 		MixinStubRebind.forget();
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(redirect(HUD, HOTBAR, HAS_EXPERIENCE), resolver(Map.of(HUD, hud(false)))).verdict());
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
+		// Vanilla is the game the row names: a Fabric mod is the one judged here, and the row says its caller.
+		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
 		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(redirect(HUD, HOTBAR, HAS_EXPERIENCE), resolver(Map.of(HUD, hud(false)))).verdict());
 	}
 
@@ -117,7 +118,7 @@ class MixinFitLivenessTest {
 		MixinFit.Result dead = MixinFit.evaluate(mixin, resolver(Map.of(model, target,
 				renderer, type(renderer, "tesselate", tesselate, null, null, null, false))));
 		assertEquals(MixinFit.Verdict.PARTIAL, dead.verdict(), dead.unresolved().toString());
-		assertTrue(dead.unresolved().get(0).endsWith("vanilla and MinecraftForge call it from FluidRenderer.tesselate"),
+		assertTrue(dead.unresolved().get(0).endsWith("vanilla calls it from FluidRenderer.tesselate"),
 				dead.unresolved().toString());
 
 		MixinFit.Result live = MixinFit.evaluate(mixin, resolver(Map.of(model, target,
