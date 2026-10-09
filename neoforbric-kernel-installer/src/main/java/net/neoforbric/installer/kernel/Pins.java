@@ -29,34 +29,34 @@ final class Pins {
 	private Pins() {
 	}
 
-	/** The only Minecraft version this generation supports. */
-	static final String MINECRAFT = "26.2";
+	/**
+	 * The only Minecraft version this generation supports: 1.21.1, the long-lived modding line.
+	 *
+	 * <p>The loader's game-side code, its weave pins and every gate under neoforbric-kernel/run/ are written
+	 * against this version's class names, so this is an anchor, not a default: moving it means re-validating
+	 * the patched-base expectations (the kernel's staged-name constants and the gates' fixture versions all
+	 * derive from it). 1.21.1 is where NeoForge 21.1.x — the line NeoForged still maintains in parallel with
+	 * the newest Minecraft — and the largest body of live Fabric and NeoForge mods both are.
+	 */
+	static final String MINECRAFT = "1.21.1";
 
 	/**
-	 * NeoForge, on the first release line rather than a beta.
+	 * NeoForge, on the 21.1 release line that still tracks Minecraft 1.21.1.
 	 *
-	 * <p>This used to be {@code 26.2.0.38-beta}, because {@code .40-beta} deletes {@code ContainerScreenEvent}
-	 * and {@code .43-beta} deletes {@code PlayerInteractEvent$EntityInteractSpecific}, and the reference pack's
-	 * jei / sophisticatedcore / sophisticatedbackpacks still called them. Two things ended that:
-	 * {@code .57} and up are releases rather than betas, and the title screen brands whatever build it is running,
-	 * so a beta carrier tells every player it is a beta; and JEI now declares {@code neoforge [26.2.0.67,)}, which
-	 * {@code .38-beta} does not satisfy — staying put had become the thing that froze the pack.
-	 *
-	 * <p>Re-measured at the bump: {@code .38-beta → .88} removes 12 classes and adds 24; of the 98 jars in the
-	 * reference pack exactly two named anything removed, and the current builds of those mods name none of it.
-	 * Every {@code neoforge} versionRange declared in the pack is satisfied. The one thing only the class diff
-	 * caught is that {@code client.gui.ModListScreen} moved to {@code client.gui.modlist} — which the kernel's
-	 * mods-button redirect names, and which would have failed silently. {@code ForeignTypeCarrierTest} now checks
-	 * every such name against the carrier.
+	 * <p>21.1.x is the LTS branch of NeoForge for this Minecraft: it takes backports and stays compatible
+	 * with the 1.21.1 mod corpus, which is exactly the population the anchored test pack draws from. Within
+	 * the line this is the newest stable (non-beta) build; betas are excluded for the same reason the 26.2
+	 * line's betas were: the title screen brands whatever build runs, and mods' {@code neoforge} version
+	 * ranges are checked against it.
 	 */
-	static final String NEOFORGE = "26.2.0.88";
+	static final String NEOFORGE = "21.1.256";
 
 	/**
 	 * NeoFormRuntime, pinned to the build actually validated rather than the newest published one.
 	 *
 	 * <p>NFRT's own jar digest is part of its cache key, so a different NFRT is entitled to produce different
 	 * bytes. 2.0.18 is the build whose {@code gameJar} result was checked byte-for-byte against the reference
-	 * {@code patched-mc-neoforge-26.2.jar} (sha1 {@code 5b2970209ee12702117309576b08521aa38ae67b}).
+	 * patched base of its day; the 21.1 re-anchor revalidated the {@code gameJarNoRecomp} path against it.
 	 */
 	static final String NFRT = "2.0.18";
 

@@ -64,7 +64,7 @@ public final class Installer {
 
 	/**
 	 * @param mcDir      the Minecraft directory the launcher uses
-	 * @param mcVersion  the base version, e.g. {@code 26.2}
+	 * @param mcVersion  the base version, e.g. {@code 1.21.1}
 	 * @param artifactDir prebuilt game artifacts to use instead of building them, or null to build
 	 * @param explicitJdk a JVM to build with, or null to find one
 	 * @param remote      a published release to take NeoForbric's jars from, or null to require a bundled payload

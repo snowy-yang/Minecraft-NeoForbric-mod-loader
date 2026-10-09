@@ -63,7 +63,7 @@ public final class InstallerWindowInputTest {
 		// unquoted folder, which is the proof the quotes were dropped before the installer looked.
 		Path wrong = Files.createDirectories(work.resolve("wrong set"));
 		Files.createDirectories(wrong.resolve("neoforge-runtime"));
-		for (String name : List.of("patched-mc-neoforge-26.2.jar", "neoforge-runtime/neoforge-runtime.jar")) {
+		for (String name : List.of("patched-mc-neoforge-1.21.1.jar", "neoforge-runtime/neoforge-runtime.jar")) {
 			try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(wrong.resolve(name)))) {
 				out.putNextEntry(new ZipEntry("com/google/gson/Gson.class"));
 				out.closeEntry();

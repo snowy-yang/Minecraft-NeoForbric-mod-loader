@@ -24,7 +24,7 @@ import java.nio.file.Path;
  * <pre>
  *   java -jar neoforbric-kernel-installer.jar                       # window
  *   java -jar neoforbric-kernel-installer.jar --dir DIR [options]   # install, no window
- *       --mc 26.2            the base version (default 26.2)
+ *       --mc 1.21.1          the base version (default 1.21.1)
  *       --artifacts DIR      developers only: game jars already built from source, used instead of building
  *       --jdk PATH           a JVM to build the game artifacts with
  *       --remote             take NeoForbric's jars from the release even if they are carried here

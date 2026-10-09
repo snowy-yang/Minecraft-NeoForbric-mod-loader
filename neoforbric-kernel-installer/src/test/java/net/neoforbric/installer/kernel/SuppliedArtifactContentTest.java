@@ -23,7 +23,7 @@ import java.util.zip.ZipOutputStream;
  * <p>{@code --doctor} judges a supplied set with the same checks, so its report is checked here too.
  */
 public final class SuppliedArtifactContentTest {
-	private static final String MC = "26.2";
+	private static final String MC = "1.21.1";
 	private static final String BASE = ArtifactBuilder.NEOFORGE_BASE;
 	private static final String NEO = ArtifactBuilder.NEOFORGE_RUNTIME;
 
@@ -32,7 +32,7 @@ public final class SuppliedArtifactContentTest {
 		int checks = 0;
 
 		// ---- the real shapes pass ----
-		Path base = jar(work.resolve("ok/patched-mc-neoforge-26.2.jar"), base(MC));
+		Path base = jar(work.resolve("ok/patched-mc-neoforge-1.21.1.jar"), base(MC));
 		Path neo = jar(work.resolve("ok/neoforge-runtime/neoforge-runtime.jar"), neoRuntime(Pins.NEOFORGE));
 		requireOk(BASE, base);
 		requireOk(NEO, neo);
@@ -50,7 +50,7 @@ public final class SuppliedArtifactContentTest {
 				"net/neoforged/cliutils/progress/ProgressReporter.class", "installer"));
 		Path otherInstaller = jar(work.resolve("other-installer.jar"), entries(
 				"install_profile.json", "{}",
-				"version.json", "{\"id\": \"26.2-loader\"}",
+				"version.json", "{\"id\": \"1.21.1-loader\"}",
 				"net/example/installer/SimpleInstaller.class", "installer"));
 		Path fabricInstaller = jar(work.resolve("fabric-installer.jar"), entries(
 				"net/fabricmc/installer/Main.class", "installer"));
@@ -69,9 +69,9 @@ public final class SuppliedArtifactContentTest {
 		}
 
 		// ---- Minecraft, but not the base NeoForbric runs on ----
-		requireProblem(BASE, jar(work.resolve("vanilla.jar"), base(MC, false)), "plain Minecraft 26.2");
-		requireProblem(BASE, jar(work.resolve("mc-26.1.jar"), base("26.1")),
-				"Minecraft 26.1, but this install is for Minecraft 26.2");
+		requireProblem(BASE, jar(work.resolve("vanilla.jar"), base(MC, false)), "plain Minecraft 1.21.1");
+		requireProblem(BASE, jar(work.resolve("mc-1.21.jar"), base("1.21")),
+				"Minecraft 1.21, but this install is for Minecraft 1.21.1");
 		checks += 2;
 
 		// ---- the right family, but not the runtime NeoForbric assembles; and the two jars swapped ----
@@ -99,7 +99,7 @@ public final class SuppliedArtifactContentTest {
 
 		// ---- the whole set: every bad file named at once, with the way out ----
 		Path wrong = Files.createDirectories(work.resolve("wrong"));
-		Files.copy(gson, wrong.resolve("patched-mc-neoforge-26.2.jar"));
+		Files.copy(gson, wrong.resolve("patched-mc-neoforge-1.21.1.jar"));
 		Files.createDirectories(wrong.resolve("neoforge-runtime"));
 		Files.copy(empty, wrong.resolve("neoforge-runtime/neoforge-runtime.jar"));
 		try {
@@ -108,7 +108,7 @@ public final class SuppliedArtifactContentTest {
 		} catch (IOException expected) {
 			String message = expected.getMessage();
 			for (String part : List.of("these files are not the game files NeoForbric needs",
-					wrong.resolve("patched-mc-neoforge-26.2.jar").toString(),
+					wrong.resolve("patched-mc-neoforge-1.21.1.jar").toString(),
 					wrong.resolve("neoforge-runtime/neoforge-runtime.jar").toString(),
 					"Leave \"Built artifacts\" empty")) {
 				require(message.contains(part), "the refusal does not say \"" + part + "\":\n" + message);
@@ -117,12 +117,12 @@ public final class SuppliedArtifactContentTest {
 		checks++;
 
 		// ---- the installer refuses it before anything is downloaded, staged or written ----
-		// versions/26.2 holds a jar and an unparseable JSON: if the supplied set were judged after the base version
+		// versions/1.21.1 holds a jar and an unparseable JSON: if the supplied set were judged after the base version
 		// is read, this would fail on the JSON (or, with no base at all, go to Mojang) instead of on the files.
 		Path mcDir = work.resolve("minecraft");
-		Path baseVersion = Files.createDirectories(mcDir.resolve("versions/26.2"));
-		Files.writeString(baseVersion.resolve("26.2.json"), "not json");
-		Files.write(baseVersion.resolve("26.2.jar"), new byte[0]);
+		Path baseVersion = Files.createDirectories(mcDir.resolve("versions/1.21.1"));
+		Files.writeString(baseVersion.resolve("1.21.1.json"), "not json");
+		Files.write(baseVersion.resolve("1.21.1.jar"), new byte[0]);
 		try {
 			new Installer(line -> { }).install(mcDir, MC, wrong);
 			throw new AssertionError("the installer installed renamed jars");
@@ -130,7 +130,7 @@ public final class SuppliedArtifactContentTest {
 			require(expected.getMessage().contains("not the game files NeoForbric needs"),
 					"refused for the wrong reason (was the base version read first?): " + expected.getMessage());
 		}
-		require(!Files.exists(mcDir.resolve("versions/26.2-neoforbric")), "a profile directory was written");
+		require(!Files.exists(mcDir.resolve("versions/1.21.1-neoforbric")), "a profile directory was written");
 		require(!Files.exists(mcDir.resolve("libraries")), "something was staged into libraries/");
 		require(!Files.exists(mcDir.resolve(".neoforbric-build")), "the link-check tools were unpacked for a refused set");
 		checks++;
@@ -139,7 +139,7 @@ public final class SuppliedArtifactContentTest {
 		// Run from a checkout that has built its own artifacts, this used to be completed from there; only the
 		// directory named counts now.
 		Path partial = Files.createDirectories(work.resolve("partial"));
-		Files.copy(base, partial.resolve("patched-mc-neoforge-26.2.jar"));
+		Files.copy(base, partial.resolve("patched-mc-neoforge-1.21.1.jar"));
 		try {
 			GameArtifacts.locate(MC, partial);
 			throw new AssertionError("an incomplete set was located");
@@ -182,7 +182,7 @@ public final class SuppliedArtifactContentTest {
 		// A half-filled directory: what is there is "present" (or WRONG FILE), only what is not is "missing", and
 		// the verdict names the wrong one, with the way out once.
 		Path half = Files.createDirectories(work.resolve("doctor-half"));
-		Files.copy(base, half.resolve("patched-mc-neoforge-26.2.jar"));
+		Files.copy(base, half.resolve("patched-mc-neoforge-1.21.1.jar"));
 		Files.createDirectories(half.resolve("neoforge-runtime"));
 		Files.copy(base, half.resolve("neoforge-runtime/neoforge-runtime.jar")); // the usual mistake: the base twice
 		out.clear();

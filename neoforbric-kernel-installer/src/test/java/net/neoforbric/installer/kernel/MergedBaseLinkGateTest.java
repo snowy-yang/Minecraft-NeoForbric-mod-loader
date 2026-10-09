@@ -58,13 +58,13 @@ public final class MergedBaseLinkGateTest {
 	 * profile behind.
 	 *
 	 * <p>The set has to look like a real one first, or the content check refuses it before any link check runs:
-	 * the game jar is Minecraft 26.2 whose client refers to NeoForge, and the carrier holds NeoForge's core class
+	 * the game jar is Minecraft 1.21.1 whose client refers to NeoForge, and the carrier holds NeoForge's core class
 	 * and mod loader and names the pinned version in its manifest. Those are real bytecode, so they resolve like
 	 * any other.
 	 */
 	private static void suppliedArtifacts(Path work, Path classes, Path target, List<String> logs) throws Exception {
 		Path supplied = Files.createDirectories(work.resolve("supplied"));
-		Path game = Files.createDirectories(supplied.resolve("neoforge-base")).resolve("patched-mc-neoforge-26.2.jar");
+		Path game = Files.createDirectories(supplied.resolve("neoforge-base")).resolve("patched-mc-neoforge-1.21.1.jar");
 		Path neo = Files.createDirectories(supplied.resolve("neoforge-runtime")).resolve("neoforge-runtime.jar");
 		Path carriers = Files.createDirectories(work.resolve("src/carriers"));
 		Path neoClasses = Files.createDirectories(work.resolve("neo-classes"));
@@ -80,10 +80,10 @@ public final class MergedBaseLinkGateTest {
 		compileWith(classes, neoClasses.toString(),
 				source(work.resolve("src"), "net.minecraft.client", "public class Minecraft { void run() { "
 						+ "net.neoforged.neoforge.common.NeoForge.hook(); } }"));
-		Files.writeString(classes.resolve("version.json"), "{\"id\": \"26.2\"}");
-		Path mc = Files.createDirectories(work.resolve("minecraft/versions/26.2"));
-		Files.writeString(mc.resolve("26.2.json"), "{\"id\":\"26.2\",\"libraries\":[]}");
-		Files.write(mc.resolve("26.2.jar"), new byte[] { 'P', 'K', 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
+		Files.writeString(classes.resolve("version.json"), "{\"id\": \"1.21.1\"}");
+		Path mc = Files.createDirectories(work.resolve("minecraft/versions/1.21.1"));
+		Files.writeString(mc.resolve("1.21.1.json"), "{\"id\":\"1.21.1\",\"libraries\":[]}");
+		Files.write(mc.resolve("1.21.1.jar"), new byte[] { 'P', 'K', 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
 		Path mcDir = work.resolve("minecraft");
 		Path jdk = Path.of(JdkLocator.javaBin());
 
@@ -91,7 +91,7 @@ public final class MergedBaseLinkGateTest {
 		compile(classes, target);
 		jar(classes, game);
 		logs.clear();
-		var found = new Installer(logs::add).obtainGameArtifacts(mcDir, "26.2", supplied, jdk);
+		var found = new Installer(logs::add).obtainGameArtifacts(mcDir, "1.21.1", supplied, jdk);
 		require(found.get(ArtifactBuilder.NEOFORGE_RUNTIME).equals(neo),
 				"the supplied runtime stands for the runtime: " + found);
 		require(logs.stream().anyMatch(s -> s.contains("(known 0, new 0)")), "a supplied set was not link-checked");
@@ -100,12 +100,12 @@ public final class MergedBaseLinkGateTest {
 		compile(classes, target);
 		jar(classes, game);
 		try {
-			new Installer(logs::add).install(mcDir, "26.2", supplied, jdk);
+			new Installer(logs::add).install(mcDir, "1.21.1", supplied, jdk);
 			throw new AssertionError("installer published a supplied game base with a new dangling reference");
 		} catch (IOException expected) {
 			requireDoNotFit(expected, supplied, "game/Target.value");
 		}
-		require(!Files.exists(mcDir.resolve("versions/26.2-neoforbric/26.2-neoforbric.json")), "a profile was written");
+		require(!Files.exists(mcDir.resolve("versions/1.21.1-neoforbric/1.21.1-neoforbric.json")), "a profile was written");
 
 		// A damaged copy of the runtime is still the right kind of file in every way the content check can see by
 		// name, so until it reads the bytes it is indistinguishable from the good one. Reading them is what the
@@ -115,7 +115,7 @@ public final class MergedBaseLinkGateTest {
 		jar(classes, game);
 		SuppliedArtifactContentTest.damage(neo, "net/neoforged/fml/loading/FMLLoader.class");
 		try {
-			new Installer(logs::add).obtainGameArtifacts(mcDir, "26.2", supplied, jdk);
+			new Installer(logs::add).obtainGameArtifacts(mcDir, "1.21.1", supplied, jdk);
 			throw new AssertionError("a supplied set with a damaged runtime passed the content check");
 		} catch (IOException expected) {
 			requireDoNotFit(expected, supplied, "It is damaged: part of it cannot be read");
@@ -123,7 +123,7 @@ public final class MergedBaseLinkGateTest {
 
 		Files.delete(neo);
 		try {
-			new Installer(logs::add).obtainGameArtifacts(mcDir, "26.2", supplied, jdk);
+			new Installer(logs::add).obtainGameArtifacts(mcDir, "1.21.1", supplied, jdk);
 			throw new AssertionError("a set missing its runtime was accepted");
 		} catch (IOException expected) {
 			require(expected.getMessage().contains("neoforge-runtime.jar"), "missing runtime not named: " + expected);

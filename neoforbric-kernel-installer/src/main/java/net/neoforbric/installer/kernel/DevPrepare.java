@@ -15,19 +15,19 @@ public final class DevPrepare {
 		Path mc = Path.of(args[0]).toAbsolutePath();
 		Path stage = Path.of(args[1]).toAbsolutePath();
 		JdkLocator.Jvm jvm = JdkLocator.locate(mc, Path.of(args[2]), System.out::println);
-		if (jvm.feature() < 25) throw new IOException("Minecraft 26.2 development needs JDK 25 or newer");
+		if (jvm.feature() < 21) throw new IOException("Minecraft " + Pins.MINECRAFT + " development needs JDK 21 or newer");
 		Path version = mc.resolve("versions").resolve(Pins.MINECRAFT);
 		if (!Files.isRegularFile(version.resolve(Pins.MINECRAFT + ".jar"))
 				|| !Files.isRegularFile(version.resolve(Pins.MINECRAFT + ".json"))) {
 			new MojangDownloader(System.out::println).downloadClient(Pins.MINECRAFT, version);
 		}
 		Map<String, Path> artifacts = new ArtifactBuilder(System.out::println).build(mc, Pins.MINECRAFT, jvm);
-		copy(artifacts.get(ArtifactBuilder.NEOFORGE_BASE), stage.resolve("neoforge-base/patched-mc-neoforge-26.2.jar"));
+		copy(artifacts.get(ArtifactBuilder.NEOFORGE_BASE), stage.resolve("neoforge-base/patched-mc-neoforge-" + Pins.MINECRAFT + ".jar"));
 		copy(artifacts.get(ArtifactBuilder.NEOFORGE_RUNTIME), stage.resolve("neoforge-runtime/neoforge-runtime.jar"));
 		// The build pin beside each staged jar says which pin set produced it, so a consumer of the staged tree can
 		// tell this build's jars from ones a launcher install keeps under libraries/ with the same names.
-		copy(mc.resolve(".neoforbric-build/out/patched-mc-neoforge-26.2.jar.pins"),
-				stage.resolve("neoforge-base/patched-mc-neoforge-26.2.jar.pins"));
+		copy(mc.resolve(".neoforbric-build/out/patched-mc-neoforge-" + Pins.MINECRAFT + ".jar.pins"),
+				stage.resolve("neoforge-base/patched-mc-neoforge-" + Pins.MINECRAFT + ".jar.pins"));
 		copy(mc.resolve(".neoforbric-build/out/neoforge-runtime.jar.pins"),
 				stage.resolve("neoforge-runtime/neoforge-runtime.jar.pins"));
 		System.out.println("Development artifacts staged under " + stage);

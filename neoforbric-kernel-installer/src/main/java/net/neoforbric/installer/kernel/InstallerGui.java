@@ -45,7 +45,7 @@ import javax.swing.WindowConstants;
 
 /** The window: pick a game version, a loader version and a directory, then press Install. */
 final class InstallerGui {
-	static final String DEFAULT_VERSION = "26.2";
+	static final String DEFAULT_VERSION = "1.21.1";
 
 	private final JFrame frame = new JFrame("NeoForbric Installer");
 	private final JComboBox<String> gameVersion = new JComboBox<>(new String[] {DEFAULT_VERSION});

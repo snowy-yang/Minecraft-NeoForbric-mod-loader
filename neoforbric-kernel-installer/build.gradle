@@ -61,7 +61,12 @@ tasks.register('buildLoaderJars', Exec) {
 			: ['./gradlew', 'jar', 'runtimeJar'])
 	inputs.dir("${loaderDir}/src/main")
 	inputs.file("${loaderDir}/build.gradle")
-	outputs.dir("${loaderDir}/build/libs")
+	// The exact two jars the loader's `jar` and `runtimeJar` tasks write. Declaring the whole build/libs
+	// directory here — what this used to be — claimed the merge-tools jar's path too, and Gradle 9's
+	// overlapping-outputs validation then failed every devToolsJar/buildLoaderJars build because the
+	// tools jar looked like this task's output.
+	outputs.files(file("${loaderDir}/build/libs/${loaderJar()}"),
+			file("${loaderDir}/build/libs/${runtimeJar()}"))
 }
 
 // The link-check tools, shaded with the ASM they need. Not a library of the installer's — they are run as a
