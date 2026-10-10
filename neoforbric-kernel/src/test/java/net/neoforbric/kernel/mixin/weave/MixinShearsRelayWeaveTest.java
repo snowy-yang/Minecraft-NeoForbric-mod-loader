@@ -23,8 +23,8 @@ import net.neoforbric.kernel.mixin.MixinShearsRelay;
 
 /**
  * MixinShearsRelay through the real weave: BCLib's tag-based shears wrap of vanilla's {@code stack.is(Items.SHEARS)}
- * on a pumpkin whose merged {@code useItemOn} asks NeoForge's {@code canPerformAction(ItemAbilities.SHEARS_CARVE)}
- * instead and makes no {@code is} call at all.
+ * ({@code ItemStack.is(Item)}Z, 1.21.1's own shape) on a pumpkin whose merged {@code useItemOn} asks NeoForge's
+ * {@code canPerformAction(ItemAbilities.SHEARS_CARVE)} instead and makes no {@code is} call at all.
  *
  * <p>The probe uses vanilla shears, a modded shears item that carries only the common shears tag, and a stick. Relayed,
  * the wrap answers the carrier's question with the carrier's answer as its original, through the kernel's real
@@ -52,7 +52,7 @@ class MixinShearsRelayWeaveTest {
 		try (Stream<Path> walk = Files.walk(SOURCES)) {
 			sources = new ArrayList<>(walk.filter(p -> p.toString().endsWith(".java")).sorted().toList());
 		}
-		assertEquals(10, sources.size(), "the fixture's sources changed; update this test with it: " + sources);
+		assertEquals(9, sources.size(), "the fixture's sources changed; update this test with it: " + sources);
 		// The outer handler calls the kernel's game-side KernelShears, which NeoForbricClassLoader must define from a jar it
 		// owns; a fresh clone has no compiled runtime source set, so the production source is compiled in here.
 		sources.add(Path.of("src/runtime/java/net/neoforbric/kernel/runtime/KernelShears.java"));

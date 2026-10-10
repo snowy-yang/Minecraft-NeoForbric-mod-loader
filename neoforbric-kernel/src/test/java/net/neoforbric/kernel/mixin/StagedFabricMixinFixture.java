@@ -87,6 +87,28 @@ final class StagedFabricMixinFixture {
   Files.writeString(pathOf(out+".raw-sha256"),digest);
   return out;
  }
+ /** A published Fabric mod's class as the kernel loads it: the same production remap the staged modules get
+  * (FabricModuleRemapTool's intermediary→Mojmap over the classes, RefmapRemapper over the refmap values), run
+  * over the mod's own jar. Real 1.21.1 Fabric mods ship intermediary-typed and the runtime hands the adapters
+  * the Mojmap form, so a test reading the raw jar would judge a class the kernel never runs. */
+ static ClassNode remapped(Path jar,String name)throws Exception{
+  Path out=Path.of("build/test-mod-remap",jar.getFileName()+"-remapped.jar");
+  byte[] bytes=Files.readAllBytes(jar);
+  String digest=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+  if(!(Files.isRegularFile(out)&&Files.isRegularFile(pathOf(out+".raw-sha256"))&&digest.equals(Files.readString(pathOf(out+".raw-sha256")).trim()))){
+   Files.createDirectories(out.getParent());
+   NeoForbricMappings mappings=mappings();Path classpath=intermediaryGame(mappings);
+   Path tmp=Files.createTempFile(out.getParent(),"remap",".jar");
+   ForgeModRemapper.remapJar(jar,tmp,ForgeModRemapper.provider(mappings,NeoForbricMappings.INTERMEDIARY,NeoForbricMappings.NAMED),List.of(classpath,jar),RefmapRemapper.Names.from(mappings));
+   Files.move(tmp,out,StandardCopyOption.REPLACE_EXISTING);
+   Files.writeString(pathOf(out+".raw-sha256"),digest);
+  }
+  try(ZipFile z=new ZipFile(out.toFile())){
+   ZipEntry e=z.getEntry(name+".class");
+   if(e==null)throw new AssertionError("actual mixin not found in the remapped mod jar: "+name);
+   return MixinFit.parse(z.getInputStream(e).readAllBytes());
+  }
+ }
  private static Path pathOf(String path){return Path.of(path);}
  private static NeoForbricMappings mappings()throws Exception{
   if(MAPPINGS==null){

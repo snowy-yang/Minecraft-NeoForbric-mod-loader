@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.zip.ZipFile;
 
 import net.neoforbric.api.Ecosystem;
 import net.neoforbric.kernel.TestFixtures;
@@ -19,14 +18,18 @@ import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.BasicVerifier;
 
 /**
- * BCLib's six wraps of vanilla's is(Items.SHEARS) also answer the carrier's canPerformAction(SHEARS_*) the merge put in
- * its place, with the carrier's answer as their original; the rows are pinned to both bodies.
+ * BCLib's wraps of vanilla's is(Items.SHEARS) also answer the carrier's canPerformAction(SHEARS_*) the merge put in
+ * their place on 1.21.1's three block sites, with the carrier's answer as their original; the rows are pinned to both
+ * bodies, and the mixins are read as the kernel loads them — bclib ships intermediary-typed, the remap hands the
+ * relay the Mojmap form.
  */
 @ResourceLock("system-properties")
 class MixinShearsRelayTest {
-	private static final Path BCLIB = Path.of("build/compat-inputs/sweep90/mods/bclib-26.201.2.jar");
+	private static final Path BCLIB = Path.of("build/compat-inputs/sweep-1.21.1/mods/bclib-21.0.13.jar");
 	private static final String SHEARS = "org/betterx/bclib/mixin/common/shears/";
 	private static final String HANDLER = "bclib_isShears";
+	/** 1.21.1's shears question is ItemStack.is(Item)Z — the erased is(Object)Z the 26.x rows named is 26.x's. */
+	private static final String IS_ITEM = "(Lnet/minecraft/world/item/Item;)Z";
 
 	@AfterEach void reset() {
 		System.clearProperty(MixinShearsRelay.PROPERTY);
@@ -36,7 +39,7 @@ class MixinShearsRelayTest {
 	/** A row stays true only while vanilla asks is(SHEARS) there and the merged body asks the row's carrier question instead. */
 	@Test void everyRowIsAVanillaShearsCheckTheMergeReplaced() throws Exception {
 		for (MixinShearsRelay.Row row : MixinShearsRelay.ROWS) {
-			MethodNode vanilla = only(StagedFabricMixinFixture.game(row.target(), true), row.method());
+			MethodNode vanilla = only(StagedFabricMixinFixture.vanilla(row.target()), row.method());
 			MethodNode merged = only(StagedFabricMixinFixture.game(row.target(), false), row.method());
 			assertEquals(1, shearsChecks(vanilla), row + " on vanilla");
 			assertEquals(0, shearsChecks(merged), row + ": a rebuilt base that restores is(SHEARS) makes the row wrong");
@@ -45,8 +48,12 @@ class MixinShearsRelayTest {
 		}
 	}
 
+	// BCLib also ships SheepMixin and SnowGolemMixin, wraps of mobInteract's is(SHEARS) — and neither has a row: the
+	// merged 1.21.1 mobInteract asks no shears question at all (Sheep just super-calls, SnowGolem passes; entity
+	// shearing runs through NeoForge's ShearsItem.interactLivingEntity), so the wrap binds nowhere and there is no
+	// carrier call to move it to.
 	@Test void aWrapWhoseCallIsGoneMovesToTheCarrierCall() throws Exception {
-		for (String name : List.of("PumpkinBlockMixin", "TripWireBlockMixin", "SheepMixin", "SnowGolemMixin")) {
+		for (String name : List.of("PumpkinBlockMixin", "TripWireBlockMixin")) {
 			ClassNode mixin = fabric(name);
 			MixinShearsRelay.Row row = rowFor(mixin);
 			ClassNode target = StagedFabricMixinFixture.game(row.target(), false);
@@ -67,14 +74,17 @@ class MixinShearsRelayTest {
 		}
 	}
 
+	// MushroomCowMixin is the fourth wrap with no row: the merged mobInteract kept only its bowl and flower
+	// questions — the mooshroom's shears question is gone with entity shearing's move into ShearsItem, so the wrap
+	// could only bind the bowl check (where it does nothing) and no carrier call exists to answer.
 	@Test void aWrapStillBoundToOtherIsCallsKeepsThemAndAnswersTheCarrierToo() throws Exception {
-		for (String name : List.of("BeehiveBlockMixin", "MushroomCowMixin")) {
+		for (String name : List.of("BeehiveBlockMixin")) {
 			ClassNode mixin = fabric(name);
 			MixinShearsRelay.Row row = rowFor(mixin);
 			ClassNode target = StagedFabricMixinFixture.game(row.target(), false);
 			assertEquals(1, MixinShearsRelay.adapt(mixin, n -> target), name);
-			assertEquals("Lnet/minecraft/world/item/ItemStack;is(Ljava/lang/Object;)Z", MixinFit.value(StagedFabricMixinFixture.at(mixin, HANDLER), "target"),
-					name + ": the glass-bottle / bowl binding stays as compiled");
+			assertEquals("Lnet/minecraft/world/item/ItemStack;is(Lnet/minecraft/world/item/Item;)Z", MixinFit.value(StagedFabricMixinFixture.at(mixin, HANDLER), "target"),
+					name + ": the glass-bottle binding stays as compiled");
 			MethodNode added = only(mixin, HANDLER + MixinShearsRelay.ADDED_SUFFIX);
 			assertEquals(MixinShearsRelay.carrierTarget(row), MixinFit.value(StagedFabricMixinFixture.at(mixin, HANDLER + MixinShearsRelay.ADDED_SUFFIX), "target"));
 			MethodNode copy = only(mixin, HANDLER + MixinShearsRelay.ADDED_SUFFIX + "$inner");
@@ -101,7 +111,7 @@ class MixinShearsRelayTest {
 		only(grouped, HANDLER).visibleAnnotations.add(new AnnotationNode("Lorg/spongepowered/asm/mixin/injection/Group;"));
 		assertEquals(0, MixinShearsRelay.adapt(grouped, n -> target));
 		ClassNode sugar = fabric("PumpkinBlockMixin");
-		only(sugar, HANDLER).desc = "(Lnet/minecraft/world/item/ItemStack;Ljava/lang/Object;Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;I)Z";
+		only(sugar, HANDLER).desc = "(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/Item;Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;I)Z";
 		assertEquals(0, MixinShearsRelay.adapt(sugar, n -> target), "a capture of the vanilla method's locals");
 
 		ClassNode twice = StagedFabricMixinFixture.game("net/minecraft/world/level/block/PumpkinBlock", false);
@@ -131,7 +141,7 @@ class MixinShearsRelayTest {
 	private static int shearsChecks(MethodNode method) {
 		int checks = 0;
 		for (AbstractInsnNode insn : method.instructions) {
-			if (insn instanceof MethodInsnNode c && c.name.equals("is") && c.desc.equals("(Ljava/lang/Object;)Z")
+			if (insn instanceof MethodInsnNode c && c.name.equals("is") && c.desc.equals(IS_ITEM)
 					&& c.getPrevious() instanceof FieldInsnNode f && f.name.equals("SHEARS") && f.owner.equals("net/minecraft/world/item/Items")) checks++;
 		}
 		return checks;
@@ -155,9 +165,9 @@ class MixinShearsRelayTest {
 
 	private static ClassNode read(String name) throws Exception {
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(BCLIB), "sweep pack absent");
-		try (ZipFile zip = new ZipFile(BCLIB.toFile())) {
-			return MixinFit.parse(zip.getInputStream(zip.getEntry(SHEARS + name + ".class")).readAllBytes());
-		}
+		// The raw bclib jar is intermediary-typed (class_2445, method_31574); the kernel hands the relay the
+		// Mojmap form, and the rows name the Mojmap sites, so the remap is part of reading the real artifact.
+		return StagedFabricMixinFixture.remapped(BCLIB, SHEARS + name);
 	}
 
 	private static MethodNode only(ClassNode node, String name) {

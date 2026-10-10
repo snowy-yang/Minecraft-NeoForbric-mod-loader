@@ -22,13 +22,17 @@ import org.objectweb.asm.tree.VarInsnNode;
 /**
  * A Fabric mod's wrap of vanilla's "is this shears?" question follows it to the carrier's "can this shear?" question.
  *
- * <p>Vanilla decides shearing with {@code stack.is(Items.SHEARS)} in six places: carving a pumpkin, disarming tripwire,
- * harvesting a beehive, shearing a sheep, a snow golem and a mooshroom. The merged bodies ask the stack instead —
- * NeoForge's {@code canPerformAction(ItemAbilities.SHEARS_*)} in the three blocks. BCLib wraps each vanilla call
- * ({@code original || tagged c:tools/shear or a mineable/shears tool}) so a modded shears item that only carries the tag
- * works; on the merged base the pumpkin and tripwire wraps had nothing to bind to, and the beehive one bound only to
- * that method's other {@code is} calls (glass bottle), where it does nothing. A tag-only shears item carved,
- * disarmed and harvested nothing.
+ * <p>Vanilla 1.21.1 decides shearing with {@code stack.is(Items.SHEARS)} in six places: carving a pumpkin
+ * ({@code PumpkinBlock.useItemOn}), disarming tripwire ({@code TripWireBlock.playerWillDestroy}), harvesting a beehive
+ * ({@code BeehiveBlock.useItemOn}), and shearing a sheep, a snow golem or a mooshroom ({@code mobInteract}). The merge
+ * replaced the three block questions with the carrier's — NeoForge's {@code canPerformAction(ItemAbilities.SHEARS_*)}
+ * — and deleted the three entity questions outright: the merged {@code mobInteract} bodies ask no shears question at
+ * all, because entity shearing runs through NeoForge's {@code ShearsItem.interactLivingEntity} and its
+ * {@code IShearable}, so a wrap of {@code mobInteract} has no question to follow and there is no row for it. BCLib
+ * wraps each vanilla call ({@code original || tagged c:tools/shear or a mineable/shears tool}) so a modded shears item
+ * that only carries the tag works; on the merged base the pumpkin and tripwire wraps had nothing to bind to, and the
+ * beehive one bound only to that method's other {@code is} call (the glass bottle), where it does nothing. A tag-only
+ * shears item carved, disarmed and harvested nothing.
  *
  * <p>For a handler in a row of {@link #ROWS}, a new {@code @WrapOperation} on the carrier's call hands the handler the
  * question it was written for: its receiver, {@code Items.SHEARS}, and an {@code Operation} ({@code KernelShears.relay})
@@ -40,8 +44,8 @@ import org.objectweb.asm.tree.VarInsnNode;
  * stays bound to it and a copy of its body answers the carrier's call.
  *
  * <p>Only a Fabric mod's handler — NeoForge's mods were written against the carrier call — and only
- * the reviewed shape: a {@code @WrapOperation} on {@code ItemStack.is(Object)Z} with one selector naming a row's method,
- * no ordinal, slice or {@code @Group}, and a handler that is exactly {@code (ItemStack, Object, Operation) → boolean}
+ * the reviewed shape: a {@code @WrapOperation} on {@code ItemStack.is(Item)Z} with one selector naming a row's method,
+ * no ordinal, slice or {@code @Group}, and a handler that is exactly {@code (ItemStack, Item, Operation) → boolean}
  * with no sugar, of the target method's static-ness. The merged method must make the row's carrier call exactly once,
  * with the row's constant. {@code -Dneoforbric.shearsRelay=off} relays nothing.
  */
@@ -49,9 +53,11 @@ public final class MixinShearsRelay {
 	public static final String PROPERTY = "neoforbric.shearsRelay";
 	static final String RUNTIME = "net/neoforbric/kernel/runtime/KernelShears";
 	static final String ITEM_STACK = "net/minecraft/world/item/ItemStack";
-	static final String VANILLA_TARGET = "L" + ITEM_STACK + ";is(Ljava/lang/Object;)Z";
+	static final String ITEM = "net/minecraft/world/item/Item";
+	/** 1.21.1's own shears question: {@code ItemStack.is(Item)}, the call every wrap of it was compiled against. */
+	static final String VANILLA_TARGET = "L" + ITEM_STACK + ";is(L" + ITEM + ";)Z";
 	static final String OPERATION = "com/llamalad7/mixinextras/injector/wrapoperation/Operation";
-	static final String HANDLER_DESC = "(L" + ITEM_STACK + ";Ljava/lang/Object;L" + OPERATION + ";)Z";
+	static final String HANDLER_DESC = "(L" + ITEM_STACK + ";L" + ITEM + ";L" + OPERATION + ";)Z";
 	static final String ADDED_SUFFIX = "$neoforbricshears";
 	private static final String WRAP_OPERATION = "Lcom/llamalad7/mixinextras/injector/wrapoperation/WrapOperation;";
 	private static final String GROUP = "Lorg/spongepowered/asm/mixin/injection/Group;";
@@ -77,6 +83,10 @@ public final class MixinShearsRelay {
 	private static final String NEO = "NeoForge's patch asks the stack for the shears ability ShearsItem declares, the same "
 			+ "question vanilla's is(SHEARS) asked, extended to any item that declares it";
 
+	/** The three sites of vanilla's is(SHEARS) the merge turned into the carrier's question (verified on the 1.21.1
+	 * base: canPerformAction(SHEARS_CARVE/SHEARS_DISARM/SHEARS_HARVEST), once each). The three entity sites have no
+	 * row: the merged mobInteract asks no shears question at all, entity shearing runs through NeoForge's
+	 * ShearsItem.interactLivingEntity, so a mobInteract wrap has no question to follow. */
 	static final List<Row> ROWS = List.of(
 			new Row("net/minecraft/world/level/block/PumpkinBlock", "useItemOn", ABILITIES, "SHEARS_CARVE", ABILITY, NEO),
 			new Row("net/minecraft/world/level/block/TripWireBlock", "playerWillDestroy", ABILITIES, "SHEARS_DISARM", ABILITY, NEO),
@@ -188,7 +198,8 @@ public final class MixinShearsRelay {
 	static int vanillaCalls(MethodNode body) {
 		int calls = 0;
 		for (AbstractInsnNode insn : body.instructions) {
-			if (insn instanceof MethodInsnNode call && call.owner.equals(ITEM_STACK) && call.name.equals("is") && call.desc.equals("(Ljava/lang/Object;)Z")) calls++;
+			if (insn instanceof MethodInsnNode call && call.owner.equals(ITEM_STACK) && call.name.equals("is")
+					&& call.desc.equals("(L" + ITEM + ";)Z")) calls++;
 		}
 		return calls;
 	}
