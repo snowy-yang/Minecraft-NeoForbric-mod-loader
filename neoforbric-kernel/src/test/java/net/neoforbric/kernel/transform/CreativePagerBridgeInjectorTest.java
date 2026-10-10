@@ -32,7 +32,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class CreativePagerBridgeInjectorTest {
 	private static final Path STAGED = Path.of(System.getProperty("neoforbric.stagedRoot", "../neoforbric-loader/run"));
-	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String SCREEN = CreativePagerBridgeInjector.SCREEN;
 
 	@AfterEach void reset() { System.clearProperty(CreativePagerBridgeInjector.PROPERTY); }
@@ -46,7 +46,7 @@ class CreativePagerBridgeInjectorTest {
 		return new CreativePagerBridgeInjector(name -> {
 			if (!installed || !name.equals(CreativePagerBridgeInjector.API)) return null;
 			try {
-				return CreativePagerFixtures.creativeModule(CreativePagerBridgeInjector.API + ".class");
+				return CreativePagerFixtures.remappedModule(CreativePagerBridgeInjector.API + ".class");
 			} catch (Exception unreadable) {
 				throw new AssertionError(unreadable);
 			}
@@ -66,16 +66,19 @@ class CreativePagerBridgeInjectorTest {
 	}
 
 	private static ClassNode contract() throws Exception {
-		return MixinFit.parse(CreativePagerFixtures.creativeModule(CreativePagerBridgeInjector.API + ".class"));
+		return MixinFit.parse(CreativePagerFixtures.remappedModule(CreativePagerBridgeInjector.API + ".class"));
 	}
 
-	@Test void theInterfaceIsAlreadyOnTheScreenWithNothingBehindItAndTheBridgeSuppliesEveryMethod() throws Exception {
+	@Test void theBridgeAttachesTheInterfaceItselfAndSuppliesEveryMethodOnThisAnchor() throws Exception {
+		// 1.21.1's module no longer class-tweaks the interface onto the screen — the PINNED mixin's
+		// implements clause was the only carrier — so pre-bridge the screen has neither the interface nor
+		// a call through it. The bridge attaches both, and the cast owo makes works exactly as before.
 		byte[] tweaked = tweakedScreen();
 		ClassNode before = node(tweaked);
-		assertTrue(before.interfaces.contains(CreativePagerBridgeInjector.API),
-				"fabric-api's class tweaker injects the interface whatever the kernel pins — so the cast works");
+		assertFalse(before.interfaces.contains(CreativePagerBridgeInjector.API),
+				"nothing but the pinned mixin carried the interface onto this screen");
 		List<String> missing = MixinFit.unsupplied(contract(), before);
-		assertEquals(8, missing.size(), "every method Fabric's pinned mixin implements is the throwing default: " + missing);
+		assertEquals(8, missing.size(), "every implementer-supplied method is unsupplied before the bridge: " + missing);
 		assertTrue(missing.contains("getCurrentPage()I"), "owo's call: " + missing);
 
 		byte[] out = bridge(true).transform(CreativePagerBridgeInjector.SCREEN_BINARY, tweaked, null);
@@ -110,7 +113,11 @@ class CreativePagerBridgeInjectorTest {
 			}
 			if (!calls.isEmpty()) buttons.add(method.name + calls);
 		}
-		assertEquals(List.of("lambda$init$1[setCurrentPage, pageTurned]", "lambda$init$0[setCurrentPage, pageTurned]"), buttons);
+		// 1.21.1 base: javac emitted the page-button lambdas in reverse declaration order
+		// (lambda$init$1 = previous/Math.max, lambda$init$2 = next/size-bound), so the assertion is a set:
+		// BOTH page buttons announce their turn, and nothing else calls setCurrentPage.
+		assertEquals(java.util.Set.of("lambda$init$1[setCurrentPage, pageTurned]", "lambda$init$2[setCurrentPage, pageTurned]"),
+				java.util.Set.copyOf(buttons));
 	}
 
 	@Test void nothingChangesTwiceWithoutTheModuleOrWithTheSwitchOff() throws Exception {
@@ -146,7 +153,7 @@ class CreativePagerBridgeInjectorTest {
 	@Test void aReshapedPagerKeepsTheInterfaceBodiesAndOnlyLosesTheTurnAnnouncement() throws Exception {
 		ClassNode reshaped = node(tweakedScreen());
 		// A third page button that sets the page once, as a carrier with a "first page" button would have.
-		MethodNode first = new MethodNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_SYNTHETIC, "lambda$init$2",
+		MethodNode first = new MethodNode(Opcodes.ACC_PRIVATE | Opcodes.ACC_SYNTHETIC, "lambda$init$4",
 				CreativePagerBridgeInjector.BUTTON_HANDLER, null, null);
 		first.instructions.add(new org.objectweb.asm.tree.VarInsnNode(Opcodes.ALOAD, 0));
 		first.instructions.add(new org.objectweb.asm.tree.VarInsnNode(Opcodes.ALOAD, 0));

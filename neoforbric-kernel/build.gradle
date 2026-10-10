@@ -54,7 +54,9 @@ def stagedGameJars = [stagedBase, stagedNeoRuntime].findAll { it.isFile() }
 def devFabricApi = file('.dev/api/fabric-api-0.116.17+1.21.1.jar')
 def stagedFabricApi = file(project.findProperty('neoforbric.fabricApi') ?: (devFabricApi.isFile() ? devFabricApi
 		: new File(stagedRoot.parentFile.parentFile, 'neoforbric-kernel/run/client-merged-pack/mods/fabric-api-0.116.17+1.21.1.jar')))
-def transferApiModules = ['fabric-transfer-api-v1-', 'fabric-api-lookup-api-v1-', 'fabric-api-base-']
+// fabric-item-group-api-v1 joins them: the creative-pager bridge reads its interface (FabricCreativeInventoryScreen)
+// in the base's namespace — the raw module is intermediary-typed, so nothing could ever match the bridge's rows.
+def transferApiModules = ['fabric-transfer-api-v1-', 'fabric-api-lookup-api-v1-', 'fabric-api-base-', 'fabric-item-group-api-v1-']
 def transferStagingDir = layout.buildDirectory.dir('transfer-api-staging')
 def transferModulesDir = layout.buildDirectory.dir('transfer-api-compile')
 // Real 1.21.1 fabric-api ships intermediary-named modules while the staged game is Mojmap; the modules are

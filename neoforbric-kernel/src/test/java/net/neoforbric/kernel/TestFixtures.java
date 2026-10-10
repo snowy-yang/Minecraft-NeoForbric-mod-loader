@@ -208,15 +208,15 @@ public final class TestFixtures {
 		return minecraftDir().resolve("libraries");
 	}
 
-	/** Minecraft 26.2's own client jar inside {@link #minecraftDir()}. */
+	/** Minecraft 1.21.1's own client jar inside {@link #minecraftDir()}. */
 	public static Path vanillaJar() {
-		return minecraftDir().resolve("versions/26.2/26.2.jar");
+		return minecraftDir().resolve("versions/1.21.1/1.21.1.jar");
 	}
 
 
 	/**
-	 * Netty's codec library under {@link #minecraftDir()}: 26.2 ships netty 4.2's split {@code netty-codec-base},
-	 * which a launcher directory that also holds older versions keeps beside their {@code netty-codec}.
+	 * Netty's codec library under {@link #minecraftDir()}: 1.21.1 ships netty 4.1's {@code netty-codec}, and a
+	 * launcher directory that also holds newer versions keeps their split {@code netty-codec-base} beside it.
 	 */
 	public static String nettyCodecLibrary() {
 		return Files.isDirectory(minecraftDir().resolve("libraries/io/netty/netty-codec-base"))
@@ -224,7 +224,7 @@ public final class TestFixtures {
 	}
 
 	/** The Fabric API build the real-bytecode tests are written against. */
-	public static final String FABRIC_API_JAR = "fabric-api-0.155.2+26.2.jar";
+	public static final String FABRIC_API_JAR = "fabric-api-0.116.17+1.21.1.jar";
 
 	/**
 	 * {@link #FABRIC_API_JAR}: the local merged pack's copy when there is one, else the jar the game side compiled

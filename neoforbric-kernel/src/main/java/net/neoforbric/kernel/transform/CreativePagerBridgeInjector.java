@@ -24,7 +24,7 @@ import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.VarInsnNode;
 
 /**
- * Puts NeoForge's creative pager behind fabric-creative-tab-api-v1's {@code FabricCreativeModeInventoryScreen}.
+ * Puts NeoForge's creative pager behind fabric-item-group-api-v1's {@code FabricCreativeInventoryScreen}.
  *
  * <p>fabric-api's class tweaker injects that interface into {@code CreativeModeInventoryScreen} on every client that
  * has fabric-api, and the one mixin that implements it — fabric-creative-tab-api-v1's
@@ -62,8 +62,8 @@ public final class CreativePagerBridgeInjector implements ClassTransformer {
 	public static final String PROPERTY = "neoforbric.creativePagerBridge";
 	static final String SCREEN_BINARY = "net.minecraft.client.gui.screens.inventory.CreativeModeInventoryScreen";
 	static final String SCREEN = "net/minecraft/client/gui/screens/inventory/CreativeModeInventoryScreen";
-	/** The Fabric interface; also what decides whether fabric-creative-tab-api-v1 is installed at all. */
-	public static final String API = "net/fabricmc/fabric/api/client/creativetab/v1/FabricCreativeModeInventoryScreen";
+	/** The Fabric interface; also what decides whether fabric-item-group-api-v1 is installed at all. */
+	public static final String API = "net/fabricmc/fabric/api/client/itemgroup/v1/FabricCreativeInventoryScreen";
 	static final String PAGER = "net/neoforbric/kernel/runtime/KernelCreativePager";
 	static final String PAGER_SCREEN = "net/neoforbric/kernel/runtime/KernelCreativePagerScreen";
 	static final String PAGE = "Lnet/neoforged/neoforge/client/gui/CreativeTabsScreenPage;";
@@ -84,12 +84,12 @@ public final class CreativePagerBridgeInjector implements ClassTransformer {
 	static final String[][] API_METHODS = {
 			{"getCurrentPage", "()I", "currentPage"},
 			{"getPageCount", "()I", "pageCount"},
-			{"getTabsOnPage", "(I)" + LIST, "tabsOnPage"},
+			{"getItemGroupsOnPage", "(I)" + LIST, "tabsOnPage"},
 			{"getPage", "(" + TAB + ")I", "pageOf"},
 			{"switchToPage", "(I)Z", "switchToPage"},
 			{"hasAdditionalPages", "()Z", "hasAdditionalPages"},
-			{"getSelectedTab", "()" + TAB, null},
-			{"setSelectedTab", "(" + TAB + ")Z", "setSelectedTab"}};
+			{"getSelectedItemGroup", "()" + TAB, null},
+			{"setSelectedItemGroup", "(" + TAB + ")Z", "setSelectedTab"}};
 
 	private final Function<String, byte[]> gameClass;
 	private final BooleanSupplier pinInForce;
@@ -110,13 +110,13 @@ public final class CreativePagerBridgeInjector implements ClassTransformer {
 	@Override public String name() { return "neoforbric-creative-pager-bridge"; }
 
 	@Override public AnchorSet anchors() {
-		if (!enabled()) return AnchorSet.scanned("FabricCreativeModeInventoryScreen left unimplemented with -D" + PROPERTY + "=off");
+		if (!enabled()) return AnchorSet.scanned("FabricCreativeInventoryScreen left unimplemented with -D" + PROPERTY + "=off");
 		if (!pinInForce.getAsBoolean()) {
 			return AnchorSet.scanned("Fabric's CreativeModeInventoryScreenMixin is not pinned on this boot and implements the interface itself");
 		}
-		if (gameClass.apply(API) == null) return AnchorSet.scanned("fabric-creative-tab-api-v1 is not installed, so there is no interface to back");
+		if (gameClass.apply(API) == null) return AnchorSet.scanned("fabric-item-group-api-v1 is not installed, so there is no interface to back");
 		return AnchorSet.of(new AnchorSet.Anchor(SCREEN_BINARY, AnchorSet.Severity.REQUIRED,
-				"every FabricCreativeModeInventoryScreen call throws AssertionError — owo-lib crashes the client when the "
+				"every FabricCreativeInventoryScreen call throws AssertionError — owo-lib crashes the client when the "
 						+ "creative inventory opens"));
 	}
 
@@ -130,7 +130,7 @@ public final class CreativePagerBridgeInjector implements ClassTransformer {
 		try {
 			needed = MixinFit.implementerSupplies(MixinFit.parse(api));
 		} catch (RuntimeException unreadable) { // the chain does not catch: a throw here would fail the screen's load
-			NeoForbricLog.warn("[NeoForbric/CreativePager] FabricCreativeModeInventoryScreen is unreadable (%s) — the creative screen "
+			NeoForbricLog.warn("[NeoForbric/CreativePager] FabricCreativeInventoryScreen is unreadable (%s) — the creative screen "
 					+ "is left as merged", unreadable);
 			return bytes;
 		}
@@ -140,11 +140,11 @@ public final class CreativePagerBridgeInjector implements ClassTransformer {
 		if (done == null) return bytes;
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
-		NeoForbricLog.info("[NeoForbric/CreativePager] CreativeModeInventoryScreen answers FabricCreativeModeInventoryScreen from "
+		NeoForbricLog.info("[NeoForbric/CreativePager] CreativeModeInventoryScreen answers FabricCreativeInventoryScreen from "
 				+ "NeoForge's pager — the interface fabric-api injects had no implementation behind it, and every call threw "
 				+ "AssertionError");
 		if (!done.uncovered().isEmpty()) {
-			NeoForbricLog.warn("[NeoForbric/CreativePager] FabricCreativeModeInventoryScreen also leaves %s to its implementer, and "
+			NeoForbricLog.warn("[NeoForbric/CreativePager] FabricCreativeInventoryScreen also leaves %s to its implementer, and "
 					+ "the bridge has no body for it — a call to it still throws AssertionError", done.uncovered());
 		}
 		if (!done.turnsAnnounced()) {

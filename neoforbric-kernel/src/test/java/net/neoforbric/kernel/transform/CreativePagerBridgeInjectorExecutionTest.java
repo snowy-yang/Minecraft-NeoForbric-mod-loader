@@ -27,7 +27,7 @@ import org.objectweb.asm.tree.VarInsnNode;
 import net.fabricmc.api.EnvType;
 
 /**
- * {@link CreativePagerBridgeInjector}'s output, run: every {@code FabricCreativeModeInventoryScreen} call on the creative
+ * {@link CreativePagerBridgeInjector}'s output, run: every {@code FabricCreativeInventoryScreen} call on the creative
  * screen answers from NeoForge's pager, where as merged each one threw {@code AssertionError("Implemented by mixin")} —
  * owo-lib asks {@code getCurrentPage()} while the screen opens, and the client died. NeoForge's page buttons still turn
  * the page as before, and a hook on Fabric's {@code updateSelection} hears the turn.
@@ -121,12 +121,12 @@ class CreativePagerBridgeInjectorExecutionTest {
 					}
 					""",
 			API, """
-					package net.fabricmc.fabric.api.client.creativetab.v1;
+					package net.fabricmc.fabric.api.client.itemgroup.v1;
 
 					import java.util.List;
 					import net.minecraft.world.item.CreativeModeTab;
 
-					public interface FabricCreativeModeInventoryScreen {
+					public interface FabricCreativeInventoryScreen {
 						default boolean switchToPage(int page) {
 							throw new AssertionError("Implemented by mixin");
 						}
@@ -139,7 +139,7 @@ class CreativePagerBridgeInjectorExecutionTest {
 							throw new AssertionError("Implemented by mixin");
 						}
 
-						default List<CreativeModeTab> getTabsOnPage(int page) {
+						default List<CreativeModeTab> getItemGroupsOnPage(int page) {
 							throw new AssertionError("Implemented by mixin");
 						}
 
@@ -151,11 +151,11 @@ class CreativePagerBridgeInjectorExecutionTest {
 							throw new AssertionError("Implemented by mixin");
 						}
 
-						default CreativeModeTab getSelectedTab() {
+						default CreativeModeTab getSelectedItemGroup() {
 							throw new AssertionError("Implemented by mixin");
 						}
 
-						default boolean setSelectedTab(CreativeModeTab tab) {
+						default boolean setSelectedItemGroup(CreativeModeTab tab) {
 							throw new AssertionError("Implemented by mixin");
 						}
 
@@ -173,13 +173,17 @@ class CreativePagerBridgeInjectorExecutionTest {
 
 					import java.util.ArrayList;
 					import java.util.List;
-					import net.fabricmc.fabric.api.client.creativetab.v1.FabricCreativeModeInventoryScreen;
+					import net.fabricmc.fabric.api.client.itemgroup.v1.FabricCreativeInventoryScreen;
 					import net.minecraft.client.gui.components.Button;
 					import net.minecraft.world.item.CreativeModeTab;
 					import net.neoforged.neoforge.client.gui.CreativeTabsScreenPage;
 
-					/** The merged screen: fabric-api's class tweaker gave it the interface; NeoForge's pager is all it has. */
-					public class CreativeModeInventoryScreen implements FabricCreativeModeInventoryScreen {
+					/**
+					 * The 1.21.1 screen as COREMOD receives it: no class tweaker attached the interface (this
+					 * fabric-api has none — the pinned mixin's implements clause was its only carrier), so
+					 * NeoForge's pager is all it has until the bridge attaches the interface itself.
+					 */
+					public class CreativeModeInventoryScreen {
 						private static CreativeModeTab selectedTab;
 						private final List<CreativeTabsScreenPage> pages = new ArrayList<>();
 						private CreativeTabsScreenPage currentPage;
@@ -316,15 +320,15 @@ class CreativePagerBridgeInjectorExecutionTest {
 		assertEquals(0, fabric(screen, "getCurrentPage"), "owo-lib's question while the screen opens is answered");
 		assertEquals(2, fabric(screen, "getPageCount"));
 		assertEquals(true, fabric(screen, "hasAdditionalPages"));
-		assertEquals(List.of(opened.gadgets(), opened.gizmos()), fabric(screen, "getTabsOnPage", 1), "another page lists its own tabs");
+		assertEquals(List.of(opened.gadgets(), opened.gizmos()), fabric(screen, "getItemGroupsOnPage", 1), "another page lists its own tabs");
 		assertEquals(1, fabric(screen, "getPage", opened.gizmos()));
 		assertEquals(0, fabric(screen, "getPage", opened.search()), "a default tab is on whichever page is shown");
-		assertSame(opened.building(), fabric(screen, "getSelectedTab"));
+		assertSame(opened.building(), fabric(screen, "getSelectedItemGroup"));
 
 		assertEquals(true, fabric(screen, "switchToNextPage"), "the interface's own page stepping goes through the bridge");
 		assertEquals(1, InjectorExecution.invoke(screen, "shownPage"), "NeoForge's pager shows the page");
-		assertSame(opened.gadgets(), fabric(screen, "getSelectedTab"), "and the selection moved onto it");
-		assertEquals(true, fabric(screen, "setSelectedTab", opened.colored()));
+		assertSame(opened.gadgets(), fabric(screen, "getSelectedItemGroup"), "and the selection moved onto it");
+		assertEquals(true, fabric(screen, "setSelectedItemGroup", opened.colored()));
 		assertEquals(0, InjectorExecution.invoke(screen, "shownPage"), "selecting a tab on another page turns to it");
 		assertSame(opened.colored(), InjectorExecution.invokeStatic(type, "shownTab"));
 
@@ -335,10 +339,12 @@ class CreativePagerBridgeInjectorExecutionTest {
 		assertSame(opened.colored(), InjectorExecution.invokeStatic(type, "shownTab"), "and leaves the selection as it always did");
 		assertEquals(List.of(screen), heard, "while a hook on updateSelection hears the turn");
 
+		// 1.21.1 premise: as merged, the screen does not carry the interface at all (no class tweaker
+		// attaches it; only the pinned mixin would have) — a Fabric mod's cast fails before any call,
+		// and owo-lib's updateSelection hook has no method to attach to.
 		Object stock = open(InjectorExecution.load(original)).screen();
-		AssertionError thrown = assertThrows(AssertionError.class, () -> fabric(stock, "getCurrentPage"),
-				"premise: as merged, the screen opening kills the client");
-		assertEquals("Implemented by mixin", thrown.getMessage());
+		assertThrows(IllegalArgumentException.class, () -> fabric(stock, "getCurrentPage"),
+				"premise: as merged, the screen is not a FabricCreativeInventoryScreen — the mod's cast fails");
 		assertThrows(NoSuchMethodException.class, () -> stock.getClass().getDeclaredMethod("updateSelection"),
 				"premise: as merged, owo-lib's updateSelection hook has no method to attach to");
 		assertSame(bridged, InjectorExecution.transform(injector(classes, true), SCREEN, bridged, EnvType.CLIENT),
