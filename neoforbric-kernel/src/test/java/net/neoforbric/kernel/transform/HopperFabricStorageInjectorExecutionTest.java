@@ -77,12 +77,16 @@ class HopperFabricStorageInjectorExecutionTest {
 			"net.neoforged.neoforge.items.VanillaInventoryCodeHooks", """
 					package net.neoforged.neoforge.items;
 
-					import java.util.List;
 					import net.minecraft.world.level.Level;
 					import net.minecraft.world.level.block.entity.Hopper;
 					import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
-					/** 1.21.1's shape: a plain boolean, and a nullable Boolean. */
+					/**
+					 * 1.21.1's whole surface: one insert hook taking the hopper, one extract hook taking the
+					 * level and hopper (verified in the staged base's bytecode — the patch site the injector
+					 * audits). Both decline here: this world has no cap-backed handlers, so every move the
+					 * tests observe happens on NeoForge's own vanilla-lookup path or the fabric bridge's.
+					 */
 					public class VanillaInventoryCodeHooks {
 						public static boolean insertHook(HopperBlockEntity hopper) {
 							return false; // NeoForge's handler pass found nothing to do in this world
@@ -90,19 +94,6 @@ class HopperFabricStorageInjectorExecutionTest {
 
 						public static Boolean extractHook(Level level, Hopper hopper) {
 							return null; // NeoForge's handler pass found nothing to do in this world
-						}
-
-						public static boolean insertHook(HopperBlockEntity hopper, List<String> target) {
-							if (hopper.contents().isEmpty() || target == null) return false;
-							target.add(hopper.contents().remove(0) + " (via NeoForge)");
-							return true;
-						}
-
-						public static Boolean extractHook(Level level, Hopper hopper, List<String> source) {
-							if (source == null) return null;
-							if (source.isEmpty()) return false;
-							hopper.contents().add(source.remove(0) + " (via NeoForge)");
-							return true;
 						}
 					}
 					""",
@@ -141,8 +132,7 @@ class HopperFabricStorageInjectorExecutionTest {
 					import java.util.List;
 					import net.minecraft.core.BlockPos;
 					import net.minecraft.world.level.Level;
-					import net.neoforged.neoforge.transfer.item.ContainerOrHandler;
-					import net.neoforged.neoforge.transfer.item.VanillaInventoryCodeHooks;
+					import net.neoforged.neoforge.items.VanillaInventoryCodeHooks;
 
 					public class HopperBlockEntity implements Hopper {
 						private final BlockPos position;
@@ -164,18 +154,28 @@ class HopperFabricStorageInjectorExecutionTest {
 							return contents;
 						}
 
-						/** NeoForge's, as 1.21.1 ships it: the hook first, the vanilla lookup after. */
+						/**
+						 * NeoForge's, as 1.21.1 ships it (bytecode-verified in the staged base): the hook once, and
+						 * when it declines, the vanilla attached-container lookup does the move. The injector widens
+						 * exactly that decline — its fabric ask lands between the hook and the vanilla lookup.
+						 */
 						public static boolean ejectItems(Level level, BlockPos pos, HopperBlockEntity hopper) {
 							if (VanillaInventoryCodeHooks.insertHook(hopper)) return true;
-							return VanillaInventoryCodeHooks.insertHook(hopper, getAttachedContainer(level, pos.below()));
+							List<String> attached = getAttachedContainer(level, pos.below());
+							if (attached == null || hopper.contents().isEmpty()) return false;
+							attached.add(hopper.contents().remove(0) + " (via NeoForge)");
+							return true;
 						}
 
-						/** NeoForge's, as 1.21.1 ships it: the hook first, then the vanilla source or item pickup. */
+						/** NeoForge's, as 1.21.1 ships it: the hook once, then the vanilla source or item pickup. */
 						public static boolean suckInItems(Level level, Hopper hopper) {
 							Boolean pulled = VanillaInventoryCodeHooks.extractHook(level, hopper);
 							if (pulled != null) return pulled;
-							Boolean fromContainer = VanillaInventoryCodeHooks.extractHook(level, hopper, getSourceContainer(level, hopper));
-							if (fromContainer != null) return fromContainer;
+							List<String> source = getSourceContainer(level, hopper);
+							if (source != null && !source.isEmpty()) {
+								hopper.contents().add(source.remove(0) + " (via NeoForge)");
+								return true;
+							}
 							if (hopper.isGridAligned() && !level.itemEntities.isEmpty()) {
 								hopper.contents().add(level.itemEntities.remove(0) + " (picked up)");
 								return true;
@@ -244,7 +244,7 @@ class HopperFabricStorageInjectorExecutionTest {
 		assertEquals(List.of(true, true, List.of("iron ingot (via Fabric)")), World.of(loader, "fabricOnly").tick(),
 				"the cobblestone goes into the Fabric storage below and the iron comes out of the one above");
 		assertEquals(List.of(true, true, List.of("iron ingot (via NeoForge)")), World.of(loader, "neoForgeVisible").tick(),
-				"a storage NeoForge sees still goes through NeoForge's hooks");
+				"a storage NeoForge sees still moves through NeoForge's own lookup path");
 		World nothingAbove = World.of(loader, "fabricOnly");
 		Map<?, ?> fabric = (Map<?, ?>) nothingAbove.level().getClass().getField("fabricOnly").get(nothingAbove.level());
 		fabric.keySet().removeIf(pos -> pos.toString().contains("y=65"));

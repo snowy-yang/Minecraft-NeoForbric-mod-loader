@@ -3,11 +3,13 @@ package net.neoforbric.kernel.transform;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -53,8 +55,21 @@ class HopperFabricStorageInjectorTest {
 			if (handler.visibleAnnotations == null) continue;
 			for (AnnotationNode a : handler.visibleAnnotations) collectTargets(a, targets);
 		}
-		assertTrue(targets.stream().anyMatch(t -> t.contains(";getAttachedContainer(")), targets.toString());
-		assertTrue(targets.stream().anyMatch(t -> t.contains(";getSourceContainer(")), targets.toString());
+		// 1.21.1's fabric-api ships intermediary modules: the anchors are written in Yarn
+		// (getOutputInventory / getInputInventory), not Mojmap — Mixin resolves them through the refmap.
+		assertTrue(targets.stream().anyMatch(t -> t.contains(";getOutputInventory(")),
+				"the mixin anchors the vanilla insert lookup, in the Yarn it was written in: " + targets);
+		assertTrue(targets.stream().anyMatch(t -> t.contains(";getInputInventory(")),
+				"the mixin anchors the vanilla extract lookup, in the Yarn it was written in: " + targets);
+		// The refmap of the module the kernel actually loads — the remapped one under
+		// build/transfer-api-compile — must carry those Yarn keys to the Mojmap call sites; that
+		// translation is RefmapRemapper's, without which every anchor soft-skips on this base.
+		Path remapped = Path.of("build/transfer-api-compile/fabric-transfer-api-v1-0.116.17.jar");
+		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(remapped),
+				"the remapped transfer module is absent (run ./gradlew remapTransferApis)");
+		String refmap = new String(zipEntry(remapped, "fabric-transfer-api-v1-refmap.json"), StandardCharsets.UTF_8);
+		assertTrue(refmap.contains("getAttachedContainer"), refmap);
+		assertTrue(refmap.contains("getSourceContainer"), refmap);
 	}
 
 	@Test void bothHookDeclinesAskFabric() throws Exception {
@@ -171,6 +186,15 @@ class HopperFabricStorageInjectorTest {
 			if ("target".equals(a.values.get(i)) && v instanceof String s) out.add(s);
 			if (v instanceof AnnotationNode nested) collectTargets(nested, out);
 			if (v instanceof List<?> list) for (Object o : list) if (o instanceof AnnotationNode nested) collectTargets(nested, out);
+		}
+	}
+
+	/** One entry of a jar, contents included. */
+	private static byte[] zipEntry(Path jar, String entry) throws Exception {
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			ZipEntry found = zip.getEntry(entry);
+			if (found == null) throw new NoSuchElementException(entry + " in " + jar);
+			try (InputStream in = zip.getInputStream(found)) { return in.readAllBytes(); }
 		}
 	}
 
