@@ -102,7 +102,7 @@ class NoRawAssumptionsTest {
 				"@EnabledIfSystemProperty(named = \"x\", matches = \"y\")",
 				"@DisabledIfEnvironmentVariable(named = \"x\", matches = \"y\")",
 				"@EnabledOnOs(OS.MAC)",
-				"@EnabledForJreRange(min = JRE.JAVA_25)",
+				"@EnabledForJreRange(min = JRE.JAVA_21)",
 				"throw new TestAbortedException(\"why\");",
 				"throw new org.opentest4j.TestAbortedException();")) {
 			assertTrue(!firstOffence(raw).isEmpty(), "not caught: " + raw);

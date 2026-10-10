@@ -689,7 +689,7 @@ the bytes alone again, `-Dneoforbric.mixinRetarget.renameCensus.leftExit=off` ke
 piece, and `-Dneoforbric.mixinRetarget.renameCensus.uncalled=off` keeps every injector out of the `UNCALLED` body), and per-surface Fabric adapters
 (`FabricBlockBreakMixinAdapter`, `FabricEntityMixinAnchors`, `FabricClientMixinAnchors` — which also stands any Fabric
 `@Inject` just before or after `Gui.extractRenderState`'s screen draw at NeoForge's `ClientHooks.extractScreen`, where the
-merged body draws the screen; LiquidBounce draws its whole browser menu there — `FabricEnchantmentMixinAdapter`,
+patched body draws the screen; LiquidBounce draws its whole browser menu there — `FabricEnchantmentMixinAdapter`,
 `FabricMiningMixinAdapter`, `FabricSoundMixinAdapter`, `FabricServerLanguageMixinAdapter`), and `ReplacedCallRedirects`: a
 `@Redirect` of a vanilla call the carrier replaced in place with its own, whose handler only puts a condition around
 forwarding the vanilla call, moves onto the carrier's call and forwards that one, along a row that says where the two
@@ -697,10 +697,10 @@ stand for each other, which operands carry the same values and why (ViaFabricPlu
 `KeyMapping.matches` → `isActiveAndMatches`, item use — `ItemStack.isSameItem` → `CommonHooks.canContinueUsing`, with the
 handler's own logic keeping vanilla's argument order, and shovel paths — `FLATTENABLES.get` → the state's
 `SHOVEL_FLATTEN` modification; only for the families whose own class made the vanilla call; `-Dneoforbric.replacedCallRedirects=off`), and `MixinTwinRebind`: an injector written for vanilla's signature of a method
-the merged base keeps but nothing in the merged game calls moves to the one overload the carrier added in its place,
+the base keeps but nothing in the game calls moves to the one overload the carrier added in its place,
 along a row of `carrier-twins.txt` (`CarrierTwinCensusTest`: vanilla's method is uncalled for the mod's family and is no
 carrier stub, the overload takes each of vanilla's parameters — matched one to one by local variable name and type —
-and every method that family's own game called vanilla's from calls the overload in the merged base). The handler is
+and every method that family's own game called vanilla's from calls the overload in the base). The handler is
 wrapped when it captures vanilla's arguments in other places than the overload has them: the outer takes the
 overload's arguments and hands the original vanilla's. It moves only while vanilla's method is still uncalled (no
 installed mod references it), only an `@Inject` capturing vanilla's arguments or none or an `@At`-driven kind whose
@@ -713,7 +713,7 @@ own and kept the others — an `@At(INVOKE)` ordinal counted on vanilla's body i
 that is the same call, along a reviewed row that maps each of vanilla's occurrences to the kept one or to none and names
 the call each kept occurrence is followed by (checked on both jars, and again on the live method). ViaFabricPlus' 1.12.2
 placement hook sits before the third `ItemStack.isEmpty()` of `MultiPlayerGameMode.performUseItemOn`; NeoForge and
-MinecraftForge ask `doesSneakBypassUse` of both hand stacks where vanilla asked `isEmpty`, so the merged body keeps only
+MinecraftForge ask `doesSneakBypassUse` of both hand stacks where vanilla asked `isEmpty`, so the patched body keeps only
 the third. Only for the families compiled against vanilla's count; `-Dneoforbric.thinnedCallOrdinals=off`.
 `GuestInjectorPruner` (COREMOD) trims individual injectors from a guest mixin
 class where the kernel replaces their function, and, at the end of the bytecode provider's adapters, the injectors the
@@ -764,7 +764,7 @@ stack passes through a method with a recorded conflict, `CrashAttribution` names
 
 ## 8. Event bridges
 
-On the merged base the two Forge families' hooks competed for the same call sites and one won; the loser's hook
+On the patched base a Forge-family hook and NeoForge's own can compete for the same call site and one wins; the loser's hook
 is dead code, so that family's listeners sit on a bus nobody posts to. A MinecraftForge mod needs an instance of
 exactly `net.minecraftforge.…Event`, so re-emission is intrinsic.
 
@@ -781,13 +781,13 @@ exactly `net.minecraftforge.…Event`, so re-emission is intrinsic.
   bridges that are not bus-to-bus (`ForgeDamageSeamsInjector`, `ForgeCreativeTabsInjector`,
   `ForgeSpawnPlacementsInjector`, `ForgeClientConsumersInjector`, `ForgeBlockTintInjector`,
   `ForgeOverlayNeuterInjector`/`KernelForgeOverlayLayers`, …).
-- **The other directions** — NeoForge events the merged body no longer posts (`ItemTooltipEvent` via
+- **The other directions** — NeoForge events the patched body no longer posts (`ItemTooltipEvent` via
   `KernelItemTooltips`, `ScreenEvent.Opening/Closing` via `NeoScreenEventsInjector`, conversion `Post` via
   `NeoConversionPostInjector`); Fabric API events fired from NeoForge's own sites where Fabric's mixin cannot fit
   (`KernelHudBridge` for
   `HudElementRegistry`, `FabricFuelValuesInjector`, tooltip and block-break adapters).
 - **Audits** — `HookCallSiteCensus` (which hooks of `ForgeEventFactory`/`ForgeEventFactoryClient`/NeoForge
-  `ClientHooks` the merged base still calls), `DeadEventAudit` + `ForgeBusSubscriptions` (who listens to a dead
+  `ClientHooks` the base still calls), `DeadEventAudit` + `ForgeBusSubscriptions` (who listens to a dead
   event, including subscriptions an annotation scan cannot see), `DeadHookWorklist` (the join, ordered by how many
   installed jars notice), `EventChainAudit` (every cross-bus post, checked by one rule set; gate-m41).
 
@@ -806,7 +806,7 @@ finder (`-Dneoforbric.modDataPacks=off` disables the Forge-family packs).
 
 ### 9.2 Client assets
 
-NeoForge's `mod_resources` source is orphaned on the merged base. `ClientPackHookInjector` redirects the body of
+NeoForge's `mod_resources` source is orphaned on this base. `ClientPackHookInjector` redirects the body of
 `ClientModLoader.setupModResourcePacks(PackRepository)` to `KernelLifecycle.onClientResourcePacks`, where
 `KernelClientPacks` adds one pack per ecosystem jar (compatibility forced to `COMPATIBLE`, as both genuine loaders
 do) before the first reload. `PackScreenHiddenFilterInjector` keeps those packs out of the resource-pack screen.
@@ -960,7 +960,7 @@ Pure JDK, no dependencies, bytecode release 17, version `0.3.1-beta2`.
 ```
 java -jar neoforbric-kernel-installer.jar                     # window (InstallerGui)
 java -jar neoforbric-kernel-installer.jar --dir DIR [options] # headless install
-    --mc 26.2  --artifacts DIR  --jdk PATH  --remote  --release TAG  --mirror PREFIX  --offline
+    --mc 1.21.1  --artifacts DIR  --jdk PATH  --remote  --release TAG  --mirror PREFIX  --offline
 java -jar neoforbric-kernel-installer.jar --doctor [--dir DIR] [--jdk PATH]
 ```
 
@@ -970,7 +970,7 @@ java -jar neoforbric-kernel-installer.jar --doctor [--dir DIR] [--jdk PATH]
 
 ```
 neoforge userdev ─┬→ neoforge-runtime.jar ─────────────┐   (NeoForgeRuntimeBuilder)
-                  └→ NFRT → patched-mc-neoforge-26.2.jar ┘   (NfrtRunner, gameJarNoRecomp)
+                  └→ NFRT → patched-mc-neoforge-1.21.1.jar ┘   (NfrtRunner, gameJarNoRecomp)
                                                                 │
                                                        link check ─→ a set that does not link fails the install
 ```
@@ -984,22 +984,22 @@ neoforge userdev ─┬→ neoforge-runtime.jar ──────────�
   link check reports `new 0`.**
 - `--artifacts DIR` ("Built artifacts (leave empty)" in the window) is for developers only and skips the build.
   `GameArtifacts` takes the two jars from that directory alone and opens each before anything is downloaded or
-  written: the base must be Minecraft 26.2 and must be NeoForge-patched — its `net/minecraft/` classes refer to
+  written: the base must be Minecraft 1.21.1 and must be NeoForge-patched — its `net/minecraft/` classes refer to
   `net/neoforged/` — and the runtime must hold NeoForge's own core class and its mod loader (`FMLLoader`,
   `IModInfo`), naming the pinned version as its manifest's main `Implementation-Version` (`Pins.NEOFORGE`). Only
   then the link check, which on its own passes any jar that refers to nothing outside itself (issue #13); a
   supplied set that fails it is reported as files that do not fit together, with the same way out.
-- `Pins`: `MINECRAFT = "26.2"` (the only supported version), `NEOFORGE = "26.2.0.88"`, `NFRT = "2.0.18"`,
+- `Pins`: `MINECRAFT = "1.21.1"` (the only supported version), `NEOFORGE = "21.1.256"`, `NFRT = "2.0.18"`,
   `NFRT_RESULT = "gameJarNoRecomp"`, each with its reason in the source. `BuildStamp` keys every cached artifact to
   the pin set, so a pin bump cannot be served from cache.
 - `JdkLocator` needs Java ≥ 21 for the build tools (NeoFormRuntime is class-file 65); it tries the running JVM,
-  then the launcher's runtimes, then the system, and never downloads a JDK. The game itself needs Java 25.
+  then the launcher's runtimes, then the system, and never downloads a JDK. The game itself needs Java 21.
 
 ### 13.2 The profile
 
-`Installer` writes `versions/26.2-neoforbric/26.2-neoforbric.json`:
+`Installer` writes `versions/1.21.1-neoforbric/1.21.1-neoforbric.json`:
 
-- `inheritsFrom: "26.2"`, `mainClass: net.neoforbric.kernel.boot.KernelClientLaunch`, no JVM arguments;
+- `inheritsFrom: "1.21.1"`, `mainClass: net.neoforbric.kernel.boot.KernelClientLaunch`, no JVM arguments;
 - game arguments `--gameJar <patched-mc-neoforge>`, `--runtimeJar <neoforge-runtime>`,
   `--libraryPath <every vanilla library for this platform>`;
 - `libraries`: the bundled NeoForbric jars and the kernel's third-party dependencies (from the kernel's own
@@ -1008,7 +1008,7 @@ neoforge userdev ─┬→ neoforge-runtime.jar ──────────�
 - a `neoforbric` block, metadata only, declaring `net.fabricmc:fabric-loader:0.19.3` so launchers that detect a
   loader by searching the JSON's text treat the instance as modded (and give it its own mods folder).
 
-Mods for both ecosystems (Fabric and NeoForge) go in `<mcDir>/mods` (or `versions/26.2-neoforbric/mods` under an
+Mods for both ecosystems (Fabric and NeoForge) go in `<mcDir>/mods` (or `versions/1.21.1-neoforbric/mods` under an
 isolating launcher).
 
 ### 13.3 Where NeoForbric's own jars come from
@@ -1032,7 +1032,7 @@ version is installed, pins, which artifacts are present or will be built, expect
   baseline is `neoforbric-loader/src/test/resources/merge/link-check-baseline.txt`.
 - **The developer pipeline.** `run/assemble-neoforge-runtime.sh` produces the staged `neoforge-runtime` under
   `neoforbric-loader/run/neoforge-runtime/` that the kernel's game side compiles against and every gate runs on;
-  `run/launch-server-26.2.sh` and `run/launch-client-26.2.sh` boot it. `NEOFORBRIC_OLD` (or
+  `run/launch-1.21.11.sh` boots it (the 26.2-generation launchers stay in the tree as history). `NEOFORBRIC_OLD` (or
   `-Pneoforbric.stagedRoot`) points another worktree at a staged root. The game base itself is downloaded and
   built by the installer (`Pins.NEOFORGE` userdev + NeoFormRuntime), never committed.
 - **Test inputs.** The canary mod sources in `run/livemod-src*`/`testmod-src` (`build-testmods.sh`), and the
@@ -1083,7 +1083,7 @@ NeoForbric/
 
 The current development entry point is `python3 tools/dev.py client` (Windows: `py tools/dev.py client`).
 It prepares isolated game inputs under `neoforbric-kernel/.dev/` with the installer's artifact pipeline, resolves
-libraries/assets and the pinned compile APIs, then builds and launches the current kernel. JDK 25+ and
+libraries/assets and the pinned compile APIs, then builds and launches the current kernel. JDK 21+ and
 Python 3.9+ are required. Gradle exposes `prepareDev`, `runClient`, `runServer` and `devDoctor`; preparation
 and launch must be separate Gradle invocations because the game-side wiring is configured before tasks run.
 See [the development guide](neoforbric-kernel/run/README.md) for commands and configuration.
@@ -1103,7 +1103,7 @@ cd neoforbric-kernel
 java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report out.json
 ```
 
-- **Staged artifacts.** The game side compiles against `neoforbric-loader/run/neoforge-base/patched-mc-neoforge-26.2.jar`
+- **Staged artifacts.** The game side compiles against the staged `patched-mc-neoforge-1.21.1.jar`
   and `…/neoforge-runtime/neoforge-runtime.jar`, plus brigadier, datafixerupper
   and gson from a local Minecraft install, a fabric-api jar for the transfer modules (`-Pneoforbric.fabricApi`), and
   Team Reborn Energy 5.0.0 pinned by SHA-256 (`run/energy-api/energy-5.0.0.jar` or `-Pneoforbric.rebornEnergy`).
@@ -1122,7 +1122,7 @@ java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report 
 | Gate | Asserts |
 | --- | --- |
 | m0 | build, the whole suite, `--scan`, merged-base link check, discovery oracle, tool self-tests, transfer suite |
-| m1, m3 | merged base to `Done` with zero mods and no genuine lifecycle; both Forge-family baselines + a real `@Mod` |
+| m1, m3 | the base to `Done` with zero mods and no genuine lifecycle; the Forge-family baseline + a real `@Mod` |
 | m2, m2b | a real Fabric mod, then full fabric-api, with no Fabric Loader |
 | m4, m4-canary, m7-neo | real mods of all three ecosystems in one server; pure NeoForge jars |
 | m8, m10 | multiloader `pack.mcmeta` sections do not delete or break a pack |
@@ -1153,11 +1153,11 @@ java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report 
   `tools/junit_report.py`): a test that starts skipping fails the job, and a line that stops skipping has to be
   deleted. The run page shows tests / executed / skipped with the most common skip reasons, and the JUnit reports
   are uploaded as `kernel-test-results`; regenerate the baseline from that artifact's `skips-actual-ci-unstaged.tsv`
-  or with `-Pneoforbric.writeSkipBaseline`. Job `kernel-prepared` (JDK 25) first builds the game files on the runner
-  with `tools/dev.py prepare --no-assets` (Minecraft from Mojang, Forge and NeoForge from their own mavens, the
-  merged base and carriers built there, plus the two canary mods and the merge report the unit tests read; only
+  or with `-Pneoforbric.writeSkipBaseline`. Job `kernel-prepared` (JDK 21) first builds the game files on the runner
+  with `tools/dev.py prepare --no-assets` (Minecraft from Mojang and NeoForge from its own maven, the
+  patched base and carrier built there, plus the two canary mods and the reports the unit tests read; only
   upstream downloads are cached and nothing derived is uploaded), then runs the same suite plus `transferTest` with
-  `-Pneoforbric.requireFixtures=staged,game-side,mc-libraries,java-25`: every kind of fixture except third-party mod
+  `-Pneoforbric.requireFixtures=staged,game-side,mc-libraries,java-21`: every kind of fixture except third-party mod
   packs is present there, so a skip for any other kind, or an untagged skip, fails the job at the test that skipped.
   The 136 tests that still skip all need third-party mod packs that are not in this repository, held to
   `ci-prepared.tsv` the same way. Job `development-tools` runs
@@ -1258,8 +1258,12 @@ Break one and the failure usually surfaces far from the cause.
 
 ## 19. Current state and known boundaries
 
-- **Minecraft 26.2 only**, Mojmap identity namespace. There is no remapping step: a jar compiled against another
-  namespace is not translated (`kernel/mapping/` is carried over from the weld and is not on the boot path).
+- **Minecraft 1.21.1 only**, Mojmap base. The base needs no translation of its own, but the Fabric side is
+  **not** identity-mapped on this anchor: real fabric modules and mods are intermediary-named, and the kernel
+  answers that before classes are served — the build remaps the modules it compiles against, `RefmapRemapper`
+  rewrites refmap VALUES into the base's namespace (KEYS verbatim), and `kernel/mapping/` is the machinery doing
+  it. A third-party fabric mod installed as a jar is the open boundary: pack-time/runtime remap of guest mods is
+  planned work (§20), and until it lands a guest fabric jar still reads intermediary names.
 - **The game base is NeoForge's game, unmerged.** NFRT's binary-patched result is used as-is: no second ecosystem is
   spliced into it, so there are no conflict resolutions to report. What a mod loses because NeoForbric cannot supply
   it is reported instead — `DeadEventAudit`, `HookCallSiteCensus`, `FieldDriftAudit`, `AbiLinkAudit`,
@@ -1284,5 +1288,10 @@ Break one and the failure usually surfaces far from the cause.
 - [`neoforbric-loader/README.md`](neoforbric-loader/README.md), [`neoforbric-loader/run/README.md`](neoforbric-loader/run/README.md) — the first generation and the artifact pipeline
 - [`neoforbric-loader/CREDITS.md`](neoforbric-loader/CREDITS.md), [`neoforbric-loader/MAPPINGS.md`](neoforbric-loader/MAPPINGS.md) — the clean-room boundary and mapping position
 - The class javadoc. Almost every class under `net.neoforbric.kernel` opens with the failure it exists for.
+
+Recorded open boundary: **runtime remap of guest Fabric jars.** The build-side machinery (module remap,
+refmap rewrite) is what fabric-api itself gets; a third-party fabric mod's own jar is not yet translated
+at pack or runtime time on the kernel path, which is the next wiring the anchor needs. Canary and gate
+boots pass today because the canaries are the kernel's own mojmap-compiled builds.
 
 NeoForbric is not affiliated with Mojang, FabricMC, MinecraftForge or NeoForged.

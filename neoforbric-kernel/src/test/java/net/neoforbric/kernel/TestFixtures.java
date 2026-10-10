@@ -52,8 +52,8 @@ public final class TestFixtures {
 		GAME_SIDE("game-side"),
 		/** A local Minecraft install: the vanilla jar and the launcher's libraries under {@link #minecraftDir()}. */
 		MC_LIBRARIES("mc-libraries"),
-		/** A JDK that links the class-file 69 game. */
-		JAVA_25("java-25"),
+		/** A JDK that links the class-file 65 game (1.21.1 is Java 21 bytecode). */
+		JAVA_21("java-21"),
 		/** Third-party mod jars and packs, under run/ or build/compat-inputs/. */
 		THIRD_PARTY("third-party"),
 		/** A test that only runs when asked for, such as a long soak or a live network probe. */
