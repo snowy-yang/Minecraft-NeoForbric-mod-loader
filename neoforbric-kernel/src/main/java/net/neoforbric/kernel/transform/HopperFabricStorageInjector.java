@@ -71,7 +71,19 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 			}
 			return bytes;
 		}
-		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		// COMPUTE_FRAMES: the edits add branch targets whose frames and stack maxima must be derived, and
+		// javac's own frames no longer describe the reshaped control flow. The getCommonSuperClass fallback
+		// covers a merge of types this transform-time loader cannot load (the unit tests' stand-ins, or a
+		// boot-order class): such a merge degrades to Object, which every reference type satisfies.
+		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
+			@Override protected String getCommonSuperClass(String type1, String type2) {
+				try {
+					return super.getCommonSuperClass(type1, type2);
+				} catch (RuntimeException unavailable) {
+					return "java/lang/Object";
+				}
+			}
+		};
 		node.accept(writer);
 		NeoForbricLog.info("[NeoForbric/Hopper] HopperBlockEntity's two VanillaInventoryCodeHooks declines now ask Fabric's "
 				+ "item storage lookup first (a Fabric storage NeoForge's item capability cannot see never reached "
@@ -99,11 +111,14 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 		}
 		if (insertDeclined == null) return "ejectItems has no insert-hook decline";
 
+		// The ask goes BEFORE the vanilla path's label, not after the decline jump: between the jump and
+		// the label lies the hook's own handled fallthrough (iconst_1; ireturn), which must stay live — an
+		// insertion after the jump would capture the handled path too, replacing NeoForge's answer with
+		// Fabric's and leaving the displaced fallthrough as dead code the JVM refuses for want of a frame.
 		LabelNode insertVanilla = insertDeclined.label;
 		LabelNode insertAsk = new LabelNode();
 		InsnList ask = new InsnList();
 		ask.add(insertAsk);
-		ask.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
 		ask.add(new VarInsnNode(Opcodes.ALOAD, 0));
 		ask.add(new VarInsnNode(Opcodes.ALOAD, 1));
 		ask.add(new VarInsnNode(Opcodes.ALOAD, 2));
@@ -111,7 +126,7 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 		ask.add(new JumpInsnNode(Opcodes.IFEQ, insertVanilla));
 		ask.add(new InsnNode(Opcodes.ICONST_1));
 		ask.add(new InsnNode(Opcodes.IRETURN));
-		eject.instructions.insert(insertDeclined, ask);
+		eject.instructions.insertBefore(insertVanilla, ask);
 		insertDeclined.label = insertAsk;
 
 		// suckInItems: extractHook; astore; aload; ifnull vanilla — null ("not handled") jumps to the vanilla
@@ -130,18 +145,27 @@ public final class HopperFabricStorageInjector implements ClassTransformer {
 		}
 		if (extractDeclined == null) return "suckInItems has no extract-hook decline";
 
+		// Same placement rule as ejectItems: before the vanilla label, past the handled fallthrough
+		// (aload pulled; booleanValue; ireturn) the insertion must not displace.
 		LabelNode extractVanilla = extractDeclined.label;
 		LabelNode extractAsk = new LabelNode();
 		InsnList ask2 = new InsnList();
 		ask2.add(extractAsk);
-		ask2.add(new FrameNode(Opcodes.F_SAME, 0, null, 0, null));
 		ask2.add(new VarInsnNode(Opcodes.ALOAD, 0));
 		ask2.add(new VarInsnNode(Opcodes.ALOAD, 1));
 		ask2.add(new MethodInsnNode(Opcodes.INVOKESTATIC, RUNTIME, "extract", "(Ljava/lang/Object;Ljava/lang/Object;)I", false));
+		// DUP + IFLT + IRETURN: the branch pops one copy, the fallthrough returns the other. A branch
+		// straight to the vanilla path would enter it with the leftover copy on the stack — the exact
+		// corruption the verifier caught — so the declined branch first pops its copy, then falls into
+		// the vanilla path with the empty stack it was promised.
+		LabelNode extractPop = new LabelNode();
 		ask2.add(new InsnNode(Opcodes.DUP));
-		ask2.add(new JumpInsnNode(Opcodes.IFLT, extractVanilla));
+		ask2.add(new JumpInsnNode(Opcodes.IFLT, extractPop));
 		ask2.add(new InsnNode(Opcodes.IRETURN));
-		suck.instructions.insert(extractDeclined, ask2);
+		ask2.add(extractPop);
+		ask2.add(new InsnNode(Opcodes.POP));
+		// No GOTO: the pop sits directly before the vanilla label, so the declined path falls into it.
+		suck.instructions.insertBefore(extractVanilla, ask2);
 		extractDeclined.label = extractAsk;
 		return null;
 	}
