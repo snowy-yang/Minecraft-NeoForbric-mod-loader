@@ -244,13 +244,9 @@ public final class NeoForbricMergedBaseCompatTransformer implements ClassTransfo
 			"(Lcom/mojang/serialization/Codec;Ljava/lang/String;)Lcom/mojang/serialization/Codec;";
 	private static final String KERNEL_FABRIC_CONDITIONS = "net/neoforbric/kernel/runtime/KernelFabricConditions";
 
-	private static final String ADD_CLIENT_RELOAD_LISTENERS =
-			"net/neoforged/neoforge/client/event/AddClientReloadListenersEvent";
-	private static final String VANILLA_CLIENT_LISTENERS =
-			"net/neoforged/neoforge/client/resources/VanillaClientListeners";
-	private static final String NAME_FOR_CLASS =
-			"(Ljava/lang/Class;)Lnet/minecraft/resources/Identifier;";
-	private static final String KERNEL_RELOAD_NAMES = "net/neoforbric/kernel/runtime/KernelClientReloadNames";
+	// 1.21.1: the client-reload-names repair is gone with its 26.x-only anchor (NeoForge's
+	// AddClientReloadListenersEvent does not exist on this line); the particle and key-mapping repairs below
+	// are what remain of the client resource-reload compat.
 	private static final String NAME_KEYED = "Ljava/util/Map;";
 	/** Vanilla's own descriptor for it, and the one fabric-api reads. */
 	private static final String ID_KEYED = "Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;";

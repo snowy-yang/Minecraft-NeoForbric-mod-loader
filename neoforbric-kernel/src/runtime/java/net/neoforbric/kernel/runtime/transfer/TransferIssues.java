@@ -2,6 +2,7 @@ package net.neoforbric.kernel.runtime.transfer;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 import java.util.function.Consumer;
 
 import net.neoforbric.kernel.util.NeoForbricLog;
@@ -21,4 +22,9 @@ public final class TransferIssues {
 	public static void reportType(String code, String owner, String detail) {
 		if (REPORTED.add(code + ":" + owner)) reporter.accept(new Issue(code, owner, detail));
 	}
+
+	// 1.21.1: the scenario suite asserts which codes a failed replay reports. Same-package test seams: the
+	// reporter swap alone cannot see a code that was already reported once, so the capture sees the set too.
+	static final List<Issue> findingsForTest() { return List.copyOf(REPORTED.stream().map(k -> { String[] parts = k.split(":", 2); return new Issue(parts[0], parts[1], ""); }).toList()); }
+	static void clearForTest() { REPORTED.clear(); }
 }

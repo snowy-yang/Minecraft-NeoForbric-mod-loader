@@ -21,7 +21,7 @@ import org.objectweb.asm.tree.TypeInsnNode;
 import net.fabricmc.fabric.api.lookup.v1.block.BlockApiLookup;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -115,7 +115,7 @@ class BlockTransferBridgeTest {
 		public void registerForBlocks(BlockApiProvider<Object, Direction> provider, Block... blocks) { throw new UnsupportedOperationException(); }
 		public <T extends BlockEntity> void registerForBlockEntity(BiFunction<? super T, Direction, Object> provider, BlockEntityType<T> type) { throw new UnsupportedOperationException(); }
 		public void registerForBlockEntities(BlockEntityApiProvider<Object, Direction> provider, BlockEntityType<?>... types) { throw new UnsupportedOperationException(); }
-		public Identifier getId() { throw new UnsupportedOperationException(); }
+		public ResourceLocation getId() { throw new UnsupportedOperationException(); }
 		public Class<Object> apiClass() { return Object.class; }
 		public Class<Direction> contextClass() { return Direction.class; }
 		public BlockApiProvider<Object, Direction> getProvider(Block block) { throw new UnsupportedOperationException(); }

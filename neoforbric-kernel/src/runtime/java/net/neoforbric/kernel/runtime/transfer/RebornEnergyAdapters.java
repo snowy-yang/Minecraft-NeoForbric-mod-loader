@@ -92,12 +92,24 @@ public final class RebornEnergyAdapters {
 			if (request == 0) return 0;
 			int simulated = receive ? handler.receiveEnergy(request, true) : handler.extractEnergy(request, true);
 			if (EnergyUnits.moved(simulated, request) == 0) return 0;
-			// The real call runs when the Fabric transaction commits, with the simulated amount as its cap.
-			// A store that dies or shrinks before then moves less than promised, and the mismatch is reported.
-			context.addCloseCallback((closed, result) -> {
-				int moved = receive ? handler.receiveEnergy(simulated, false) : handler.extractEnergy(simulated, false);
-				if (moved != simulated) TransferIssues.report("REPLAY_MISMATCH", handler,
-						"the real energy move transferred " + moved + " of the promised " + simulated + "; another actor changed the store between simulate and commit");
+			// The real call runs when the OUTERMOST transaction closes, with the simulated amount as its cap:
+			// an ordinary close callback would fire at a nested commit (probed against the real fabric API),
+			// and a root abort after that would have no undo. An aborted root runs this with wasCommitted
+			// false and nothing happens — the store was never touched.
+			// The same two-hook promise the item and fluid adapters use: the close callback cancels when this
+			// scope itself aborts (the only place that learns it), the outer callback replays when the promise
+			// survived and the outermost transaction committed.
+			boolean[] cancelled = { false };
+			context.addCloseCallback((closed, result) -> { if (!result.wasCommitted()) cancelled[0] = true; });
+			context.addOuterCloseCallback(result -> {
+				if (cancelled[0] || !result.wasCommitted()) return;
+				try {
+					int moved = receive ? handler.receiveEnergy(simulated, false) : handler.extractEnergy(simulated, false);
+					if (moved != simulated) TransferIssues.report("REPLAY_MISMATCH", handler,
+							"the real energy move transferred " + moved + " of the promised " + simulated + "; another actor changed the store between simulate and commit");
+				} catch (RuntimeException failed) {
+					TransferIssues.report("REPLAY_FAILED", handler, "the real energy move threw after the simulation promised " + simulated);
+				}
 			});
 			return simulated;
 		}

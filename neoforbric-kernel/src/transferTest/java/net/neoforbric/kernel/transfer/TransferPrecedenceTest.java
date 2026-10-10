@@ -77,18 +77,23 @@ class TransferPrecedenceTest {
 	}
 	/** The questions the bridge asks, in order: a later source is never consulted once an earlier one answered. */
 	@Test void eachConsumerAsksTheOwnersEcosystemFirstAndStopsAtTheFirstAnswer() {
-		// A NeoForge consumer of a NeoForge machine: its capability, then only Fabric's providers for the block.
+		// A NeoForge consumer reaching the fallback has already had its capability answer nothing (the fallback
+		// IS the native query's last word on 1.21.1), so the bridge asks Fabric alone — and for a NeoForge
+		// owner only Fabric's providers for that block, never its generic Container view.
 		Table neoMachine = new Table(Ecosystem.NEOFORGE, null, null, GENERIC);
 		assertNull(resolve(Ecosystem.NEOFORGE, neoMachine));
-		assertEquals(List.of("neo", "fabric-explicit"), neoMachine.asked);
+		assertEquals(List.of("fabric-explicit"), neoMachine.asked);
 		// ...and of a Fabric-owned block entity: Fabric's whole lookup, which answers.
 		Table fabricChest = new Table(Ecosystem.FABRIC, "neo", null, GENERIC);
 		assertEquals(GENERIC, resolve(Ecosystem.NEOFORGE, fabricChest));
 		assertEquals(List.of("fabric"), fabricChest.asked);
-		// A Fabric consumer never asks Fabric through the bridge; a NeoForge owner's capability answers.
-		Table neoOwned = new Table(Ecosystem.NEOFORGE, null, EXPLICIT, GENERIC);
-		assertNull(resolve(Ecosystem.FABRIC, new Table(Ecosystem.NEOFORGE, null, null, GENERIC)));
-		assertEquals(EXPLICIT, resolve(Ecosystem.FABRIC, neoOwned));
+		// A Fabric consumer never asks Fabric through the bridge: its own lookup already consulted Fabric's
+		// providers and generic fallbacks before the bridge's fallback fired, so only the NeoForge capability
+		// remains to ask — and when it too has nothing, the answer is nothing.
+		assertNull(resolve(Ecosystem.FABRIC, new Table(Ecosystem.NEOFORGE, null, EXPLICIT, GENERIC)));
+		Table neoOwned = new Table(Ecosystem.NEOFORGE, "neo", EXPLICIT, GENERIC);
+		assertEquals("neo", resolve(Ecosystem.FABRIC, neoOwned));
+		assertEquals(List.of("neo"), neoOwned.asked);
 	}
 	@Test void theOwnerIsTheModThatRegisteredTheTypeNamespace() {
 		var mods = List.of(entry(Ecosystem.FABRIC, "neoforbrictransferfabric"), entry(Ecosystem.NEOFORGE, "neoforbrictransferneo"));

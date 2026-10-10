@@ -153,14 +153,14 @@ public final class NativeTransferAdapters {
 		return new FabricEngine<>(ops, lookup, valid, generation, codec);
 	}
 
-	/** The mutation surface the NeoForge facades (and the scenario suite) drive on a Fabric storage. */
+	/**
+	 * The mutation surface the NeoForge facades (and the scenario suite) drive on a Fabric storage. Direction
+	 * and execution are separate axes: a simulate answers with what would move and aborts its scope (the one
+	 * direction with a real rollback), an execute commits it. Returns the native units moved.
+	 */
 	interface NeoMoves<F> {
-		/**
-		 * Moves {@code nativeAmount} native units of {@code resource}, at {@code slot} when {@code slot >= 0},
-		 * through the Fabric transaction already open (or a root of our own). A simulation aborts its scope; an
-		 * execute commits it. Returns the native units moved.
-		 */
-		long move(int slot, F resource, long nativeAmount, boolean execute);
+		long insert(int slot, F resource, long nativeAmount, boolean execute);
+		long extract(int slot, F resource, long nativeAmount, boolean execute);
 	}
 
 	/** The NeoForge-side semantics core, parameterized for the tests; production reaches it through the facades. */
@@ -264,16 +264,42 @@ public final class NativeTransferAdapters {
 				return 0;
 			}
 			if (simulated == 0) return 0;
-			// The replay re-resolves and re-checks: the endpoint may die between the simulation and the commit.
-			context.addCloseCallback((closed, result) -> {
-				H live = current();
+			// The promise needs BOTH hooks, each for a failure the other cannot see (both probed against the
+			// real 1.21.1 fabric-transfer-api):
+			// - an ordinary close callback fires when THIS scope closes — eagerly at a nested commit — so it is
+			//   the only place that learns a nested scope ABORTED. It cancels the promise; a committed scope
+			//   leaves it alive for the root's decision.
+			// - an outer close callback defers to the outermost close, so the replay never runs at a nested
+			//   commit. But it fires at the root close with the ROOT's result even when the promise's own scope
+			//   aborted — without the cancellation it would replay a move fabric already undid.
+			boolean[] cancelled = { false };
+			context.addCloseCallback((closed, result) -> { if (!result.wasCommitted()) cancelled[0] = true; });
+			context.addOuterCloseCallback(result -> {
+				if (cancelled[0] || !result.wasCommitted()) return;
+				// The replay re-resolves and re-checks: the endpoint may die between the simulation and the
+				// commit. A dead endpoint or a failed replay is REPORTED, never thrown: fabric does not roll
+				// back the other participants when a close callback throws (probed: a SnapshotParticipant
+				// that committed kept its mutation), so rethrowing could not deliver all-or-nothing — it would
+				// only crash the commit path after the loss already happened.
+				H live;
+				try {
+					live = current();
+				} catch (LiveTransferEndpoints.Unavailable invalidated) {
+					TransferIssues.report("ENDPOINT_INVALIDATED", lookup, "the endpoint was invalidated before the simulated move replayed; nothing was written to it");
+					return;
+				}
 				if (live == null) {
 					TransferIssues.report("ENDPOINT_INVALIDATED", lookup, "the endpoint died before the simulated move could be performed");
-					throw new LiveTransferEndpoints.Unavailable("Transfer endpoint invalidated before the simulated move replayed");
+					return;
 				}
-				long moved = insert ? ops.insert(live, slot, resource, simulated, false) : ops.extract(live, slot, resource, simulated, false);
-				if (moved != simulated) TransferIssues.report("REPLAY_MISMATCH", live,
-						"the real move transferred " + moved + " of the promised " + simulated + "; another actor changed the store between simulate and commit");
+				try {
+					long moved = insert ? ops.insert(live, slot, resource, simulated, false) : ops.extract(live, slot, resource, simulated, false);
+					if (moved != simulated) TransferIssues.report("REPLAY_MISMATCH", live,
+							"the real move transferred " + moved + " of the promised " + simulated + "; another actor changed the store between simulate and commit");
+				} catch (RuntimeException failed) {
+					TransferIssues.report("REPLAY_FAILED", live, "the real move threw after the simulation promised " + simulated
+							+ "; the native store may be short by that amount");
+				}
 			});
 			return simulated * codec.fabricUnits();
 		}
@@ -309,7 +335,10 @@ public final class NativeTransferAdapters {
 	 * Fabric store exactly as it found it — the one direction that still has a real rollback on this line.
 	 */
 	private record NeoEngine<F>(SlottedStorage<F> storage, TransferCodec<F, ?> codec) implements NeoMoves<F> {
-		public long move(int slot, F resource, long nativeAmount, boolean execute) {
+		public long insert(int slot, F resource, long nativeAmount, boolean execute) { return move(slot, resource, nativeAmount, execute, true); }
+		public long extract(int slot, F resource, long nativeAmount, boolean execute) { return move(slot, resource, nativeAmount, execute, false); }
+
+		private long move(int slot, F resource, long nativeAmount, boolean execute, boolean inserting) {
 			amount(nativeAmount);
 			if (nativeAmount == 0 || resource == null || codec.isFabricBlank(resource)) return 0;
 			// A provider may accept less than requested, including a fraction of one mB. Every unsuccessful
@@ -322,8 +351,8 @@ public final class NativeTransferAdapters {
 				TransactionContext joined = Transaction.getCurrentUnsafe();
 				try (Transaction nested = Transaction.openNested(joined)) {
 					long moved = validResult(slot < 0
-							? (execute ? storage.insert(resource, request, nested) : storage.extract(resource, request, nested))
-							: slotOperation(slot, resource, request, nested, execute), request);
+							? (inserting ? storage.insert(resource, request, nested) : storage.extract(resource, request, nested))
+							: slotOperation(slot, resource, request, nested, inserting), request);
 					if (moved % codec.fabricUnits() == 0) {
 						if (execute) nested.commit();
 						return moved / codec.fabricUnits();
@@ -338,9 +367,9 @@ public final class NativeTransferAdapters {
 			return 0;
 		}
 
-		private long slotOperation(int slot, F resource, long request, Transaction nested, boolean execute) {
+		private long slotOperation(int slot, F resource, long request, Transaction nested, boolean inserting) {
 			SingleSlotStorage<F> at = storage.getSlot(slot);
-			return execute ? at.insert(resource, request, nested) : at.extract(resource, request, nested);
+			return inserting ? at.insert(resource, request, nested) : at.extract(resource, request, nested);
 		}
 	}
 
@@ -358,7 +387,7 @@ public final class NativeTransferAdapters {
 			amount(stack.getCount());
 			if (stack.isEmpty()) return stack;
 			ItemVariant variant = codec.toFabric(stack);
-			long moved = engine.move(slot, variant, stack.getCount(), !simulate);
+			long moved = engine.insert(slot, variant, stack.getCount(), !simulate);
 			return moved == 0 ? stack : moved >= stack.getCount() ? ItemStack.EMPTY : stack.copyWithCount((int) (stack.getCount() - moved));
 		}
 		public ItemStack extractItem(int slot, int amount, boolean simulate) {
@@ -367,7 +396,7 @@ public final class NativeTransferAdapters {
 			SingleSlotStorage<ItemVariant> at = engine.storage().getSlot(slot);
 			ItemVariant there = at.getResource();
 			if (there == null || codec.isFabricBlank(there)) return ItemStack.EMPTY;
-			long moved = engine.move(slot, there, amount, !simulate);
+			long moved = engine.extract(slot, there, amount, !simulate);
 			return moved == 0 ? ItemStack.EMPTY : codec.toNeo(there, moved);
 		}
 		public int getSlotLimit(int slot) { return (int) Math.min(engine.storage().getSlot(slot).getCapacity(), Integer.MAX_VALUE); }
@@ -389,12 +418,12 @@ public final class NativeTransferAdapters {
 		public int fill(FluidStack resource, FluidAction action) {
 			amount(resource.getAmount());
 			if (resource.isEmpty()) return 0;
-			return (int) engine.move(-1, codec.toFabric(resource), resource.getAmount(), action.execute());
+			return (int) engine.insert(-1, codec.toFabric(resource), resource.getAmount(), action.execute());
 		}
 		public FluidStack drain(FluidStack resource, FluidAction action) {
 			amount(resource.getAmount());
 			if (resource.isEmpty()) return FluidStack.EMPTY;
-			long moved = engine.move(-1, codec.toFabric(resource), resource.getAmount(), action.execute());
+			long moved = engine.extract(-1, codec.toFabric(resource), resource.getAmount(), action.execute());
 			return moved == 0 ? FluidStack.EMPTY : codec.toNeo(codec.toFabric(resource), moved);
 		}
 		public FluidStack drain(int maxAmount, FluidAction action) {
@@ -403,7 +432,7 @@ public final class NativeTransferAdapters {
 			for (StorageView<FluidVariant> view : engine.storage()) {
 				FluidVariant there = view.getResource();
 				if (there == null || codec.isFabricBlank(there)) continue;
-				long moved = engine.move(-1, there, maxAmount, action.execute());
+				long moved = engine.extract(-1, there, maxAmount, action.execute());
 				return moved == 0 ? FluidStack.EMPTY : codec.toNeo(there, moved);
 			}
 			return FluidStack.EMPTY;

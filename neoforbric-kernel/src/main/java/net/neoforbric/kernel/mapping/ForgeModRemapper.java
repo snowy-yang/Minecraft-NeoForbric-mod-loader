@@ -19,7 +19,12 @@ package net.neoforbric.kernel.mapping;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.jar.Manifest;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import net.fabricmc.mappingio.tree.MappingTree;
 import net.fabricmc.tinyremapper.IMappingProvider;
@@ -108,6 +113,11 @@ public final class ForgeModRemapper {
 	/** Remaps {@code input} to {@code output} using an explicit provider (e.g. {@code provider(m, "official", "named")}). */
 	public static void remapJar(Path input, Path output, IMappingProvider provider, List<Path> remapClasspath) throws IOException {
 		Files.deleteIfExists(output);
+		// tiny-remapper decides jar-vs-directory output from the file extension: keep a .jar suffix so the
+		// intermediate lands as a jar (a `.classes-only` suffix made it a directory output and the next run's
+		// cleanup failed with DirectoryNotEmptyException).
+		Path remappedClasses = output.resolveSibling(output.getFileName() + ".classes-only.jar");
+		Files.deleteIfExists(remappedClasses);
 
 		TinyRemapper remapper = TinyRemapper.newRemapper()
 				.withMappings(provider)
@@ -115,9 +125,7 @@ public final class ForgeModRemapper {
 				.threads(1)
 				.build();
 
-		try (OutputConsumerPath out = new OutputConsumerPath.Builder(output).build()) {
-			out.addNonClassFiles(input);
-
+		try (OutputConsumerPath out = new OutputConsumerPath.Builder(remappedClasses).build()) {
 			if (remapClasspath != null) {
 				for (Path cp : remapClasspath) {
 					remapper.readClassPath(cp);
@@ -128,6 +136,60 @@ public final class ForgeModRemapper {
 			remapper.apply(out);
 		} finally {
 			remapper.finish();
+		}
+		assembleUnsigned(input, remappedClasses, output);
+		Files.deleteIfExists(remappedClasses);
+	}
+
+	/**
+	 * A remapped jar cannot honor the original signature: its class bytes changed, so the manifest's per-entry
+	 * digests and the {@code META-INF/*.SF}/{@code *.RSA}/{@code *.DSA} blocks would make the JVM refuse the
+	 * first class it loads (SHA-256 digest error — hit the moment the 1.21.1 fabric-api-base module carried its
+	 * signed manifest into a test run). The final jar takes the remapped class entries from {@code classes},
+	 * the non-class files from {@code input} — with the signature blocks left out and the manifest's per-entry
+	 * digest sections cleared — and nothing else.
+	 */
+	private static void assembleUnsigned(Path input, Path classes, Path output) throws IOException {
+		try (ZipFile source = new ZipFile(input.toFile());
+				ZipFile remapped = new ZipFile(classes.toFile());
+				var out = new java.util.zip.ZipOutputStream(Files.newOutputStream(output))) {
+			Set<String> written = new HashSet<>();
+			// Manifest first, as jars expect: attributes kept, per-entry digest sections dropped.
+			ZipEntry manifestEntry = source.getEntry("META-INF/MANIFEST.MF");
+			if (manifestEntry != null) {
+				Manifest manifest = new Manifest(source.getInputStream(manifestEntry));
+				manifest.getEntries().clear();
+				out.putNextEntry(new ZipEntry("META-INF/MANIFEST.MF"));
+				manifest.write(out);
+				out.closeEntry();
+				written.add("META-INF/MANIFEST.MF");
+			}
+			// The remapped classes.
+			var remappedEntries = remapped.entries();
+			while (remappedEntries.hasMoreElements()) {
+				ZipEntry entry = remappedEntries.nextElement();
+				if (entry.isDirectory() || written.contains(entry.getName())) continue;
+				out.putNextEntry(new ZipEntry(entry.getName()));
+				try (var data = remapped.getInputStream(entry)) {
+					data.transferTo(out);
+				}
+				out.closeEntry();
+				written.add(entry.getName());
+			}
+			// Every non-class file of the original except the signature blocks.
+			var entries = source.entries();
+			while (entries.hasMoreElements()) {
+				ZipEntry entry = entries.nextElement();
+				String name = entry.getName();
+				if (entry.isDirectory() || written.contains(name) || name.endsWith(".class")) continue;
+				if (name.startsWith("META-INF/") && (name.endsWith(".SF") || name.endsWith(".RSA") || name.endsWith(".DSA"))) continue;
+				out.putNextEntry(new ZipEntry(name));
+				try (var data = source.getInputStream(entry)) {
+					data.transferTo(out);
+				}
+				out.closeEntry();
+				written.add(name);
+			}
 		}
 	}
 
