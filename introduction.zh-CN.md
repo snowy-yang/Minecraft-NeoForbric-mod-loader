@@ -117,7 +117,7 @@ if (code != 0) System.exit(code);
 9. **静态审计** —— 在加载任何东西之前扫一遍所有第三方 jar：`PortingLayerAudit`（自带 `net.neoforged.*`/`net.minecraftforge.*` 的 Fabric jar）、`FabricApiModuleLossAudit`、`FieldDriftAudit`、`MergedBaseUncalledMethods.scanGuests`、`AbiLinkAudit`（jar 里引用了、却在任何载体、基底或已安装的 jar 中都不存在的 Forge 系类）。
 10. **类加载器** —— `new NeoForbricClassLoader(owned, bootLoader)`、备援 jar、jar 家族、`LoaderProbePolicy.bindGuestLoader`、`KernelFabricLauncher.install`（mod 的 `addToClassPath` 最终落到这里）。
 11. **转换链** —— 91 个 `chain.register(…)` 调用点（§6）。
-12. `loader.setTransformer((name, bytes) -> chain.applyBeforeMixin(name, bytes, ctx))`；上下文类加载器换成游戏类加载器；绑定 `KernelLifecycle`、`KernelHudBridge`、`LootTableEventDispatch`；`KernelLoadReport` 和 `CrashAttribution` 拿到运行目录（以及各自的关闭钩子）。
+12. `loader.setTransformer((name, bytes) -> chain.applyBeforeMixin(name, bytes, ctx))`；上下文类加载器换成游戏类加载器；绑定 `KernelLifecycle`、`KernelHudBridge`；`KernelLoadReport` 和 `CrashAttribution` 拿到运行目录（以及各自的关闭钩子）。
 13. **加载器身份，先于 Mixin** —— `PassiveSeeder.seedNeoForgePaths`、`seedNeoForgeLoader`、`seedForgeFmlLoader`、`publishForgeLoadingList`。这一步必须早于第一个经过 Mixin 转换器的类，因为 Mixin 会在那一刻构造所有第三方 `IMixinConfigPlugin`，而这些配置插件会在 `<clinit>` 里读取 `FMLPaths`/`FMLLoader`。MinecraftForge 的 `FMLEnvironment` 在一次性的 `<clinit>` 里把 `dist` 缓存进 `static final` 字段；谁先碰到它，它的值就永远由谁决定。
 14. **Mixin** —— 先放 Fabric 配置，再追加 Forge 系配置（§7.1）；注册之前先调用 `MixinConfigOwners.publish`；`KernelMixinBootstrap.init`。
 15. `PassiveSeeder.reportDependencies()` —— 放在 Mixin 之后，因为它要报告的内容有一半（写给另一个 mod、却没有挂上的 mixin）是在 Mixin 解析配置时才记录下来的。
@@ -332,7 +332,7 @@ Mixin (via MixinWeaverSlot) → NativeCoremodParity → PostMixinFixups → Inte
 - **桥清单** —— `net.neoforbric.api.GameEventBridge` 列出 96 个桥，每个都标明对应的事件、所属的安装轮次，以及从玩家角度说的**代价**。安装轮次有：`GAME_BUS`（客户端与服务端）、`CLIENT_GAME_BUS`、`CLIENT_MOD_BUS`、`CLIENT_INIT`、`REGISTRATION`、`CLIENT_HUD`、`ON_DEMAND`。
 - **校验** —— `net.neoforbric.api.EventBridges.verify(pass)` 把实际装上的桥和声明的桥对照，缺了哪个就连同它的代价一起点名；桥装不上时会少掉一项功能，却不抛任何异常，所以这是它唯一能被看见的途径。
 - **实现** —— `boot.GameEventMultiplexer` 安装总线之间的桥；游戏侧的另一半是 `runtime.KernelGame*Events`（tick、服务端生命周期、玩家、level、世界、方块、实体、伤害、追踪，以及客户端的 tick/渲染/输入/网络/资源/界面鼠标事件），外加 `KernelGameResultBridges`，负责 MinecraftForge 一侧有返回值的那两个事件。可取消的事件会把取消结果传回去。不属于总线到总线的桥由转换器落地（`ForgeDamageSeamsInjector`、`ForgeCreativeTabsInjector`、`ForgeSpawnPlacementsInjector`、`ForgeClientConsumersInjector`、`ForgeBlockTintInjector`、`ForgeOverlayNeuterInjector`/`KernelForgeOverlayLayers`……）。
-- **其他方向** —— 合并后的方法体不再发布的 NeoForge 事件（`ItemTooltipEvent` 经由 `KernelItemTooltips`，`ScreenEvent.Opening/Closing` 经由 `NeoScreenEventsInjector`，转化事件的 `Post` 经由 `NeoConversionPostInjector`）；在 Fabric 的 mixin 套不上的地方，从 NeoForge 自己的调用点触发 Fabric API 事件（`LootTableEventBridgeInjector` + `LootTableEventDispatch` 负责 `LootTableEvents`，`KernelHudBridge` 负责 `HudElementRegistry`，`FabricFuelValuesInjector`，以及提示框和方块破坏的适配器）。
+- **其他方向** —— 合并后的方法体不再发布的 NeoForge 事件（`ItemTooltipEvent` 经由 `KernelItemTooltips`，`ScreenEvent.Opening/Closing` 经由 `NeoScreenEventsInjector`，转化事件的 `Post` 经由 `NeoConversionPostInjector`）；在 Fabric 的 mixin 套不上的地方，从 NeoForge 自己的调用点触发 Fabric API 事件（`KernelHudBridge` 负责 `HudElementRegistry`，`FabricFuelValuesInjector`，以及提示框和方块破坏的适配器）。
 - **审计** —— `HookCallSiteCensus`（合并基底还在调用 `ForgeEventFactory`/`ForgeEventFactoryClient`/NeoForge `ClientHooks` 中的哪些钩子），`DeadEventAudit` + `ForgeBusSubscriptions`（谁在监听死事件，包括注解扫描看不到的订阅），`DeadHookWorklist`（前两者交叉比对的结果，按会察觉到的已安装 jar 数量排序），`EventChainAudit`（每一次跨总线发布，都用同一套规则检查；gate-m41）。
 
 ## 9. 数据包、资源与数据

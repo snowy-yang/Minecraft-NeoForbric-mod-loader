@@ -195,7 +195,7 @@ server rejects `--gameDir`, so `KernelBoot` strips it on that side. The game ver
 11. **Transform chain** — 91 `chain.register(…)` call sites (§6).
 12. `loader.setTransformer((name, bytes) -> chain.applyBeforeMixin(name, bytes, ctx))`; the context class loader
     becomes the game loader;
-    `KernelLifecycle`, `KernelHudBridge`, `LootTableEventDispatch` are bound; `KernelLoadReport` and
+    `KernelLifecycle`, `KernelHudBridge` are bound; `KernelLoadReport` and
     `CrashAttribution` get the run directory (and their shutdown hooks).
 13. **Loader identity, before Mixin** — `PassiveSeeder.seedNeoForgePaths`, `seedNeoForgeLoader`. This must
     precede the first class that passes through the Mixin transformer, because Mixin constructs every guest
@@ -775,7 +775,7 @@ exactly `net.minecraftforge.…Event`, so re-emission is intrinsic.
 - **The other directions** — NeoForge events the merged body no longer posts (`ItemTooltipEvent` via
   `KernelItemTooltips`, `ScreenEvent.Opening/Closing` via `NeoScreenEventsInjector`, conversion `Post` via
   `NeoConversionPostInjector`); Fabric API events fired from NeoForge's own sites where Fabric's mixin cannot fit
-  (`LootTableEventBridgeInjector` + `LootTableEventDispatch` for `LootTableEvents`, `KernelHudBridge` for
+  (`KernelHudBridge` for
   `HudElementRegistry`, `FabricFuelValuesInjector`, tooltip and block-break adapters).
 - **Audits** — `HookCallSiteCensus` (which hooks of `ForgeEventFactory`/`ForgeEventFactoryClient`/NeoForge
   `ClientHooks` the merged base still calls), `DeadEventAudit` + `ForgeBusSubscriptions` (who listens to a dead

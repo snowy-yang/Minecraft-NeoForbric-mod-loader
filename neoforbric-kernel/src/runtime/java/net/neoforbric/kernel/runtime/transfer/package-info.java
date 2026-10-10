@@ -1,24 +1,28 @@
 /**
- * Cross-ecosystem block-entity item/fluid/energy transfer, compiled against Fabric transfer 8.0.11, NeoForge
- * 26.2.0.88 and Team Reborn Energy 5.0.0. Every built game side carries this package: without the Fabric API or Reborn
- * compile input the build fails rather than shipping a runtime jar without it. It is never a Fabric mod, and neither
- * Fabric API nor Reborn is bundled.
+ * Cross-ecosystem block-entity item/fluid/energy transfer, compiled against Fabric transfer 0.116.17, Minecraft
+ * 1.21.1's immediate NeoForge capabilities and Team Reborn Energy 4.2.0. Every built game side carries this package:
+ * without the Fabric API or Reborn compile input the build fails rather than shipping a runtime jar without it. It
+ * is never a Fabric mod, and neither Fabric API nor Reborn is bundled.
  *
- * <p>Boot integration: install TransferTransactionHooks and TransferCapabilityFallback in the pre-Mixin chain
- * only when both selected APIs exist. After native capability registration, invoke BlockTransferBridge.install
+ * <p>Boot integration: install TransferCapabilityFallback in the pre-Mixin chain only when the game side asks for
+ * the interop. After native capability registration, invoke BlockTransferBridge.install
  * through the GAME classloader. Installation checks every hook marker before exposing any fallback. The native
  * provider gets the first answer; a provider from another ecosystem is consulted only when that answer is absent,
  * the block entity's owner (the mod that registered its type) first. Fabric's generic fallbacks, which wrap any
  * Container, speak only for Fabric-owned and vanilla block entities (TransferPrecedence).
  * TransferIssues.setReporter can connect runtime findings to the kernel's attributed compatibility report.
  *
- * <p>The bridge pairs native transaction objects, including every outer ancestor, and closes both at the same
- * nesting boundary. Final notifications run only after both roots close, once per native participant, and may
- * open new roots and transfer again. Transfer during a close callback and joining independently-open roots are
- * unsupported. A callback throwing after commit is reported and both engines are released; external side effects
- * are not magically rolled back.
+ * <p>1.21.1 has one transaction engine: Fabric's, on the Fabric side of every adapter. The native side is
+ * immediate — insert/extract with a simulate boolean — so the Fabric consumer simulates inside the open
+ * transaction and replays the promised amount at the outermost close (NativeTransferAdapters' two-hook
+ * promise: a nested scope that aborts cancels its own promise, an aborted root never touched the store at
+ * all), and the native consumer owns a joined-or-root Fabric scope per operation. Within one transaction the
+ * native store still holds its pre-transaction state — the documented cost of never writing before commit.
+ * A replay that moves less than promised, or hits a dead endpoint, is reported and the commit completes:
+ * fabric does not roll back the other participants when a close callback throws, so rethrowing could not
+ * deliver all-or-nothing, only crash the commit after the loss already happened.
  *
- * <p>Fabric SlottedStorage is required when exposing a NeoForge ResourceHandler: an arbitrary Storage cannot
+ * <p>Fabric SlottedStorage is required when exposing a NeoForge IItemHandler: an arbitrary Storage cannot
  * supply indexed insertion. Fabric has no exact resource-specific validity query; our advertised validity is
  * conservative and the real provider's insert remains authoritative. Fluid units convert exactly at 81 Fabric
  * units per millibucket, with sub-millibucket leftovers retained at their source. Failed quantization trials abort
@@ -34,7 +38,8 @@
  *
  * <p>Energy (placed block entities only; item energy is not bridged) uses the same seams, endpoints, precedence,
  * invalidation and recursion guard. 1 FE = 1 E; see EnergyUnits for the int/long rule. Fabric's side is Team Reborn
- * Energy's EnergyStorage.SIDED, through RebornEnergyAdapters (PairedTransactions) and RebornEnergyBridge, the only
- * two classes that name a Reborn type and the only ones the boot seam loads when Reborn is installed.
+ * Energy's EnergyStorage.SIDED, through RebornEnergyAdapters and RebornEnergyBridge, the only two classes that
+ * name a Reborn type and the only ones the boot seam loads when Reborn is installed — energy shares the same
+ * two-hook promise as items and fluids.
  */
 package net.neoforbric.kernel.runtime.transfer;

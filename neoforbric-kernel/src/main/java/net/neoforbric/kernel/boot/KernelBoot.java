@@ -402,7 +402,10 @@ public final class KernelBoot {
 			catch (java.io.IOException unavailable) { return false; }
 		}));
 		if (transferInterop) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.TransferTransactionHooks());
+			// No TransferTransactionHooks on 1.21.1: it paired Fabric transactions with the 26.x
+			// net.neoforged.neoforge.transfer framework, which this base does not have — the immediate
+			// capabilities here take simulate booleans, and NativeTransferAdapters carries the whole
+			// cross-API contract itself.
 			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.TransferCapabilityFallback());
 		}
 		// Hoppers ask Fabric's item storage lookup where NeoForge's hopper found nothing, with or without the bridge.
@@ -668,15 +671,11 @@ public final class KernelBoot {
 		// GuiLayerManager, which a dedicated server never loads.
 		chain.register(TransformPhase.COREMOD, new HudElementBridgeInjector());
 
-		// Both sides: route ReloadableServerRegistries' two loot seams through the kernel so fabric-loot-api-v3's
-		// LootTableEvents fire from NeoForge's own LootTableLoadEvent point — its mixin cannot fit the merged base.
-		if (net.neoforbric.kernel.transform.LootTableEventBridgeInjector.enabled()) {
-			chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.LootTableEventBridgeInjector());
-		} else {
-			NeoForbricLog.warn("[NeoForbric/LootBridge] -D%s=off — Fabric LootTableEvents.REPLACE/MODIFY/ALL_LOADED never fire; "
-					+ "loot tables load exactly as NeoForge returns them",
-					net.neoforbric.kernel.transform.LootTableEventBridgeInjector.PROPERTY);
-		}
+		// 1.21.1: no loot-table bridge. The 26.x one existed because NeoForge had reordered
+		// ReloadableServerRegistries' lambda so fabric-loot-api-v3's ReloadableServerRegistriesMixin could not
+		// bind; on this base the mixin's intermediary descriptors match lambda$scheduleElementParse$3/$4
+		// exactly, so the mixin applies as fabric wrote it and fires REPLACE/MODIFY/ALL_LOADED itself — and a
+		// bridge kept alive beside it would have double-fired every event.
 
 		// Trim guest mixins to the injectors that fit: fabric-model-loading-api-v1's ModelManagerMixin (client;
 		// NeoForge replaced CuboidModel.fromStream at one site), so ModelLoadingPlugins dispatch instead of the whole
@@ -786,7 +785,6 @@ public final class KernelBoot {
 
 		KernelLifecycle.bind(loader);
 		KernelHudBridge.bind(loader);
-		LootTableEventDispatch.bind(loader);
 		KernelLifecycle.setModJars(modJars);
 		// Where the load report goes, and the shutdown hook that writes it if loading never finishes -- which is
 		// exactly the boot whose reader needs the file most.

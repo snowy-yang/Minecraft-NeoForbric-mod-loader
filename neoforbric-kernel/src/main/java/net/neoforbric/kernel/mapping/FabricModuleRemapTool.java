@@ -51,6 +51,9 @@ public final class FabricModuleRemapTool {
 		}
 
 		var intermediaryToNamed = ForgeModRemapper.provider(mappings, NeoForbricMappings.INTERMEDIARY, NeoForbricMappings.NAMED);
+		// The refmap half of the same remap: tiny-remapper rewrites the classes but not the JSON Mixin reads,
+		// so without this the modules' member-level injectors would soft-skip on the Mojmap base (RefmapRemapper).
+		RefmapRemapper.Names refmaps = RefmapRemapper.Names.from(mappings);
 		List<Path> modules = new ArrayList<>();
 		for (int i = 5; i < args.length; i++) modules.add(Path.of(args[i]));
 
@@ -59,7 +62,7 @@ public final class FabricModuleRemapTool {
 		classpath.add(intermediaryGame);
 		classpath.addAll(modules);
 		for (Path module : modules) {
-			ForgeModRemapper.remapJar(module, outDir.resolve(module.getFileName().toString()), intermediaryToNamed, classpath);
+			ForgeModRemapper.remapJar(module, outDir.resolve(module.getFileName().toString()), intermediaryToNamed, classpath, refmaps);
 		}
 	}
 	private FabricModuleRemapTool() { }

@@ -20,7 +20,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
@@ -112,20 +114,35 @@ public final class ForgeModRemapper {
 
 	/** Remaps {@code input} to {@code output} using an explicit provider (e.g. {@code provider(m, "official", "named")}). */
 	public static void remapJar(Path input, Path output, IMappingProvider provider, List<Path> remapClasspath) throws IOException {
+		remapJar(input, output, provider, remapClasspath, null);
+	}
+
+	/**
+	 * Remaps {@code input} to {@code output} using an explicit provider, rewriting the refmap values a mixin
+	 * config names when {@code refmaps} is non-null — the refmap half of a namespace-crossing module remap
+	 * (see {@link RefmapRemapper}); {@code null} leaves every non-class file as it was.
+	 */
+	public static void remapJar(Path input, Path output, IMappingProvider provider, List<Path> remapClasspath,
+			RefmapRemapper.Names refmaps) throws IOException {
 		Files.deleteIfExists(output);
 		// tiny-remapper decides jar-vs-directory output from the file extension: keep a .jar suffix so the
 		// intermediate lands as a jar (a `.classes-only` suffix made it a directory output and the next run's
 		// cleanup failed with DirectoryNotEmptyException).
 		Path remappedClasses = output.resolveSibling(output.getFileName() + ".classes-only.jar");
 		Files.deleteIfExists(remappedClasses);
+		remapClasses(input, remappedClasses, provider, remapClasspath);
+		assembleUnsigned(input, remappedClasses, output, refmaps);
+		Files.deleteIfExists(remappedClasses);
+	}
 
+	private static void remapClasses(Path input, Path output, IMappingProvider provider, List<Path> remapClasspath) throws IOException {
 		TinyRemapper remapper = TinyRemapper.newRemapper()
 				.withMappings(provider)
 				.renameInvalidLocals(false)
 				.threads(1)
 				.build();
 
-		try (OutputConsumerPath out = new OutputConsumerPath.Builder(remappedClasses).build()) {
+		try (OutputConsumerPath out = new OutputConsumerPath.Builder(output).build()) {
 			if (remapClasspath != null) {
 				for (Path cp : remapClasspath) {
 					remapper.readClassPath(cp);
@@ -137,8 +154,6 @@ public final class ForgeModRemapper {
 		} finally {
 			remapper.finish();
 		}
-		assembleUnsigned(input, remappedClasses, output);
-		Files.deleteIfExists(remappedClasses);
 	}
 
 	/**
@@ -149,7 +164,20 @@ public final class ForgeModRemapper {
 	 * the non-class files from {@code input} — with the signature blocks left out and the manifest's per-entry
 	 * digest sections cleared — and nothing else.
 	 */
-	private static void assembleUnsigned(Path input, Path classes, Path output) throws IOException {
+	private static void assembleUnsigned(Path input, Path classes, Path output, RefmapRemapper.Names refmaps) throws IOException {
+		// Which entries are refmaps: every *.json a mixin config names through its "refmap" key (the name is
+		// the config's choice, not a convention), plus the *-refmap.json loom writes by default. One pass to
+		// learn the names, so the copy loop needs only a set lookup per entry.
+		Set<String> refmapEntries = new HashSet<>();
+		if (refmaps != null) {
+			var sourceEntries = sourceEntries(input);
+			for (Map.Entry<String, byte[]> entry : sourceEntries.entrySet()) {
+				if (!entry.getKey().endsWith(".json")) continue;
+				String named = RefmapRemapper.refmapNameOf(entry.getValue());
+				if (named != null) refmapEntries.add(named);
+			}
+			for (String name : sourceEntries.keySet()) if (name.endsWith("-refmap.json")) refmapEntries.add(name);
+		}
 		try (ZipFile source = new ZipFile(input.toFile());
 				ZipFile remapped = new ZipFile(classes.toFile());
 				var out = new java.util.zip.ZipOutputStream(Files.newOutputStream(output))) {
@@ -176,7 +204,7 @@ public final class ForgeModRemapper {
 				out.closeEntry();
 				written.add(entry.getName());
 			}
-			// Every non-class file of the original except the signature blocks.
+			// Every non-class file of the original except the signature blocks — refmaps rewritten on the way.
 			var entries = source.entries();
 			while (entries.hasMoreElements()) {
 				ZipEntry entry = entries.nextElement();
@@ -184,13 +212,35 @@ public final class ForgeModRemapper {
 				if (entry.isDirectory() || written.contains(name) || name.endsWith(".class")) continue;
 				if (name.startsWith("META-INF/") && (name.endsWith(".SF") || name.endsWith(".RSA") || name.endsWith(".DSA"))) continue;
 				out.putNextEntry(new ZipEntry(name));
-				try (var data = source.getInputStream(entry)) {
-					data.transferTo(out);
+				if (refmapEntries.contains(name)) {
+					try (var data = source.getInputStream(entry)) {
+						out.write(RefmapRemapper.rewrite(data.readAllBytes(), refmaps));
+					}
+				} else {
+					try (var data = source.getInputStream(entry)) {
+						data.transferTo(out);
+					}
 				}
 				out.closeEntry();
 				written.add(name);
 			}
 		}
+	}
+
+	/** Every non-directory entry of a jar, contents included — jars here are modules, a few hundred entries. */
+	private static Map<String, byte[]> sourceEntries(Path jar) throws IOException {
+		Map<String, byte[]> entries = new LinkedHashMap<>();
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			var all = zip.entries();
+			while (all.hasMoreElements()) {
+				ZipEntry entry = all.nextElement();
+				if (entry.isDirectory()) continue;
+				try (var data = zip.getInputStream(entry)) {
+					entries.put(entry.getName(), data.readAllBytes());
+				}
+			}
+		}
+		return entries;
 	}
 
 	/** @see #automaticModuleName(String, Ecosystem) */

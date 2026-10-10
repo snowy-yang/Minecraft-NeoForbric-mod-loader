@@ -34,7 +34,6 @@ import net.neoforbric.api.Side;
 import net.neoforbric.kernel.mixin.MergedBaseMixinCompat;
 import net.neoforbric.kernel.transform.CreativePagerBridgeInjector;
 import net.neoforbric.kernel.transform.GuestInjectorPruner;
-import net.neoforbric.kernel.transform.LootTableEventBridgeInjector;
 import net.neoforbric.kernel.util.ByteScan;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
@@ -44,12 +43,11 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * failing silently somewhere downstream.
  *
  * <p>{@link net.neoforbric.kernel.mixin.MergedBaseMixinCompat} pins a handful of fabric-api mixins that cannot fit
- * the merged base. Most of what they carried is restored by other means now (loot events by
- * {@link LootTableEventDispatch}, model-loading plugins by {@link GuestInjectorPruner}, {@code fabric:type} model
- * formats by {@link ModelFormatFunnelInjector}); what is NOT is listed here, one surface per row, with the
- * predicate that says whether it is still lost on THIS boot — so switching a restoration off with its
- * {@code -Dneoforbric.<x>=off} makes its users show up here, and the row goes quiet again the day the surface is
- * restored. Same needle/note/report shape as {@link CapabilityUseAudit}.
+ * the merged base. Most of what they carried is restored by other means now (model-loading plugins by
+ * {@link GuestInjectorPruner}, {@code fabric:type} model formats by {@link ModelFormatFunnelInjector}); what is
+ * NOT is listed here, one surface per row, with the predicate that says whether it is still lost on THIS boot —
+ * so switching a restoration off with its {@code -Dneoforbric.<x>=off} makes its users show up here, and the row
+ * goes quiet again the day the surface is restored. Same needle/note/report shape as {@link CapabilityUseAudit}.
  *
  * <p>A constant-pool needle over-reports a mod that names the API only in an optional compat class. That is the
  * safe direction: a DEGRADED row that turns out not to matter costs a glance; a silent loss costs a bug hunt.
@@ -79,9 +77,11 @@ public final class FabricApiModuleLossAudit {
 	}
 
 	static final List<Loss> LOSSES = List.of(
-			new Loss("fabric-loot-api-v3", "net/fabricmc/fabric/api/loot/v3/LootTableEvents", null,
-					"LootTableEvents.REPLACE, MODIFY and ALL_LOADED never fire",
-					() -> !LootTableEventBridgeInjector.enabled()),
+			// No fabric-loot-api-v3 row on 1.21.1: ReloadableServerRegistriesMixin's intermediary descriptors
+			// match the base's lambda$scheduleElementParse$3/$4 exactly, so the mixin applies as fabric wrote it
+			// and LootTableEvents.REPLACE, MODIFY and ALL_LOADED fire natively — nothing is lost, so there is
+			// nothing to audit. (The 26.x row existed for the bridge that replaced a mixin a reordered lambda
+			// had made unbindable.)
 			// No fabric-model-loading-api-v1 rows on 1.21.1: both were about 26.x's model-loading rework —
 			// ModelLoadingPlugin lost to a pruned ModelManagerMixin whose lambda this base does not have, and
 			// fabric:type formats read by a deserializer registry 0.116.17 does not ship. This base keeps

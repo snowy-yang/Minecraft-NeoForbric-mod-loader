@@ -81,17 +81,20 @@ public final class MergedBaseMixinCompat {
 	 *       server/client context during datapack registry load. FabricRegistryLoaderMixinAdapter now restores
 	 *       the original ScopedValue bindings and async propagation on both widened overloads; this pin returns
 	 *       only with that adapter switched off.</li>
-	 *   <li><b>loot-api-v3 {@code ReloadableServerRegistriesMixin}</b> — its generated callback loads a local slot
-	 *       the merged base's method does not have: {@code VerifyError: Bad local variable type} at
-	 *       {@code ReloadableServerRegistries.handler$…$modifyLootTable} — NeoForge swapped the last two parameters
-	 *       of {@code lambda$scheduleRegistryLoad$0} and split vanilla's one element map into two, so
-	 *       {@code modifyLootTable}'s {@code @Local Map} can never bind. Its sibling {@code onLootTablesLoaded}
-	 *       (an {@code @Inject} at RETURN in vanilla's shape) is a different matter: {@code MixinHandlerShim} wraps
-	 *       it along that lambda's row of {@code lambda-permutations.txt}, so it WOULD bind. The pin stays, and it no
-	 *       longer costs the API: {@link net.neoforbric.kernel.boot.LootTableEventDispatch} fires REPLACE / MODIFY /
-	 *       ALL_LOADED from NeoForge's own {@code LootTableLoadEvent} seam ({@code -Dneoforbric.lootBridge=off} to see
-	 *       the old behaviour). Lifting the pin on the strength of the shim would fire ALL_LOADED twice, once from the
-	 *       bridge and once from {@code onLootTablesLoaded}, and still fail on {@code modifyLootTable}.</li>
+	 *   <li><b>loot-api-v3 {@code ReloadableServerRegistriesMixin}</b> — 1.21.1: UNPINNED, and the whole
+	 *       {@code LootTableEventBridgeInjector} that replaced it is deleted. The 26.x pin existed because
+	 *       NeoForge had reordered {@code lambda$scheduleRegistryLoad$0} so {@code modifyLootTable}'s
+	 *       {@code @Local Map} could never bind; on this base the mixin's targets exist verbatim
+	 *       (method_58278 = {@code lambda$scheduleElementParse$3(LootDataType, RegistryOps, WritableRegistry,
+	 *       ResourceLocation, JsonElement)V}, method_58279 = {@code lambda$scheduleElementParse$4(LootDataType,
+	 *       ResourceManager, RegistryOps)WritableRegistry}, the {@code getOps} wrap = {@code createSerializationContext}
+	 *       on {@code EmptyTagLookupWrapper} — all four anchors confirmed in the base jar's bytecode), so the
+	 *       mixin applies and fires REPLACE / MODIFY / ALL_LOADED itself. Its member strings resolve because the
+	 *       module remap rewrites the refmap into the base's namespace ({@link
+	 *       net.neoforbric.kernel.mapping.RefmapRemapper} — without that, tiny-remapper rewrites the classes but
+	 *       the refmap keeps pointing at intermediary names no Mojmap target answers to, and every injector
+	 *       soft-skips). Keeping the bridge would have double-fired every event; the bridge, its injector,
+	 *       the dispatch and their tests are gone.</li>
 	 *   <li><b>creative-tab CLIENT {@code CreativeModeInventoryScreenMixin}</b> — Fabric's creative-screen PAGER.
 	 *       The merged screen already carries NeoForge's pager as a base patch ({@code CreativeTabsScreenPage},
 	 *       the "&lt; N/M &gt;" buttons), so with this mixin woven BOTH pagers run at once — and they fight:
@@ -165,7 +168,6 @@ public final class MergedBaseMixinCompat {
 			"fabric-registry-sync-v0.mixins.json:BootstrapMixin",
 			"fabric-registry-sync-v0.mixins.json:MainMixin",
 			"fabric-registry-sync-v0.client.mixins.json:MinecraftMixin",
-			"fabric-loot-api-v3.mixins.json:ReloadableServerRegistriesMixin",
 			"fabric-creative-tab-api-v1.client.mixins.json:CreativeModeInventoryScreenMixin",
 			// MOD-vs-MOD, not merged-base: Shoulder Surfing's @Redirect deletes the call site CustomSkinLoader's
 			// raw-ASM cape patch needs. See the javadoc entry below — this one arbitrates between two mods.

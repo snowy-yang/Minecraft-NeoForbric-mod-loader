@@ -382,10 +382,9 @@ class MixinFitLivenessCensusStagedTest {
 	 * bridges or adapters of their own that the verdict does not ask, its item tooltip hooks the Fabric tooltip bridge's
 	 * over NeoForge's appenders) or reports as the mixin's PARTIAL line. Four of item-api's tooltip anchors read as bound
 	 * only while R3 moved them, on the bytes alone, into NeoForge's addDetailsToTooltipComponents — a renamed tooltip body
-	 * nothing calls; the carrier-rename census keeps them out of it, so they are lost, honestly, where they never ran. Two are
-	 * names that bind a lambda the handler was not written for, which Mixin rejects: loot-api's
-	 * {@code ReloadableServerRegistriesMixin} (suppressed by name; KernelLootBridge serves its callbacks) and
-	 * resource-conditions' {@code SimpleJsonResourceReloadListenerMixin} (SupersededMixins; KernelFabricConditions judges
+	 * nothing calls; the carrier-rename census keeps them out of it, so they are lost, honestly, where they never ran. One is
+	 * a name that binds a lambda the handler was not written for, which Mixin rejects: resource-conditions'
+	 * {@code SimpleJsonResourceReloadListenerMixin} (SupersededMixins; KernelFabricConditions judges
 	 * the conditions at ConditionalOps' funnel). Both read FIT until the verdict asked whether the handler fits. The decorator
 	 * line is the anchor CreativeCore's required redirect also lost, but it is pinned here as fabric-networking's accepted
 	 * loss (its wrap stays unbound on purpose: PayloadInterop serves the play-phase channels), so this set could never have

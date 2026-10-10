@@ -96,25 +96,10 @@ public final class SupersededMixins {
 						+ "ejectItems and suckInItems instead (KernelFabricHopperStorage)",
 						"neoforbric.hopperFabricStorage", "net.minecraft.world.level.block.entity.HopperBlockEntity",
 						SupersededMixins::hopperAsksFabric));
-		map.put("net.fabricmc.fabric.mixin.loot.ReloadableServerRegistriesMixin",
-				new Replacement("KernelLootBridge supplies all Fabric loot REPLACE, MODIFY and ALL_LOADED callbacks "
-						+ "through the surviving native loot and tag loading calls",
-						"neoforbric.lootBridge", "net.minecraft.server.ReloadableServerRegistries",
-						SupersededMixins::lootCallbacksRouted));
 		return Map.copyOf(map);
 	}
 
 	private SupersededMixins() {
-	}
-
-	private static boolean lootCallbacksRouted(ClassNode node) {
-		int load = 0, tags = 0;
-		for (MethodNode method : node.methods) for (AbstractInsnNode instruction : method.instructions) {
-			if (!(instruction instanceof MethodInsnNode call) || !"net/neoforbric/kernel/runtime/KernelLootBridge".equals(call.owner)) continue;
-			if ("loadLootTable".equals(call.name)) load++;
-			if ("loadTagsForRegistry".equals(call.name)) tags++;
-		}
-		return load == 1 && tags == 1;
 	}
 
 	static boolean enabled() {

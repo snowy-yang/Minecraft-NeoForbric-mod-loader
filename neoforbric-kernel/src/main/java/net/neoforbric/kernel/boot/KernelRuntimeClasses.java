@@ -154,9 +154,6 @@ public final class KernelRuntimeClasses {
 		// through the neo transfer framework's TransactionContext; 1.21.1 capabilities are immediate with
 		// simulate booleans, so the adapters carry no paired journals at all.
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelLootModifiers", new Entry(Origin.COMPILED, List.of()));
-		// The two calls LootTableEventBridgeInjector routes out of ReloadableServerRegistries, so fabric-loot-api-v3's
-		// callbacks fire at NeoForge's own loot-load point. Named as an ASM owner, so no Call entries.
-		CLASSES.put("net.neoforbric.kernel.runtime.KernelLootBridge", new Entry(Origin.COMPILED, List.of()));
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelFeatureFlags", new Entry(Origin.COMPILED, List.of()));
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelSnippets", new Entry(Origin.COMPILED, List.of()));
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelWidenedFields", new Entry(Origin.COMPILED, List.of()));

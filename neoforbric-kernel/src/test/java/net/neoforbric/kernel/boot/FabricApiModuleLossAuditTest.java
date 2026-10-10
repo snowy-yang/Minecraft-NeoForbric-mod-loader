@@ -34,12 +34,11 @@ import net.neoforbric.api.ModCatalog;
 import net.neoforbric.api.Side;
 import net.neoforbric.kernel.transform.CreativePagerBridgeInjector;
 import net.neoforbric.kernel.transform.GuestInjectorPruner;
-import net.neoforbric.kernel.transform.LootTableEventBridgeInjector;
 
 /** The attribution rows: recorded by needle, judged by side and by kill switch, marked by catalog identity. */
 @org.junit.jupiter.api.parallel.ResourceLock("ModCatalog")
 class FabricApiModuleLossAuditTest {
-	private static final String LOOT = "net/fabricmc/fabric/api/loot/v3/LootTableEvents";
+	private static final String LOOT = "net/fabricmc/fabric/api/loot/v3/LootTableEvents";   // 1.21.1: not a Loss row — the mixin binds as written
 	private static final String MODEL_PLUGIN = "net/fabricmc/fabric/api/client/model/loading/v1/ModelLoadingPlugin";
 	private static final String CREATIVE = "net/fabricmc/fabric/api/client/creativetab/v1/FabricCreativeModeInventoryScreen";
 	private static final String DYNAMIC_REGISTRIES = "net/fabricmc/fabric/api/event/registry/DynamicRegistries";
@@ -50,7 +49,6 @@ class FabricApiModuleLossAuditTest {
 	@AfterEach
 	void forget() {
 		FabricApiModuleLossAudit.reset();
-		System.clearProperty(LootTableEventBridgeInjector.PROPERTY);
 		System.clearProperty(GuestInjectorPruner.PROPERTY);
 		System.clearProperty(CreativePagerBridgeInjector.PROPERTY);
 		System.clearProperty(FabricApiModuleLossAudit.SWITCH);
@@ -86,25 +84,19 @@ class FabricApiModuleLossAuditTest {
 		return ModCatalog.failures().stream().filter(e -> e.modId().equals(modId)).findFirst().orElse(null);
 	}
 
+	/**
+	 * 1.21.1: a loot listener is not a Loss row at all. The 26.x bridge is gone because the mixin's intermediary
+	 * descriptors match this base's lambdas exactly, so LootTableEvents fire natively — nothing is lost, so no
+	 * needle matches and the listener is never recorded.
+	 */
 	@Test
-	void aLootListenerIsRecordedAndIsNotALossWhileTheBridgeIsOn() {
+	void aLootListenerIsNotALossAtAllBecauseTheMixinBindsAsWritten() {
 		publish(entry("balm", "balm.jar", ""));
 		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT));
-		assertEquals(Set.of("balm.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(0)));
+		assertTrue(FabricApiModuleLossAudit.users().isEmpty(), "no surface is lost, so nobody is recorded");
 
 		FabricApiModuleLossAudit.report(Side.DEDICATED_SERVER);
-		assertTrue(ModCatalog.failures().isEmpty(), "the bridge fires the events, so nothing is lost: " + ModCatalog.failures());
-	}
-
-	@Test
-	void withTheLootBridgeOffTheListenerIsDegradedNamingTheModule() {
-		publish(entry("balm", "balm.jar", ""));
-		System.setProperty(LootTableEventBridgeInjector.PROPERTY, "off");
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT));
-		FabricApiModuleLossAudit.report(Side.DEDICATED_SERVER);
-		ModCatalog.Entry balm = degraded("balm");
-		assertTrue(balm != null && balm.status() == ModCatalog.Status.DEGRADED, String.valueOf(balm));
-		assertTrue(balm.statusDetail().startsWith("fabric-loot-api-v3: "), balm.statusDetail());
+		assertTrue(ModCatalog.failures().isEmpty(), "the mixin fires the events, so nothing is lost: " + ModCatalog.failures());
 	}
 
 	@Test
@@ -180,27 +172,30 @@ class FabricApiModuleLossAuditTest {
 		FabricApiModuleLossAudit.note("lithostitched.jar", classNaming(DYNAMIC_REGISTRIES));
 		assertTrue(FabricApiModuleLossAudit.users().isEmpty(), "DynamicRegistries works — it must not be recorded");
 		FabricApiModuleLossAudit.note("other.jar", classNaming(SETUP_CALLBACK));
-		assertEquals(Set.of("other.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(4)));
+		assertEquals(Set.of("other.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(1)));
 	}
 
 	@Test
 	void fabricApisOwnModuleIsNeverAUserAndAThirdPartyBesideItIs() {
-		publish(entry("balm", "balm.jar", ""),
-				entry("fabric-loot-api-v3", "fabric-loot-api-v3-3.0.17.jar", "fabric-api"));
-		System.setProperty(LootTableEventBridgeInjector.PROPERTY, "off");
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT));
-		FabricApiModuleLossAudit.note("fabric-loot-api-v3-3.0.17.jar", classNaming(LOOT));
-		FabricApiModuleLossAudit.report(Side.DEDICATED_SERVER);
-		assertTrue(degraded("balm") != null, "the third party is named");
-		assertTrue(degraded("fabric-loot-api-v3") == null, "the module that DEFINES the surface is not its user");
+		publish(entry("owo", "owo.jar", ""),
+				entry("fabric-creative-tab-api-v1", "fabric-creative-tab-api-v1.jar", "fabric-api"));
+		// The creative row only fires while its restoration is switched off — the kill switch every sibling
+		// test sets too; without it the bridge answers for the interface and nobody is degraded.
+		System.setProperty(CreativePagerBridgeInjector.PROPERTY, "off");
+		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.note("fabric-creative-tab-api-v1.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.report(Side.CLIENT);
+		assertTrue(degraded("owo") != null, "the third party is named");
+		assertTrue(degraded("fabric-creative-tab-api-v1") == null, "the module that DEFINES the surface is not its user");
 	}
 
 	@Test
 	void threeClassesFromOneJarNameItOnce() {
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT));
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT));
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT, SETUP_CALLBACK));
-		assertEquals(Set.of("balm.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(0)));
+		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE, SETUP_CALLBACK));
+		assertEquals(Set.of("owo.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(0)));
+		assertEquals(Set.of("owo.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(1)));
 		assertEquals(2, FabricApiModuleLossAudit.users().size(), "two surfaces, one jar each");
 	}
 
@@ -221,11 +216,10 @@ class FabricApiModuleLossAuditTest {
 
 	@Test
 	void switchedOffItRecordsAndMarksNothing() {
-		publish(entry("balm", "balm.jar", ""));
+		publish(entry("owo", "owo.jar", ""));
 		System.setProperty(FabricApiModuleLossAudit.SWITCH, "off");
-		System.setProperty(LootTableEventBridgeInjector.PROPERTY, "off");
-		FabricApiModuleLossAudit.note("balm.jar", classNaming(LOOT));
-		FabricApiModuleLossAudit.report(Side.DEDICATED_SERVER);
+		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.report(Side.CLIENT);
 		assertFalse(FabricApiModuleLossAudit.enabled());
 		assertTrue(ModCatalog.failures().isEmpty(), "report only, and only when asked");
 	}
