@@ -775,7 +775,7 @@ class EnvironmentStripTransformerTest {
 
 	@Test
 	void creativeCoresLoaderLosesExactlyTheOneMethodNativeFabricRemoves() throws Exception {
-		Path jar = Path.of("build/compat-inputs/sweep90/mods/CreativeCore_FABRIC_v2.14.16_mc26.2.jar");
+		Path jar = Path.of("build/compat-inputs/sweep-1.21.1/mods/CreativeCore_FABRIC_v2.13.48_mc1.21.1.jar");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(jar), "sweep pack absent");
 		byte[] raw;
 		try (ZipFile zip = new ZipFile(jar.toFile())) {

@@ -122,7 +122,7 @@ class InsertedLambdaArgumentShimTest {
   finally{System.clearProperty(InsertedLambdaArgumentShim.PROPERTY);}
  }
  @Test void actualFusionSpriteLoaderHookFollowsNeoForgesLiveLambda()throws Exception{
-  Path jar=Path.of("build/compat-inputs/sweep90/mods/fusion-1.3.15a-forge-mc26.2.jar");TestFixtures.require(Fixture.THIRD_PARTY,Files.isRegularFile(jar),"sweep pack absent");
+  Path jar=Path.of("build/compat-inputs/sweep-1.21.1/mods/fusion-1.3.15a-forge-mc1.21.jar");TestFixtures.require(Fixture.THIRD_PARTY,Files.isRegularFile(jar),"sweep pack absent");
   ClassNode mixin;try(ZipFile z=new ZipFile(jar.toFile())){mixin=MixinFit.parse(z.getInputStream(z.getEntry("com/supermartijn642/fusion/mixin/SpriteResourceLoaderMixin.class")).readAllBytes());}
   String owner="net/minecraft/client/renderer/texture/atlas/SpriteResourceLoader";
   // The raw class, local variable table included: the fixture's parse drops it, and the live table is the proof.

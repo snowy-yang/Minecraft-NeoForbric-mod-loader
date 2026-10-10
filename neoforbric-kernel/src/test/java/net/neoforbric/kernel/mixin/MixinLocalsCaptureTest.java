@@ -87,21 +87,9 @@ class MixinLocalsCaptureTest {
 		assertEquals(0, MixinLocalsCapture.softenRequirements(node, binary -> true), "idempotent");
 	}
 
-	@Test
-	void actualCreativeCoreConfigurationRedirectIsSoftened() throws Exception {
-		Path jar = Path.of("build/compat-inputs/sweep90/mods/CreativeCore_FABRIC_v2.14.16_mc26.2.jar");
-		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(jar), "sweep pack absent");
-		ClassNode node;
-		try (ZipFile zip = new ZipFile(jar.toFile());
-				InputStream in = zip.getInputStream(zip.getEntry("team/creative/creativecore/mixin/ServerConfigurationPacketListenerImplMixin.class"))) {
-			node = parse(in.readAllBytes());
-		}
-		assertEquals(1, MixinLocalsCapture.softenRequirements(node, binary -> true));
-		AnnotationNode redirect = node.methods.stream().filter(m -> m.name.equals("handleConfigurationFinished"))
-				.findFirst().orElseThrow().visibleAnnotations.get(0);
-		assertEquals(0, redirect.values.get(redirect.values.indexOf("require") + 1));
-	}
-
+	// CreativeCore's configuration-finished redirect went with the 26.2 pin: the 1.21.1 lineage (v2.13.48)
+	// ships no ServerConfigurationPacketListenerImplMixin and no @Redirect at all, so the captured-local
+	// soften has no real mod row here. The soften logic itself stays covered by the synthetic rows below.
 	@Test
 	void failHardBecomesFailSoft() {
 		ClassNode node = parse(mixin("CAPTURE_FAILHARD"));

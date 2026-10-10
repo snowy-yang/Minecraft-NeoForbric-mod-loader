@@ -34,7 +34,7 @@ import org.junit.jupiter.api.parallel.ResourceLock;
  */
 @ResourceLock("system-properties")
 class KernelFabricFluidBehaviorsTest {
-	private static final Path MODS = Path.of("build/compat-inputs/sweep90/mods");
+	private static final Path MODS = Path.of("build/compat-inputs/sweep-1.21.1/mods");
 	@TempDir Path temp;
 	private URLClassLoader loader;
 	private Class<?> tagKey, entity, living, boat, behaviourType;

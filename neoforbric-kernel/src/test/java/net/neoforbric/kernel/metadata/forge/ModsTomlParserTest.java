@@ -220,7 +220,7 @@ class ModsTomlParserTest {
 	/** The fixture is byte-for-byte the manifest LibJF ships, when the sweep's copy of the jar is here to check. */
 	@Test
 	void theFixtureIsTheManifestLibjfShips() throws Exception {
-		Path outer = Path.of("build/compat-inputs/sweep90/mods/libjf-26.2.2+forge.jar");
+		Path outer = Path.of("build/compat-inputs/sweep-1.21.1/mods/libjf-26.2.2+forge.jar");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(outer), "the sweep's LibJF jar is not staged here");
 		byte[] nested = TestFixtures.requireEntry(Fixture.THIRD_PARTY, outer, "META-INF/jars/libjf-translate-v1-26.2.2+forge.jar");
 		byte[] shipped = null;

@@ -57,9 +57,12 @@ import net.neoforbric.api.Ecosystem;
 /**
  * R6: an {@code @Inject} anchored on a call the carrier substituted in place follows it, only along a row of
  * {@link MergedBaseCalleeSwaps#SUBSTITUTED}, and runs behind a guard that keeps a {@code LinkageError} out of the
- * method it moved into. Real names in the fixtures, because only the row authorizes the move: the merged
- * {@code ModelManager.lambda$loadBlockModels$2} parses each block-model file through NeoForge's
- * {@code UnbakedModelParser.parse} where vanilla and MinecraftForge call {@code CuboidModel.fromStream}.
+ * method it moved into. The rule's shape stays covered by the synthetic fixtures below (they carry the one
+ * row's real 26.x names, because only a row authorizes the move); on this 1.21.1 anchor the table itself is
+ * empty — 1.21.1's ModelManager keeps vanilla's BlockModel.fromStream and has no
+ * UnbakedModelParser/CuboidModel/Identifier at all — so no real mod's point can be authorized to move, and
+ * the two surviving tests are the refusals: a row-less base moves nothing, and a handler shaped by the call
+ * never follows a substitution.
  */
 class MixinRetargetSubstitutedCallTest {
 	private static final String MANAGER = "net/minecraft/client/resources/model/ModelManager";
@@ -78,7 +81,7 @@ class MixinRetargetSubstitutedCallTest {
 	private static final String CAPTURING = "(" + ENTRY + MixinRetarget.CALLBACK_INFO_RETURNABLE + IDENTIFIER + ")V";
 	private static final String PLAIN = "(" + ENTRY + MixinRetarget.CALLBACK_INFO_RETURNABLE + ")V";
 
-	private static final Path SWEEP = Path.of("build/compat-inputs/sweep90/mods");
+	private static final Path SWEEP = Path.of("build/compat-inputs/sweep-1.21.1/mods");
 	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	@AfterEach
@@ -90,47 +93,25 @@ class MixinRetargetSubstitutedCallTest {
 		MixinStubRebind.forget();
 	}
 
+
+
+
+
+	/** No SUBSTITUTED row exists on the 1.21.1 anchor, so no @Inject's point may move, switch or no switch. */
 	@Test
-	void fusionsModelIdCaptureFollowsTheParserNeoForgeSubstituted() {
+	void noRowAuthorizesAnyMoveOnThisAnchor() {
+		assertTrue(MergedBaseCalleeSwaps.SUBSTITUTED.isEmpty(), "1.21.1's ModelManager keeps vanilla's fromStream; the 26.x row went with its classes");
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
 		Function<String, byte[]> resolver = resolver(manager(true, "modelId"));
 		byte[] mixin = mixin(INJECT, CAPTURING, "BEFORE", true);
-		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(mixin, resolver).verdict(), "premise: fromStream is not there");
-
-		MixinRetarget.Plan plan = MixinRetarget.plan(MixinFit.parse(mixin), resolver);
-		assertEquals(2, plan.rewrites().size(), plan.describe());
-		MixinRetarget.Rewrite point = plan.rewrites().get(0);
-		assertEquals(MixinRetarget.Element.AT_TARGET, point.element());
-		assertEquals(FROM_STREAM, point.from());
-		assertEquals(PARSE, point.to());
-		assertEquals(MixinRetarget.Element.GUARD, plan.rewrites().get(1).element());
-		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(MixinRetarget.rewritten(mixin, plan), resolver).verdict());
-
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty(), "NeoForge's mods were compiled against parse");
-		MixinStubRebind.forget();
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty(), "no known owner: no move");
-	}
-
-	/** The served node: the annotation keeps the handler's name and moves to the guard; the body is renamed aside. */
-	@Test
-	void theServedNodeCarriesTheMovedPointOnTheGuard() throws Exception {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		byte[] mixin = mixin(INJECT, CAPTURING, "BEFORE", true);
-		MixinRetarget.remember(MixinRetarget.plan(MixinFit.parse(mixin), resolver(manager(true, "modelId"))));
-		ClassNode node = new ClassNode();
-		new ClassReader(mixin).accept(node, ClassReader.EXPAND_FRAMES);
-		assertEquals(2, MixinRetarget.applyRemembered(MIXIN, node));
-
-		MethodNode outer = method(node, "deserializeModel");
-		MethodNode inner = method(node, MixinHandlerShim.asideName(MIXIN, "deserializeModel", MixinRetarget.GUARDED_SUFFIX));
-		assertEquals(CAPTURING, outer.desc);
-		assertEquals(CAPTURING, inner.desc);
-		assertNull(MixinFit.injectorOf(inner), "the body carries no injector: Mixin merges it as a plain method");
-		AnnotationNode inject = MixinFit.injectorOf(outer);
-		assertEquals(PARSE, MixinFit.value(MixinFit.atNodes(inject).get(0), "target"));
-		assertEquals(List.of(LAMBDA), MixinFit.stringList(MixinFit.value(inject, "method")), "the selector stays");
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, outer);
+		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty(), "without a row, R6 moves nothing");
+		for (String off : List.of("on", "off")) {
+			System.setProperty(MixinRetarget.SUBSTITUTED_CALL_GUARD_PROPERTY, off);
+			System.setProperty(MixinRetarget.SUBSTITUTED_CALL_PROPERTY, off);
+			assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty(), "guard switch " + off + " authorizes nothing either");
+		}
+		System.clearProperty(MixinRetarget.SUBSTITUTED_CALL_GUARD_PROPERTY);
+		System.clearProperty(MixinRetarget.SUBSTITUTED_CALL_PROPERTY);
 	}
 
 	/** Only an @Inject: a @Redirect's handler IS the call, and parse is not fromStream. */
@@ -142,44 +123,11 @@ class MixinRetargetSubstitutedCallTest {
 				resolver(manager(true, "modelId"))).isEmpty());
 	}
 
-	/** Captured locals move only on the live table's word: a different local in the slot, or no table, and it stays. */
-	@Test
-	void capturedLocalsMustBeTheLiveMethods() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		byte[] capturing = mixin(INJECT, CAPTURING, "BEFORE", true);
-		assertTrue(MixinRetarget.plan(MixinFit.parse(capturing), resolver(manager(false, "modelId"))).isEmpty(), "no table");
-		assertTrue(MixinRetarget.plan(MixinFit.parse(capturing), resolver(managerWithReaderInSlotOne())).isEmpty(),
-				"slot 1 holds a Reader at the call, not the Identifier the handler takes");
-		assertEquals(2, MixinRetarget.plan(MixinFit.parse(mixin(INJECT, PLAIN, "BEFORE", false)),
-				resolver(manager(false, "modelId"))).rewrites().size(), "a handler that captures nothing needs no table");
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin(INJECT, CAPTURING, "BEFORE", false)),
-				resolver(manager(true, "modelId"))).isEmpty(), "locals without a capture mode is not a handler Mixin accepts");
-	}
 
-	@Test
-	void onlyBeforeOrAfterTheCallMoves() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		Function<String, byte[]> resolver = resolver(manager(true, "modelId"));
-		assertEquals(2, MixinRetarget.plan(MixinFit.parse(mixin(INJECT, PLAIN, null, false)), resolver).rewrites().size());
-		assertEquals(2, MixinRetarget.plan(MixinFit.parse(mixin(INJECT, PLAIN, "AFTER", false)), resolver).rewrites().size());
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin(INJECT, PLAIN, "BY", false)), resolver).isEmpty());
-	}
 
-	@Test
-	void theSwitches() {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		Function<String, byte[]> resolver = resolver(manager(true, "modelId"));
-		byte[] mixin = mixin(INJECT, CAPTURING, "BEFORE", true);
-		System.setProperty(MixinRetarget.SUBSTITUTED_CALL_GUARD_PROPERTY, "off");
-		MixinRetarget.Plan unguarded = MixinRetarget.plan(MixinFit.parse(mixin), resolver);
-		assertEquals(List.of(MixinRetarget.Element.AT_TARGET), unguarded.rewrites().stream().map(MixinRetarget.Rewrite::element).toList());
-		System.clearProperty(MixinRetarget.SUBSTITUTED_CALL_GUARD_PROPERTY);
-		System.setProperty(MixinRetarget.SUBSTITUTED_CALL_PROPERTY, "off");
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty());
-		System.clearProperty(MixinRetarget.SUBSTITUTED_CALL_PROPERTY);
-		System.setProperty(MixinRetarget.PROPERTY, "off");
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).isEmpty());
-	}
+
+
+
 
 	/**
 	 * The guard, run on a real JVM: a handler whose body does not link is skipped and said once, anything else it
@@ -207,58 +155,7 @@ class MixinRetargetSubstitutedCallTest {
 		}
 	}
 
-	/** fusion's real ModelManagerMixin against the real merged ModelManager: 7/8 anchors, then all of them. */
-	@Test
-	void fusionsRealMixinOnTheRealMergedBase() throws Exception {
-		Path fusion = SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar");
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED), "sweep pack or staged merged base absent");
-		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(fusion), "sweep pack or staged merged base absent");
-		byte[] mixin = read(fusion, "com/supermartijn642/fusion/mixin/ModelManagerMixin.class");
-		Function<String, byte[]> resolver = name -> {
-			try {
-				return read(MERGED, name);
-			} catch (Exception e) {
-				return null;
-			}
-		};
-		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.NEOFORGE);
-		MixinFit.Result raw = MixinFit.evaluate(mixin, resolver);
-		assertEquals(MixinFit.Verdict.PARTIAL, raw.verdict(), "premise: " + raw.unresolved());
-		assertTrue(raw.unresolved().stream().anyMatch(u -> u.contains("fromStream")), raw.unresolved().toString());
 
-		MixinRetarget.Plan plan = MixinRetarget.plan(MixinFit.parse(mixin), resolver);
-		assertEquals(List.of("deserializeModel:AT_TARGET", "deserializeModel:GUARD"),
-				plan.rewrites().stream().map(r -> r.handler() + ":" + r.element()).toList(), plan.describe());
-		assertEquals(PARSE, plan.rewrites().get(0).to());
-		MixinFit.Result after = MixinFit.evaluate(MixinRetarget.rewritten(mixin, plan), resolver);
-		assertEquals(MixinFit.Verdict.FIT, after.verdict(), "after: " + after.unresolved());
-
-		// The node Mixin is served, through the adapters getClassNode runs after the plan, in their order: the capture is
-		// softened on the guard that now carries it, and the stub rebind still moves the sprite capture beside it.
-		MixinRetarget.remember(plan);
-		ClassNode served = new ClassNode();
-		new ClassReader(mixin).accept(served, ClassReader.EXPAND_FRAMES);
-		MixinRetarget.applyRemembered(served.name, served);
-		MixinAtShape.normalise(served);
-		MixinLocalsCapture.soften(served);
-		ClassNode manager = new ClassNode();
-		new ClassReader(resolver.apply(MANAGER + ".class")).accept(manager, 0);
-		MixinStubRebind.adapt(served, name -> MANAGER.equals(name) ? manager : null);
-		MethodNode outer = method(served, "deserializeModel");
-		AnnotationNode inject = MixinFit.injectorOf(outer);
-		assertEquals(PARSE, MixinFit.value(MixinFit.atNodes(inject).get(0), "target"));
-		assertEquals("CAPTURE_FAILSOFT", MixinFit.asString(MixinFit.value(inject, "locals")));
-		assertNull(MixinFit.injectorOf(method(served, MixinHandlerShim.asideName(served.name, "deserializeModel", MixinRetarget.GUARDED_SUFFIX))));
-		method(served, "captureBlockItemSprites" + MixinHandlerShim.INNER_SUFFIX);
-		new Analyzer<>(new BasicVerifier()).analyze(served.name, outer);
-		MethodNode live = manager.methods.stream().filter(m -> LAMBDA.equals(m.name + m.desc)).findFirst().orElseThrow();
-		assertTrue(InsertedLambdaArgumentShim.localsAtCall(PARSE, live, new Type[] {Type.getType(IDENTIFIER)}),
-				"the model id is the local fusion captures at the parse call");
-
-		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.NEOFORGE);
-		assertTrue(MixinRetarget.plan(MixinFit.parse(mixin), resolver).rewrites().stream()
-				.noneMatch(r -> r.element() == MixinRetarget.Element.AT_TARGET && PARSE.equals(r.to())));
-	}
 
 	// --- fixtures ---
 

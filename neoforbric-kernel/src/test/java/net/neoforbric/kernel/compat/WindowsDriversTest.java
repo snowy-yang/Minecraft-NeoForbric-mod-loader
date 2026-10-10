@@ -156,7 +156,7 @@ class WindowsDriversTest {
     }
 
     @Test void aFirstRunScreenIsMarkedSeenWithoutTouchingTheModsOtherSettings() throws Exception {
-        // sweep90-win-r6 sat on wover-ui's BetterX welcome for five minutes: vanilla runs quick-play only after it.
+        // sweep-1.21.1-win-r6 sat on wover-ui's BetterX welcome for five minutes: vanilla runs quick-play only after it.
         var result = DriverTools.run(Map.of(), "-c", """
                 import json, pathlib, sys
                 sys.path.insert(0, sys.argv[1]); import common
@@ -210,7 +210,7 @@ class WindowsDriversTest {
      * A sweep plays en_us whoever runs it, and the player's options.txt comes back byte for byte — over the client's
      * own rewrite of it too, in every --lang, and without a file when the player had none.
      *
-     * sweep90-win-r7c inherited its player's zh_cn and died at world join: Axiom 6.1.3's bundled Dear ImGui 1.92.7
+     * sweep-1.21.1-win-r7c inherited its player's zh_cn and died at world join: Axiom 6.1.3's bundled Dear ImGui 1.92.7
      * keeps a pointer into the font byte[]s past the JNI call that pinned them, and the two CJK fonts it loads for
      * zh (19 MB) are humongous reads that start the GC which moves or frees them before the atlas builds —
      * imstb_truetype.h:1590, then System.exit(1). Native Fabric with only Axiom and fabric-api asserts the same way

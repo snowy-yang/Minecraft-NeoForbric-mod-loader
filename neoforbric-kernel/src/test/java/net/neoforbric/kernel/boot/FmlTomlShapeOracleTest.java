@@ -195,7 +195,7 @@ class FmlTomlShapeOracleTest {
 	@Test
 	void theReadersOwnManifestsAnswerAsTheirOwnFmlDoes() throws Exception {
 		String nec = fixture("notenoughcrashes.neoforge.mods.toml",
-				"build/compat-inputs/sweep90/mods/notenoughcrashes-neoforge-4.4.9+26.2.jar", "META-INF/neoforge.mods.toml");
+				"build/compat-inputs/sweep-1.21.1/mods/notenoughcrashes-neoforge-4.4.9+1.21.1.jar", "META-INF/neoforge.mods.toml");
 		String puzzles = fixture("puzzleslib.neoforge.mods.toml",
 				"run/client-popular/mods/PuzzlesLib-v26.2.4-mc26.2.x-NeoForge.jar", "META-INF/neoforge.mods.toml");
 

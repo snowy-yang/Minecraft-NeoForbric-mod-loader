@@ -138,7 +138,7 @@ class PostMixinFixupsAliasTargetTest {
 	 */
 	@Test
 	void everyShippedFabricRegistrySyncHasExactlyTheWarningsCheckRepaired() throws Exception {
-		List<Path> roots = List.of(Path.of("build/compat-inputs/sweep90/mods"), Path.of("run/client-merged-pack/mods"),
+		List<Path> roots = List.of(Path.of("build/compat-inputs/sweep-1.21.1/mods"), Path.of("run/client-merged-pack/mods"),
 				Path.of("run/client-popular/mods"));
 		Map<String, byte[]> mixins = new HashMap<>();
 		for (Path root : roots) {

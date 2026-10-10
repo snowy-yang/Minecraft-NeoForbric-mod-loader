@@ -21,7 +21,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 /** balm's clear-all MOB_EFFECT_REMOVE veto wraps NeoForge's per-effect question, as fabric-api's ALLOW_EARLY_REMOVE does. */
 @ResourceLock("system-properties")
 class BalmEffectVetoTest {
-	private static final Path BALM = Path.of("build/compat-inputs/sweep90/mods/balm-fabric-26.2-26.2.0.9.jar");
+	private static final Path BALM = Path.of("build/compat-inputs/sweep-1.21.1/mods/balm-fabric-26.2-26.2.0.9.jar");
 
 	@AfterEach void reset() {
 		System.clearProperty(FabricEntityMixinAnchors.BALM_VETO_PROPERTY);
@@ -45,8 +45,10 @@ class BalmEffectVetoTest {
 		AnnotationNode wrap = MixinFit.injectorOf(handler);
 		assertEquals("Lcom/llamalad7/mixinextras/injector/wrapoperation/WrapOperation;", wrap.desc);
 		assertEquals(List.of("removeAllEffects()Z"), MixinFit.stringList(MixinFit.value(wrap, "method")));
+		// 1.21.1's EventHooks.onEffectRemoved carries the EffectCure the 26.x body did not; the adapter
+		// rewrote its point with this base's own signature.
 		assertEquals("Lnet/neoforged/neoforge/event/EventHooks;onEffectRemoved(Lnet/minecraft/world/entity/LivingEntity;"
-				+ "Lnet/minecraft/world/effect/MobEffectInstance;)Z", MixinFit.value(StagedFabricMixinFixture.at(mixin, "neoforbric$balmAllowRemove"), "target"));
+				+ "Lnet/minecraft/world/effect/MobEffectInstance;Lnet/neoforged/neoforge/common/EffectCure;)Z", MixinFit.value(StagedFabricMixinFixture.at(mixin, "neoforbric$balmAllowRemove"), "target"));
 		// NeoForge first (the Operation), then balm's own question with the effect's holder, exactly as its lambda asks it.
 		List<String> calls = new ArrayList<>();
 		for (AbstractInsnNode insn : handler.instructions) if (insn instanceof MethodInsnNode c) calls.add(c.name);

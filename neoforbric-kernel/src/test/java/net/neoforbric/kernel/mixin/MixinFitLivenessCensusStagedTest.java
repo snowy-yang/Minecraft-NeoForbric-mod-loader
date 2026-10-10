@@ -71,7 +71,7 @@ class MixinFitLivenessCensusStagedTest {
 		if (other != null) {
 			for (String pack : other.split(";")) if (pack.contains("=")) PACKS.put(pack.substring(0, pack.indexOf('=')), Path.of(pack.substring(pack.indexOf('=') + 1)));
 		} else {
-			for (String pack : List.of("sweep90", "mix80", "popular", "random")) PACKS.put(pack, Path.of("build/compat-inputs", pack, "mods"));
+			for (String pack : List.of("sweep-1.21.1", "mix80", "popular", "random")) PACKS.put(pack, Path.of("build/compat-inputs", pack, "mods"));
 			PACKS.put("client-merged-pack", Path.of("run/client-merged-pack/mods"));
 		}
 	}

@@ -77,7 +77,7 @@ class FabricHooksCallTest {
 	private static final String OPTIONS = "net/minecraft/client/Options";
 
 	private static final String QUILT_HOOKS = "org/quiltmc/loader/impl/game/minecraft/Hooks";
-	private static final Path OWO = Path.of("build/compat-inputs/sweep90/mods/owo-lib-0.13.1+26.2.jar");
+	private static final Path OWO = Path.of("build/compat-inputs/sweep-1.21.1/mods/owo-lib-0.12.15.4+1.21.jar");
 
 	@AfterEach
 	void restore() {

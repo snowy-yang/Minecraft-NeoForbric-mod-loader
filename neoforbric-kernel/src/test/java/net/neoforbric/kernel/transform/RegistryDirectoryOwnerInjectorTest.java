@@ -83,7 +83,7 @@ class RegistryDirectoryOwnerInjectorTest {
 	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEO_RUNTIME = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
-	private static final Path SWEEP = Path.of("build/compat-inputs/sweep90/mods");
+	private static final Path SWEEP = Path.of("build/compat-inputs/sweep-1.21.1/mods");
 	private static final Path FABRIC_API = SWEEP.resolve("fabric-api-0.161.0+26.2.jar");
 	private static final Path WORLDWEAVER = SWEEP.resolve("worldweaver-26.201.2.jar");
 

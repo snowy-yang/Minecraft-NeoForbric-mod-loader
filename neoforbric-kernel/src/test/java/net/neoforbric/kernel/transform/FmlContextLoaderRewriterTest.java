@@ -286,9 +286,9 @@ class FmlContextLoaderRewriterTest {
 
 	/** LibJF's mixin plugin out of the nested libjf-unsafe-v0 jar; skipped when the sweep pack is not here. */
 	private static byte[] libJfPlugin() throws Exception {
-		Path outer = Path.of("build/compat-inputs/sweep90/mods/libjf-3.17.4+forge.jar");
+		Path outer = Path.of("build/compat-inputs/sweep-1.21.1/mods/libjf-3.17.4+forge.jar");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(outer),
-				"the sweep90 pack (build/compat-inputs) is not linked into this checkout");
+				"the sweep-1.21.1 pack (build/compat-inputs) is not linked into this checkout");
 		// The jar is pinned by its full name, so a present one without the plugin has changed under the test.
 		try (ZipFile zip = new ZipFile(outer.toFile())) {
 			ZipEntry nested = zip.getEntry("META-INF/jars/libjf-unsafe-v0-3.17.4+forge.jar");

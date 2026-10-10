@@ -205,10 +205,10 @@ class MixinAddedMembersTest {
 	/** The two real mixins against the raw merged BlockModelRenderState. */
 	@Test
 	void morecullingsShadowOfFabricRenderersMeshResolves() throws Exception {
-		Path mods = Path.of(System.getProperty("user.dir"), "build", "compat-inputs", "sweep90", "mods").normalize();
+		Path mods = Path.of(System.getProperty("user.dir"), "build", "compat-inputs", "sweep-1.21.1", "mods").normalize();
 		Path moreculling = mods.resolve("moreculling-fabric-26.2-1.8.1.jar");
 		Path fabricApi = mods.resolve("fabric-api-0.161.0+26.2.jar");
-		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(moreculling) && Files.isRegularFile(fabricApi), "sweep90 pack absent");
+		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(moreculling) && Files.isRegularFile(fabricApi), "sweep-1.21.1 pack absent");
 		Function<String, byte[]> merged = MixinFitStagedTest.rawResolver();
 
 		String cullConfig = "moreculling.fabric.mixins.json";

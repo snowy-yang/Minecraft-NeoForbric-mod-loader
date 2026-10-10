@@ -258,7 +258,7 @@ class PushAndRunTest {
 
     @Test
     void theKernelJarIsBuiltBeforeAnythingIsStagedAndAFailedBuildStagesNothing() throws Exception {
-        // sweep90-win-r5 reported 4f229131 and ran a build/libs jar from before 8d0fb2ee.
+        // sweep-1.21.1-win-r5 reported 4f229131 and ran a build/libs jar from before 8d0fb2ee.
         var result = python("""
                 import json, os, stat, sys
                 kernel = output / 'kernel'; kernel.mkdir()

@@ -48,7 +48,7 @@ public final class CreativePagerFixtures {
 	}
 
 	public static Path owo() {
-		return find("build/compat-inputs/sweep90/mods/" + OWO_JAR);
+		return find("build/compat-inputs/sweep-1.21.1/mods/" + OWO_JAR);
 	}
 
 	/** One entry of the build's remapped item-group module — the interface as a NeoForbric client installs it. */

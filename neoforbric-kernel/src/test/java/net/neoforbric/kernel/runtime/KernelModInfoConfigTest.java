@@ -62,7 +62,7 @@ import net.neoforbric.kernel.metadata.forge.FmlConfigElements;
  */
 class KernelModInfoConfigTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path NEC = Path.of("build/compat-inputs/sweep90/mods/notenoughcrashes-neoforge-4.4.9+26.2.jar");
+	private static final Path NEC = Path.of("build/compat-inputs/sweep-1.21.1/mods/notenoughcrashes-neoforge-4.4.9+1.21.1.jar");
 	private static final Path PUZZLES = Path.of("run/client-popular/mods/PuzzlesLib-v26.2.4-mc26.2.x-NeoForge.jar");
 
 	@TempDir

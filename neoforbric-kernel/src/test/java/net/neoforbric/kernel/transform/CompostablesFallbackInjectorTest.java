@@ -33,7 +33,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class CompostablesFallbackInjectorTest {
 	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path MODS = Path.of("build/compat-inputs/sweep90/mods");
+	private static final Path MODS = Path.of("build/compat-inputs/sweep-1.21.1/mods");
 	private static final String COMPOSTER = "net/minecraft/world/level/block/ComposterBlock";
 	private static final String INPUT = COMPOSTER + "$InputContainer";
 	private static final String MAP = "it/unimi/dsi/fastutil/objects/Object2FloatMap";
