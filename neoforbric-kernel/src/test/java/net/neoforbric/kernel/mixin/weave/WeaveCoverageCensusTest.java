@@ -89,7 +89,6 @@ class WeaveCoverageCensusTest {
 			Map.entry("FabricRegistryInitializationMixinAdapter", Switch.own("neoforbric.fabricRegistryInitialization")),
 			// FabricFreezeHookMixinAdapter stands down with FabricFreezePointInjector, whose hooks its test puts on the pre-Mixin chain.
 			Map.entry("FabricFreezeHookMixinAdapter", new Switch(List.of("neoforbric.fabricFreezePoint"), "net.neoforbric.kernel.transform.FabricFreezePointInjector")),
-			Map.entry("FabricCreativePagerMixinAdapter", Switch.own("neoforbric.fabricCreativeKeyboard")),
 			Map.entry("FabricServerLanguageMixinAdapter", Switch.own("neoforbric.fabricServerLanguage")),
 			Map.entry("FabricSoundMixinAdapter", new Switch(List.of("neoforbric.fabricSoundContracts"), "net.neoforbric.kernel.transform.FabricSoundContractTransformer")),
 			Map.entry("FabricEnchantmentMixinAdapter", new Switch(List.of("neoforbric.fabricItemContracts"), "net.neoforbric.kernel.transform.FabricItemContractTransformer")),
@@ -114,9 +113,11 @@ class WeaveCoverageCensusTest {
 		Set<String> postMixin = postMixinStages();
 		assertEquals(Set.of("KernelGuestMixinAdapter"), configTime, "the config-time stages changed; place the new one in a list");
 		// A floor, not a description: it only has to be high enough that a census which stopped reading getClassNode's
-		// adapters fails. It fell from 40 when the per-mod adapters were deleted; the coverage check below is what
-		// actually holds the chain accountable, and this is only the reader's liveness guard.
-		assertTrue(preMixin.size() >= 35, "the census could not read getClassNode's adapters: " + preMixin);
+		// adapters fails. It fell from 40 when the per-mod adapters were deleted, and from 35 when the 26.x
+		// FabricCreativePagerMixinAdapter went with its premise (1.21.1's pinned mixin has no keyboard handler);
+		// the coverage check below is what actually holds the chain accountable, and this is only the reader's
+		// liveness guard.
+		assertTrue(preMixin.size() >= 33, "the census could not read getClassNode's adapters: " + preMixin);
 		assertEquals(Set.of("NativeCoremodParity", "PostMixinFixups", "InterfaceDefaultConflictRepair"),
 				postMixin, "the post-Mixin stages changed; place the new one in a list");
 

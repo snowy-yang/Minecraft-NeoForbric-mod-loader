@@ -620,9 +620,10 @@ public final class KernelBoot {
 				try (var in = loader.getGameResourceAsStream(name + ".class")) { return in == null ? null : in.readAllBytes(); }
 				catch (java.io.IOException unavailable) { return null; }
 			};
-			java.util.function.BooleanSupplier pinned = () -> net.neoforbric.kernel.mixin.FabricCreativePagerMixinAdapter.enabled()
-					|| net.neoforbric.kernel.mixin.MergedBaseMixinCompat.pinInForce(
-							net.neoforbric.kernel.mixin.MergedBaseMixinCompat.CREATIVE_PAGER_PIN);
+			// 1.21.1: only the pin decides — the 26.x adapter that used to retain the mixin's keyboard
+			// callback is gone (this fabric-api's mixin has no keyboard handler to retain).
+			java.util.function.BooleanSupplier pinned = () -> net.neoforbric.kernel.mixin.MergedBaseMixinCompat.pinInForce(
+					net.neoforbric.kernel.mixin.MergedBaseMixinCompat.CREATIVE_PAGER_PIN);
 			if (net.neoforbric.kernel.transform.CreativePagerBridgeInjector.enabled()) {
 				chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.CreativePagerBridgeInjector(gameClass, pinned));
 			} else if (pinned.getAsBoolean() && gameClass.apply(net.neoforbric.kernel.transform.CreativePagerBridgeInjector.API) != null) {

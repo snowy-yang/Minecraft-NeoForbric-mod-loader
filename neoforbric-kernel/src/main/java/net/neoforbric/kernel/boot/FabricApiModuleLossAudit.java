@@ -86,22 +86,26 @@ public final class FabricApiModuleLossAudit {
 			// ModelLoadingPlugin lost to a pruned ModelManagerMixin whose lambda this base does not have, and
 			// fabric:type formats read by a deserializer registry 0.116.17 does not ship. This base keeps
 			// vanilla's ModelBakery and fabric's mixins bind as written.
-			// Not a ClassCastException, which is what this row used to say: fabric-api's class tweaker injects the
-			// interface into the screen whatever the kernel pins, so the cast works and the call is the interface's
-			// own default. owo-lib implements it, from a mixin — the pinned-contract closure leaves that mixin out.
-			// Lost only while Fabric's mixin is pinned and the bridge is off: with the pin lifted, Fabric implements it.
-			new Loss("fabric-creative-tab-api-v1", "net/fabricmc/fabric/api/client/creativetab/v1/", Side.CLIENT,
-					"FabricCreativeModeInventoryScreen has nothing behind it on the creative screen — every call throws "
-							+ "AssertionError(\"Implemented by mixin\")",
+			// 1.21.1: no class tweaker attaches the interface anymore — the pinned mixin's implements clause was
+			// its only carrier — so with the pin in force and the bridge off the screen is not a
+			// FabricCreativeInventoryScreen at all and a mod's cast fails before any call. The bridge is what
+			// carries both the interface and its bodies now. Lost only while the pin is in force and the bridge
+			// is off: with the pin lifted, Fabric's own mixin implements it (and fights NeoForge's pager).
+			new Loss("fabric-item-group-api-v1", "net/fabricmc/fabric/api/client/itemgroup/v1/FabricCreativeInventoryScreen", Side.CLIENT,
+					"FabricCreativeInventoryScreen is not on the creative screen at all — a mod's cast to it fails, "
+							+ "and any guest mixin relying on it is left out",
 					() -> MergedBaseMixinCompat.pinInForce(MergedBaseMixinCompat.CREATIVE_PAGER_PIN)
 							&& !CreativePagerBridgeInjector.enabled(),
-					"its mixin implementing FabricCreativeModeInventoryScreen is left out unless -Dneoforbric.pinnedContracts=off "
-							+ "keeps it, as nothing stands behind that interface on the creative screen (kept, its first "
-							+ "call throws AssertionError, not ClassCastException)"),
+					"its mixin implementing FabricCreativeInventoryScreen is left out unless -Dneoforbric.pinnedContracts=off "
+							+ "keeps it — kept, the mixin applies, and nothing stands behind that interface on the creative "
+							+ "screen except the mixin itself")
 			// The CLASS, not the package: lithostitched names DynamicRegistries in the same package, which works.
-			new Loss("fabric-registry-sync-v0", "net/fabricmc/fabric/api/event/registry/DynamicRegistrySetupCallback", null,
-					"DynamicRegistrySetupCallback never fires (RegistryDataLoaderMixin is pinned)",
-					() -> MergedBaseMixinCompat.pinInForce(net.neoforbric.kernel.mixin.FabricRegistryLoaderMixinAdapter.PIN)));
+			// No DynamicRegistrySetupCallback row on 1.21.1: the 26.x one existed because
+			// RegistryDataLoaderMixin was pinned, and this module no longer ships that mixin; the callback's
+			// delivery mixins (SaveLoading/SerializableRegistries) carry plain method anchors the base
+			// answers, so nothing suppresses them and nothing is lost.
+			);
+
 	// No fabric-item-api-v1 entry on 1.21.1: the tooltip loss this table used to carry was about 26.x's
 	// ItemComponentTooltipProviderRegistry, a surface 0.116.17 does not have — its tooltip API is the
 	// ItemTooltipCallback of vanilla's own tooltip body, which this base kept.

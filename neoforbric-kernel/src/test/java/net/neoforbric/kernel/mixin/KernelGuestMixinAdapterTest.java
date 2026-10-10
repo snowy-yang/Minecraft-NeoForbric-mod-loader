@@ -892,7 +892,7 @@ class KernelGuestMixinAdapterTest {
 
 	@Test
 	void aMixinRelyingOnAPinnedMixinsInterfaceGoesWhenNothingStandsBehindIt() {
-		System.setProperty(FabricCreativePagerMixinAdapter.PROPERTY, "off");
+		System.setProperty(net.neoforbric.kernel.transform.CreativePagerBridgeInjector.PROPERTY, "off");
 		try {
 		assertEquals(List.of("PagerMemoryMixin"), judgePagerMemory(false),
 				"kept, its getCurrentPage() is the interface default and the creative inventory throws AssertionError");
@@ -902,7 +902,7 @@ class KernelGuestMixinAdapterTest {
 		assertEquals(net.neoforbric.api.CompatibilityFinding.Confidence.CONFIRMED, finding.confidence());
 		assertFalse(finding.required(), "the pin's own row carries the necessity");
 		assertTrue(finding.evidence().stream().anyMatch(e -> e.contains("getCurrentPage()I")), finding.evidence().toString());
-		} finally { System.clearProperty(FabricCreativePagerMixinAdapter.PROPERTY); }
+		} finally { System.clearProperty(net.neoforbric.kernel.transform.CreativePagerBridgeInjector.PROPERTY); }
 	}
 
 	@Test

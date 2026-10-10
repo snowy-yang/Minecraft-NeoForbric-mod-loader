@@ -7,7 +7,15 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
-/** Keeps Fabric's server/client ScopedValue binding across the carrier's added tags and leniency arguments. */
+/**
+ * Keeps Fabric's server/client ScopedValue binding across the carrier's added tags and leniency arguments.
+ *
+ * <p>26.x-era machinery, kept deliberately: 1.21.1's registry-sync no longer ships RegistryDataLoaderMixin
+ * (the load path moved onto {@code SaveLoading}/{@code SerializableRegistries} mixins with plain method
+ * anchors), so on this bundle {@link #adapt} matches nothing and the pin-lift in NeoForbricMixinService
+ * lifts nothing. It returns the moment a module carrying the 26.x shape appears, and its re-derivation
+ * against the 1.21.1 loading mixins is recorded follow-up work.
+ */
 public final class FabricRegistryLoaderMixinAdapter {
 	public static final String PROPERTY="neoforbric.fabricRegistryLoader";
 	public static final String PIN="fabric-registry-sync-v0.mixins.json:RegistryDataLoaderMixin";

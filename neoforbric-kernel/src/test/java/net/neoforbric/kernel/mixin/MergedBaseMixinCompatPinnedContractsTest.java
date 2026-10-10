@@ -42,13 +42,22 @@ class MergedBaseMixinCompatPinnedContractsTest {
 			Matcher pkg = PACKAGE.matcher(new String(entries.get(config), StandardCharsets.UTF_8));
 			assertTrue(pkg.find(), config);
 			String mixin = pkg.group(1).replace('.', '/') + "/" + pin.substring(pin.indexOf(':') + 1).replace('.', '/');
-			var node = MixinFit.parse(entries.get(mixin + ".class"));
+			// The pin's TARGET is a runtime concept: the base the kernel patches is Mojmap-named, so the
+			// row is derived from the module as the build remaps it — the raw module's targets are
+			// intermediary class_* names no base class answers. Only the item-group module is remapped
+			// into the stage; the registry pins contribute no interface rows, so their targets never
+			// reach the comparison below.
+			byte[] derived = module.equals("fabric-item-group-api-v1") ? CreativePagerFixtures.remappedModule(mixin + ".class") : entries.get(mixin + ".class");
+			var node = MixinFit.parse(derived);
 			judged++;
 			for (String contract : MixinFit.contributedInterfaces(node)) {
 				for (String target : MixinFit.mixinTargets(node)) read.add(new MergedBaseMixinCompat.PinnedContract(pin, target, contract));
 			}
 		}
-		assertTrue(judged >= 6, "the fabric-api pins were all read: " + judged);
+		// 1.21.1: the 26.x RegistryDataLoaderMixin pin died with its mixin (the module no longer ships
+		// it); the four that remain are BootstrapMixin, MainMixin, MinecraftClientMixin and
+		// CreativeInventoryScreenMixin — every fabric-api pin this bundle carries.
+		assertEquals(4, judged, "the fabric-api pins were all read: " + judged);
 		assertEquals(Set.copyOf(read), Set.copyOf(MergedBaseMixinCompat.PINNED_CONTRACTS));
 		for (var row : MergedBaseMixinCompat.PINNED_CONTRACTS) assertTrue(MergedBaseMixinCompat.SUPPRESSED_MIXINS.contains(row.pin()));
 	}
@@ -56,7 +65,7 @@ class MergedBaseMixinCompatPinnedContractsTest {
 	/** Lifted by -Dneoforbric.keepMixins or -Dneoforbric.mergedBaseCompat=off, a pin's mixin applies and implements its interface. */
 	@Test @ResourceLock("system-properties")
 	void aPinIsInForceUntilSomethingLiftsIt() {
-		System.setProperty(FabricCreativePagerMixinAdapter.PROPERTY, "off");
+		System.setProperty(net.neoforbric.kernel.transform.CreativePagerBridgeInjector.PROPERTY, "off");
 		String pin = MergedBaseMixinCompat.CREATIVE_PAGER_PIN;
 		assertTrue(MergedBaseMixinCompat.pinInForce(pin));
 		assertFalse(MergedBaseMixinCompat.pinInForce(pin.substring(0, pin.indexOf(':') + 1) + "NotPinned"));
@@ -69,7 +78,7 @@ class MergedBaseMixinCompatPinnedContractsTest {
 			System.setProperty("neoforbric.suppressMixins", pin);
 			assertTrue(MergedBaseMixinCompat.pinInForce(pin), "named again by hand");
 		} finally {
-			System.clearProperty(FabricCreativePagerMixinAdapter.PROPERTY);
+			System.clearProperty(net.neoforbric.kernel.transform.CreativePagerBridgeInjector.PROPERTY);
 			System.clearProperty("neoforbric.keepMixins");
 			System.clearProperty("neoforbric.mergedBaseCompat");
 			System.clearProperty("neoforbric.suppressMixins");
@@ -78,7 +87,7 @@ class MergedBaseMixinCompatPinnedContractsTest {
 
 	/**
 	 * The raw-byte check in front of the pinned-contract parse turns away only what the parse would: across every class
-	 * of owo-lib and fabric-api's creative-tab module, a class relies on the interface exactly when its bytes pass. A
+	 * of owo-lib and fabric-api's item-group module, a class relies on the interface exactly when its bytes pass. A
 	 * needle spelled as a descriptor or with dots would miss owo's mixin here, and let it throw in the game.
 	 */
 	@Test
@@ -86,7 +95,7 @@ class MergedBaseMixinCompatPinnedContractsTest {
 		MergedBaseMixinCompat.PinnedContract row = MergedBaseMixinCompat.PINNED_CONTRACTS.getFirst();
 		byte[] named = net.neoforbric.kernel.util.ByteScan.needle(row.contract());
 		Map<String, byte[]> classes = new HashMap<>();
-		for (var e : entries(fabricApiModules().get("fabric-creative-tab-api-v1")).entrySet()) {
+		for (var e : entries(fabricApiModules().get("fabric-item-group-api-v1")).entrySet()) {
 			if (e.getKey().endsWith(".class")) classes.put(e.getKey(), e.getValue());
 		}
 		try (ZipFile owo = new ZipFile(CreativePagerFixtures.owo().toFile())) {

@@ -286,7 +286,6 @@ public final class NeoForbricMixinService
 		FabricRegistryLoaderMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		FabricRegistryInitializationMixinAdapter.adapt(node);
 		FabricFreezeHookMixinAdapter.adapt(node, this::mergedBaseNode);
-		FabricCreativePagerMixinAdapter.adapt(node);
 		GuiItemCaptureMixinAdapter.adapt(node, this::mergedBaseNodeWithCode);
 		// …and a redirect of a vanilla call the carrier replaced at the same place, whose handler only conditions it,
 		// forwards the carrier's call there instead.
@@ -640,15 +639,14 @@ public final class NeoForbricMixinService
 
 		if (MergedBaseMixinCompat.enabled()) {
 			collectSuppressed(MergedBaseMixinCompat.SUPPRESSED_MIXINS, configName, out);
-			if (FabricRegistryLoaderMixinAdapter.enabled() && configName.equals("fabric-registry-sync-v0.mixins.json")) {
-				out.remove("RegistryDataLoaderMixin");
+			if (FabricRegistryLoaderMixinAdapter.enabled()) {
+				// 1.21.1's module has no RegistryDataLoaderMixin (its scheme moved onto SaveLoading and
+				// SerializableRegistries mixins), so the 26.x pin-lift has nothing to lift — kept only so
+				// the adapter's kill switch keeps its documented shape; it matches nothing on this bundle.
 			}
 			if (FabricRegistryInitializationMixinAdapter.enabled()) {
 				if (configName.equals("fabric-registry-sync-v0.mixins.json")) out.removeAll(List.of("BootstrapMixin","MainMixin"));
-				if (configName.equals("fabric-registry-sync-v0.client.mixins.json")) out.remove("MinecraftMixin");
-			}
-			if (FabricCreativePagerMixinAdapter.enabled() && configName.equals("fabric-creative-tab-api-v1.client.mixins.json")) {
-				out.remove("CreativeModeInventoryScreenMixin");
+				if (configName.equals("fabric-registry-sync-v0.client.mixins.json")) out.remove("MinecraftClientMixin");
 			}
 			// The pruner trims these to the injectors that fit; switched off, the whole-mixin pin comes back so the
 			// kill switch reproduces the OLD behaviour and never the half-applied one.

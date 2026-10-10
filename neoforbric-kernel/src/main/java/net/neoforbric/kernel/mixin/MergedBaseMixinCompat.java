@@ -52,8 +52,8 @@ public final class MergedBaseMixinCompat {
 	/**
 	 * Individual mixins to drop, as {@code <config>:<MixinEntry>}. The rest of each config still applies.
 	 * The registry and creative entries below are fallback pins: NeoForbricMixinService lifts them while
-	 * FabricRegistryInitializationMixinAdapter, FabricRegistryLoaderMixinAdapter and
-	 * FabricCreativePagerMixinAdapter retain their callbacks on the kernel's single freeze and carrier pager.
+	 * FabricRegistryInitializationMixinAdapter and FabricRegistryLoaderMixinAdapter retain their callbacks on
+	 * the kernel's single freeze and carrier pager.
 	 *
 	 * <ul>
 	 *   <li><b>registry-sync {@code BootstrapMixin} + {@code MainMixin}</b> — a coupled pair: the first redirects
@@ -64,7 +64,7 @@ public final class MergedBaseMixinCompat {
 	 *       {@code BootstrapMixin.afterInitialize} could not apply anyway — its {@code @At(INVOKE,
 	 *       target=Bootstrap.wrapStreams()V)} anchor does not exist, because Forge/NeoForge won the byte-merge of
 	 *       {@code Bootstrap.bootStrap} and their version never calls {@code wrapStreams()}.)</li>
-	 *   <li><b>registry-sync CLIENT {@code MinecraftMixin}</b> — the client twin of the same freeze-timing scheme:
+	 *   <li><b>registry-sync CLIENT {@code MinecraftClientMixin}</b> — the client twin of the same freeze-timing scheme:
 	 *       it re-runs {@code BuiltInRegistries.bootStrap()} from {@code Minecraft.<init>} after the kernel already
 	 *       froze, giving {@code IllegalStateException: Registry is already frozen}. Same redundancy as its three
 	 *       common-config siblings above — the kernel owns the single freeze — so it is suppressed for the same
@@ -74,13 +74,13 @@ public final class MergedBaseMixinCompat {
 	 *       Fabric main has run. Nothing the kernel forces may run Fabric code in that gap — its datapack-registry
 	 *       declaration did, through {@code RegistryDataLoader.<clinit>}, and poisoned world loading for the
 	 *       session; see {@code DatapackRegistryDeclaration}.</li>
-	 *   <li><b>registry-sync {@code RegistryDataLoaderMixin}</b> — binds a {@code ScopedValue IS_SERVER} in one
-	 *       wrap and reads it in another, re-binding across the async boundary in two more. The re-bind wraps do
-	 *       not match the merged base's {@code RegistryDataLoader.load}, so the read throws
-	 *       {@code NoSuchElementException: ScopedValue not bound} on a ForkJoin worker. Cost: registry-sync's
-	 *       server/client context during datapack registry load. FabricRegistryLoaderMixinAdapter now restores
-	 *       the original ScopedValue bindings and async propagation on both widened overloads; this pin returns
-	 *       only with that adapter switched off.</li>
+	 *   <li><b>registry-sync {@code RegistryDataLoaderMixin}</b> — GONE with this anchor: 1.21.1's
+	 *       registry-sync has no such mixin, and the ScopedValue-across-async scheme it pinned died with it
+	 *       (the load path moved onto {@code SaveLoading}+{@code SerializableRegistries} mixins whose anchors
+	 *       are plain method targets the base answers). FabricRegistryLoaderMixinAdapter — which restored the
+	 *       26.x ScopedValue bindings on the widened overloads — is kept for now and simply matches nothing on
+	 *       this module; its re-derivation against the 1.21.1 loading mixins is follow-up work, to be measured
+	 *       against a live boot before anything is pinned or adapted again.</li>
 	 *   <li><b>loot-api-v3 {@code ReloadableServerRegistriesMixin}</b> — 1.21.1: UNPINNED, and the whole
 	 *       {@code LootTableEventBridgeInjector} that replaced it is deleted. The 26.x pin existed because
 	 *       NeoForge had reordered {@code lambda$scheduleRegistryLoad$0} so {@code modifyLootTable}'s
@@ -95,21 +95,22 @@ public final class MergedBaseMixinCompat {
 	 *       the refmap keeps pointing at intermediary names no Mojmap target answers to, and every injector
 	 *       soft-skips). Keeping the bridge would have double-fired every event; the bridge, its injector,
 	 *       the dispatch and their tests are gone.</li>
-	 *   <li><b>creative-tab CLIENT {@code CreativeModeInventoryScreenMixin}</b> — Fabric's creative-screen PAGER.
-	 *       The merged screen already carries NeoForge's pager as a base patch ({@code CreativeTabsScreenPage},
-	 *       the "&lt; N/M &gt;" buttons), so with this mixin woven BOTH pagers run at once — and they fight:
-	 *       Fabric cancels {@code extractTabButton} for any tab not on ITS OWN static {@code currentPage} (page
-	 *       math over vanilla {@code CreativeModeTabs.tabs()} positions), which NeoForge's page-flip buttons never
-	 *       change. Net effect: a mod tab beyond the first ten was registered, sorted, searchable, and
+	 *   <li><b>item-group CLIENT {@code CreativeInventoryScreenMixin}</b> — Fabric's creative-screen PAGER.
+	 *       The base screen already carries NeoForge's pager ({@code CreativeTabsScreenPage}, the "< N/M >"
+	 *       buttons), so with this mixin woven BOTH pagers run at once — and they fight:
+	 *       Fabric cancels the tab buttons for any tab not on ITS OWN static {@code currentPage} (page math over
+	 *       vanilla {@code CreativeModeTabs.tabs()} positions), which NeoForge's page-flip buttons never change.
+	 *       Net effect: a mod tab beyond the first ten was registered, sorted, searchable, and
 	 *       {@code shouldDisplay()==true}, yet drawn on NO page — Fabric hid it on NeoForge's page 2 while
-	 *       NeoForge's pager kept it off page 1. One pager must own the merged screen, and only NeoForge's is part
-	 *       of the base. What this mixin also carried is the implementation of {@code FabricCreativeModeInventoryScreen},
+	 *       NeoForge's pager kept it off page 1. One pager must own the screen, and only NeoForge's is part of
+	 *       the base. What this mixin also carried is the implementation of {@code FabricCreativeInventoryScreen},
 	 *       and that is NOT left out with it: fabric-api's class tweaker injects the interface into the screen
 	 *       regardless, so without an implementation every call is the interface default,
 	 *       {@code AssertionError("Implemented by mixin")} — owo-lib makes one each time the creative inventory
 	 *       opens. {@link net.neoforbric.kernel.transform.CreativePagerBridgeInjector} implements it from NeoForge's pager
-	 *       instead. FabricCreativePagerMixinAdapter keeps the original PageUp/PageDown callback and uses that
-	 *       same pager, while leaving the conflicting second page state out. With the bridge
+	 *       instead. (The 26.x-era FabricCreativePagerMixinAdapter — which kept the mixin's PageUp/PageDown
+	 *       callback while dropping its second page state — is gone with this anchor: 1.21.1's mixin has no
+	 *       keyboard handler at all, so there is nothing left to adapt.) With the bridge
 	 *       switched off, {@link #PINNED_CONTRACTS} has the mixin adapter leave out the mixins that rely on it.</li>
 	 *   <li><b>Shoulder Surfing {@code CapeLayerMixin} — the only entry here that arbitrates between two MODS
 	 *       rather than against the merged base.</b> Both it and CustomSkinLoader rewrite the SAME instruction:
@@ -164,11 +165,10 @@ public final class MergedBaseMixinCompat {
  * the unfit injectors are separable.
  */
 	public static final List<String> SUPPRESSED_MIXINS = List.of(
-			"fabric-registry-sync-v0.mixins.json:RegistryDataLoaderMixin",
 			"fabric-registry-sync-v0.mixins.json:BootstrapMixin",
 			"fabric-registry-sync-v0.mixins.json:MainMixin",
-			"fabric-registry-sync-v0.client.mixins.json:MinecraftMixin",
-			"fabric-creative-tab-api-v1.client.mixins.json:CreativeModeInventoryScreenMixin",
+			"fabric-registry-sync-v0.client.mixins.json:MinecraftClientMixin",
+			"fabric-item-group-api-v1.client.mixins.json:CreativeInventoryScreenMixin",
 			// MOD-vs-MOD, not merged-base: Shoulder Surfing's @Redirect deletes the call site CustomSkinLoader's
 			// raw-ASM cape patch needs. See the javadoc entry below — this one arbitrates between two mods.
 			"shouldersurfing.common.mixins.json:CapeLayerMixin",
@@ -206,13 +206,13 @@ public final class MergedBaseMixinCompat {
 	}
 
 	/** Fabric's creative pager, the pin whose interface {@link net.neoforbric.kernel.transform.CreativePagerBridgeInjector} backs. */
-	public static final String CREATIVE_PAGER_PIN = "fabric-creative-tab-api-v1.client.mixins.json:CreativeModeInventoryScreenMixin";
+	public static final String CREATIVE_PAGER_PIN = "fabric-item-group-api-v1.client.mixins.json:CreativeInventoryScreenMixin";
 
 	/** Every pin that implements an interface. {@code MergedBaseMixinCompatPinnedContractsTest} reads each off its jar. */
 	public static final List<PinnedContract> PINNED_CONTRACTS = List.of(
 			new PinnedContract(CREATIVE_PAGER_PIN,
 					"net/minecraft/client/gui/screens/inventory/CreativeModeInventoryScreen",
-					"net/fabricmc/fabric/api/client/creativetab/v1/FabricCreativeModeInventoryScreen"));
+					"net/fabricmc/fabric/api/client/itemgroup/v1/FabricCreativeInventoryScreen"));
 
 	/**
 	 * Whether {@code pin} ({@code <config>:<MixinEntry>}) is left out on this boot: listed, and neither

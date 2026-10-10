@@ -40,7 +40,7 @@ import net.neoforbric.kernel.transform.GuestInjectorPruner;
 class FabricApiModuleLossAuditTest {
 	private static final String LOOT = "net/fabricmc/fabric/api/loot/v3/LootTableEvents";   // 1.21.1: not a Loss row — the mixin binds as written
 	private static final String MODEL_PLUGIN = "net/fabricmc/fabric/api/client/model/loading/v1/ModelLoadingPlugin";
-	private static final String CREATIVE = "net/fabricmc/fabric/api/client/creativetab/v1/FabricCreativeModeInventoryScreen";
+	private static final String CREATIVE = "net/fabricmc/fabric/api/client/itemgroup/v1/FabricCreativeInventoryScreen";
 	private static final String DYNAMIC_REGISTRIES = "net/fabricmc/fabric/api/event/registry/DynamicRegistries";
 	private static final String SETUP_CALLBACK = "net/fabricmc/fabric/api/event/registry/DynamicRegistrySetupCallback";
 
@@ -108,7 +108,7 @@ class FabricApiModuleLossAuditTest {
 		assertTrue(ModCatalog.failures().isEmpty(), "a dedicated server never opens the creative screen");
 		FabricApiModuleLossAudit.report(Side.CLIENT);
 		ModCatalog.Entry pager = degraded("pager");
-		assertTrue(pager != null && pager.statusDetail().startsWith("fabric-creative-tab-api-v1: "), String.valueOf(pager));
+		assertTrue(pager != null && pager.statusDetail().startsWith("fabric-item-group-api-v1: "), String.valueOf(pager));
 	}
 
 	/** A class IMPLEMENTING the creative-tab interface: owo-lib's mixin, which the fallback leaves out. */
@@ -121,7 +121,7 @@ class FabricApiModuleLossAuditTest {
 	}
 
 	@Test
-	void theCreativePagerRowFollowsTheBridgeAndNamesTheAssertionErrorNotACast() {
+	void theCreativePagerRowFollowsTheBridgeAndNamesTheMissingInterfaceNotAnAssertionError() {
 		publish(entry("pager", "pager.jar", ""));
 		FabricApiModuleLossAudit.note("pager.jar", classNaming(CREATIVE));
 		FabricApiModuleLossAudit.report(Side.CLIENT);
@@ -130,9 +130,11 @@ class FabricApiModuleLossAuditTest {
 		System.setProperty(CreativePagerBridgeInjector.PROPERTY, "off");
 		FabricApiModuleLossAudit.report(Side.CLIENT);
 		ModCatalog.Entry pager = degraded("pager");
-		assertTrue(pager != null && pager.statusDetail().contains("AssertionError"), String.valueOf(pager));
-		assertFalse(pager.statusDetail().contains("ClassCastException"),
-				"fabric-api's class tweaker injects the interface, so a cast succeeds: " + pager.statusDetail());
+		// 1.21.1: with the bridge off and the pin in force nothing attaches the interface to the screen —
+		// the mod's own cast fails, and the row says exactly that (26.x's tweaker injected the interface
+		// unconditionally, so its row could only ever name the throwing call).
+		assertTrue(pager != null && pager.statusDetail().contains("cast to it fails"), String.valueOf(pager));
+		assertFalse(pager.statusDetail().contains("AssertionError"), String.valueOf(pager));
 	}
 
 	@Test
@@ -143,11 +145,11 @@ class FabricApiModuleLossAuditTest {
 		FabricApiModuleLossAudit.note("caller.jar", classNaming(CREATIVE));
 		FabricApiModuleLossAudit.report(Side.CLIENT);
 		ModCatalog.Entry owo = degraded("owo");
-		assertTrue(owo != null && owo.statusDetail().contains("mixin implementing FabricCreativeModeInventoryScreen is left out"),
+		assertTrue(owo != null && owo.statusDetail().contains("mixin implementing FabricCreativeInventoryScreen is left out"),
 				String.valueOf(owo));
 		assertTrue(owo.statusDetail().contains("unless -Dneoforbric.pinnedContracts=off"), "that switch keeps it: " + owo.statusDetail());
 		ModCatalog.Entry caller = degraded("caller");
-		assertTrue(caller != null && caller.statusDetail().contains("every call throws AssertionError"), String.valueOf(caller));
+		assertTrue(caller != null && caller.statusDetail().contains("a mod's cast to it fails"), String.valueOf(caller));
 	}
 
 	/** With Fabric's own mixin unpinned it implements the interface itself: nothing is lost, bridge or not. */
@@ -168,49 +170,55 @@ class FabricApiModuleLossAuditTest {
 	}
 
 	@Test
-	void theRegistryNeedleIsTheClassNotThePackage() {
-		FabricApiModuleLossAudit.note("lithostitched.jar", classNaming(DYNAMIC_REGISTRIES));
-		assertTrue(FabricApiModuleLossAudit.users().isEmpty(), "DynamicRegistries works — it must not be recorded");
-		FabricApiModuleLossAudit.note("other.jar", classNaming(SETUP_CALLBACK));
-		assertEquals(Set.of("other.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(1)));
+	void theNeedleIsTheClassNotThePackage() {
+		// 26.x exercised this on the registry-sync row (lithostitched's DynamicRegistries beside Fabric's
+		// DynamicRegistrySetupCallback); that row died with RegistryDataLoaderMixin, so the property is
+		// proven on the one row that remains — the item-group interface.
+		FabricApiModuleLossAudit.note("works.jar", classNaming("net/fabricmc/fabric/api/client/itemgroup/v1/FabricItemGroup"));
+		assertTrue(FabricApiModuleLossAudit.users().isEmpty(), "a sibling class in the surface package works — it must not be recorded");
+		FabricApiModuleLossAudit.note("other.jar", classNaming(CREATIVE));
+		assertEquals(Set.of("other.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(0)));
 	}
 
 	@Test
 	void fabricApisOwnModuleIsNeverAUserAndAThirdPartyBesideItIs() {
 		publish(entry("owo", "owo.jar", ""),
-				entry("fabric-creative-tab-api-v1", "fabric-creative-tab-api-v1.jar", "fabric-api"));
+				entry("fabric-item-group-api-v1", "fabric-item-group-api-v1.jar", "fabric-api"));
 		// The creative row only fires while its restoration is switched off — the kill switch every sibling
 		// test sets too; without it the bridge answers for the interface and nobody is degraded.
 		System.setProperty(CreativePagerBridgeInjector.PROPERTY, "off");
 		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
-		FabricApiModuleLossAudit.note("fabric-creative-tab-api-v1.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.note("fabric-item-group-api-v1.jar", classNaming(CREATIVE));
 		FabricApiModuleLossAudit.report(Side.CLIENT);
 		assertTrue(degraded("owo") != null, "the third party is named");
-		assertTrue(degraded("fabric-creative-tab-api-v1") == null, "the module that DEFINES the surface is not its user");
+		assertTrue(degraded("fabric-item-group-api-v1") == null, "the module that DEFINES the surface is not its user");
 	}
 
 	@Test
 	void threeClassesFromOneJarNameItOnce() {
 		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
 		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
-		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE, SETUP_CALLBACK));
-		assertEquals(Set.of("owo.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(0)));
-		assertEquals(Set.of("owo.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(1)));
-		assertEquals(2, FabricApiModuleLossAudit.users().size(), "two surfaces, one jar each");
+		FabricApiModuleLossAudit.note("owo.jar", classNaming(CREATIVE));
+		assertEquals(Set.of("owo.jar"), FabricApiModuleLossAudit.users().get(FabricApiModuleLossAudit.LOSSES.get(0)),
+				"one surface, named once per jar: " + FabricApiModuleLossAudit.users());
+		assertEquals(1, FabricApiModuleLossAudit.users().size(), "one surface, one jar");
 	}
 
 	@Test void separatelyInstalledDefiningModuleIsNotItsOwnThirdPartyConsumer() {
-		String before = System.setProperty(net.neoforbric.kernel.mixin.FabricRegistryLoaderMixinAdapter.PROPERTY, "off");
+		// 26.x proved this on the registry-sync row; that row died with RegistryDataLoaderMixin, so the
+		// property moves to the surviving one: fabric's own item-group module jar (published with the
+		// fabric-api parent) is not its own consumer.
+		String before = System.setProperty(CreativePagerBridgeInjector.PROPERTY, "off");
 		try {
-		publish(entry("fabric-registry-sync-v0", "module.jar", ""), entry("consumer", "consumer.jar", ""));
-		FabricApiModuleLossAudit.note("module.jar", classNaming(SETUP_CALLBACK));
-		FabricApiModuleLossAudit.note("consumer.jar", classNaming(SETUP_CALLBACK));
-		FabricApiModuleLossAudit.report(Side.DEDICATED_SERVER);
-		assertTrue(degraded("fabric-registry-sync-v0") == null);
+		publish(entry("fabric-item-group-api-v1", "module.jar", "fabric-api"), entry("consumer", "consumer.jar", ""));
+		FabricApiModuleLossAudit.note("module.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.note("consumer.jar", classNaming(CREATIVE));
+		FabricApiModuleLossAudit.report(Side.CLIENT);
+		assertTrue(degraded("fabric-item-group-api-v1") == null);
 		assertTrue(degraded("consumer") != null);
 		} finally {
-			if (before == null) System.clearProperty(net.neoforbric.kernel.mixin.FabricRegistryLoaderMixinAdapter.PROPERTY);
-			else System.setProperty(net.neoforbric.kernel.mixin.FabricRegistryLoaderMixinAdapter.PROPERTY, before);
+			if (before == null) System.clearProperty(CreativePagerBridgeInjector.PROPERTY);
+			else System.setProperty(CreativePagerBridgeInjector.PROPERTY, before);
 		}
 	}
 
