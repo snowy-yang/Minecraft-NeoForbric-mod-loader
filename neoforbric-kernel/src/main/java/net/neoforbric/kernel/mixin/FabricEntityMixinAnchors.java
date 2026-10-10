@@ -36,8 +36,8 @@ public final class FabricEntityMixinAnchors {
      +"— the merged removeAllEffects has no activeEffects.clear() for its wrap to bind to",mixin.name.replace('/','.'));
    return changed;
   }
-  if(!List.of(BASE+"effect/LivingEntityMixin",BASE+"elytra/LivingEntityMixin",BASE+"ServerPlayerMixin",BASE+"LivingEntityMixin").contains(mixin.name))return 0;
-  ClassNode target=targets.apply(mixin.name.equals(BASE+"ServerPlayerMixin")?"net/minecraft/server/level/ServerPlayer":LIVING);if(target==null)return 0;int changed=0;
+  if(!List.of(BASE+"effect/LivingEntityMixin",BASE+"elytra/LivingEntityMixin",BASE+"ServerPlayerEntityMixin",BASE+"LivingEntityMixin").contains(mixin.name))return 0;
+  ClassNode target=targets.apply(mixin.name.equals(BASE+"ServerPlayerEntityMixin")?"net/minecraft/server/level/ServerPlayer":LIVING);if(target==null)return 0;int changed=0;
   if(mixin.name.equals(BASE+"effect/LivingEntityMixin")) {
    MethodNode force=method(target,"forceAddEffect","("+EFFECT+ENTITY+")V");
    String old="L"+LIVING+";canBeAffected("+EFFECT+")Z";
@@ -61,13 +61,13 @@ public final class FabricEntityMixinAnchors {
       "Lnet/neoforged/neoforge/common/NeoForgeMod;GLIDING_FLIGHT:Lnet/minecraft/core/Holder;");
    if(!"off".equalsIgnoreCase(System.getProperty(TICK_PROPERTY,"on"))&&damageChoiceBehindEmptyGuard(method(target,"updateFallFlying","()V"))
      &&plainPoint(mixin,"injectElytraTick","("+CI+")V")) {
-    int tick=move(mixin,"injectElytraTick","("+CI+")V","updateFallFlying()V",null,"INVOKE",GET_RANDOM,"INVOKE","Ljava/util/List;isEmpty()Z");
+    int tick=move(mixin,"injectElytraTick","("+CI+")V","tickFallFlying()V",null,"INVOKE",GET_RANDOM,"INVOKE","Ljava/util/List;isEmpty()Z");
     if(tick>0)NeoForbricLog.info("[NeoForbric/Mixin] fabric-api's elytra flight tick now runs before NeoForge's empty-glider guard in "
       +"LivingEntity.updateFallFlying — custom flight without a glider item reaches EntityElytraEvents.CUSTOM(entity, true) again");
     changed+=tick;
    }
   }
-  if(mixin.name.equals(BASE+"ServerPlayerMixin"))changed+=sleepLambda(mixin,target);
+  if(mixin.name.equals(BASE+"ServerPlayerEntityMixin"))changed+=sleepLambda(mixin,target);
   if(mixin.name.equals(BASE+"LivingEntityMixin"))changed+=bedOccupation(mixin,target);
   if(mixin.name.equals(BASE+"LivingEntityMixin"))changed+=sleepDirection(mixin,target);
   if(changed>0)NeoForbricLog.info("[NeoForbric/Mixin] restored %d entity callback anchor(s) in %s at the corresponding native decision stage",changed,mixin.name.replace('/','.'));
@@ -79,8 +79,10 @@ public final class FabricEntityMixinAnchors {
   if(handler==null||host==null||hasGroup(handler.visibleAnnotations)||hasGroup(handler.invisibleAnnotations)
     ||countCalls(host,"java/util/List","isEmpty","()Z")!=0)return 0;
   AnnotationNode inject=MixinFit.injectorOf(handler);
+  // The module writes its selector in the names it was authored with: yarn "trySleep", which the refmap
+  // resolves onto this base's startSleepInBed — never this base's own spelling.
   if(inject==null||!inject.desc.equals("Lorg/spongepowered/asm/mixin/injection/Redirect;")
-    ||!MixinFit.stringList(MixinFit.value(inject,"method")).equals(List.of("startSleepInBed")))return 0;
+    ||!MixinFit.stringList(MixinFit.value(inject,"method")).equals(List.of("trySleep")))return 0;
   List<AnnotationNode> points=MixinFit.atNodes(inject);
   if(points.size()!=1||!"Ljava/util/List;isEmpty()Z".equals(MixinFit.value(points.getFirst(),"target")))return 0;
   List<AbstractInsnNode> body=code(host);if(body.size()<4||!(body.get(0) instanceof VarInsnNode self)||self.var!=0||self.getOpcode()!=Opcodes.ALOAD
@@ -101,7 +103,9 @@ public final class FabricEntityMixinAnchors {
  private static final String LEVEL="net/minecraft/world/level/Level";
  private static final String POSITION="Lnet/minecraft/core/BlockPos;";
  private static final String BED_CALL="(L"+LEVEL+";"+POSITION+"L"+LIVING+";Z)V";
- // Exact instruction body in Fabric API 0.155.2's occupancy redirect. Frame/debug/access metadata is ignored.
+ // The exact instruction body of the occupancy redirect in the pinned fabric-entity-events-v1 0.116.17, as the
+ // module remap carries it into the base's names — identical to the 0.155.2 body the row was first pinned from:
+// the handler never changed between them. Frame/debug/access metadata is ignored.
  private static final String BED_BODY="f783fdec79ad88be77806d13c6c1804729677aa315cf9e8d6f1156351efee6e0";
  private static int bedOccupation(ClassNode mixin,ClassNode target) {
   MethodNode old=method(mixin,"setOccupiedState","(L"+LEVEL+";"+POSITION+"L"+STATE+";I)Z");
@@ -109,18 +113,32 @@ public final class FabricEntityMixinAnchors {
   AnnotationNode redirect=MixinFit.injectorOf(old);
   if(redirect==null||!redirect.desc.equals("Lorg/spongepowered/asm/mixin/injection/Redirect;"))return 0;
   List<String> selectors=MixinFit.stringList(MixinFit.value(redirect,"method"));
-  if(!new java.util.HashSet<>(selectors).equals(java.util.Set.of("startSleeping","lambda$stopSleeping$0")))return 0;
+  // 0.116.17 writes its selectors in the names the module was authored with — yarn "sleep" beside the
+  // intermediary synthetic "method_18404" — and its refmap resolves them onto vanilla's startSleeping and
+  // lambda$stopSleeping$9; this base renumbered the wake lambda ($12) and moved both bodies off
+  // Level.setBlockState, so the redirect is dead here twice over. The hosts are therefore found by the
+  // audited setter contract below, never by reading a selector or its refmap value as a base name.
+  if(!new java.util.HashSet<>(selectors).equals(java.util.Set.of("sleep","method_18404")))return 0;
   List<AnnotationNode> points=MixinFit.atNodes(redirect);
-  if(points.size()!=1||!("L"+LEVEL+";setBlock("+POSITION+"L"+STATE+";I)Z").equals(MixinFit.value(points.getFirst(),"target")))return 0;
-  for(String name:selectors){MethodNode host=method(target,name,"("+POSITION+")V");
-   if(host==null||countCalls(host,LEVEL,"setBlock","("+POSITION+"L"+STATE+";I)Z")!=0||countCalls(host,STATE,"setBedOccupied",BED_CALL)!=1)return 0;
+  if(points.size()!=1||!"Lnet/minecraft/world/World;setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;I)Z".equals(MixinFit.value(points.getFirst(),"target")))return 0;
+  List<String> hosts=new ArrayList<>();
+  for(MethodNode candidate:target.methods) {
+   if(!candidate.desc.equals("("+POSITION+")V"))continue;
+   if(countCalls(candidate,LEVEL,"setBlock","("+POSITION+"L"+STATE+";I)Z")!=0)continue;
+   if(countCalls(candidate,STATE,"setBedOccupied",BED_CALL)!=1)continue;
+   hosts.add(candidate.name+candidate.desc);
   }
+  if(hosts.size()!=2)return 0; // the sleep path and the wake-up lambda: exactly the two bodies the patch moved
   String desc="(L"+STATE+";L"+LEVEL+";"+POSITION+"L"+LIVING+";Z)V";
   if(method(mixin,"neoforbric$setBedOccupied",desc)!=null)return 0;
   MethodNode bridge=new MethodNode(Opcodes.ACC_PRIVATE,"neoforbric$setBedOccupied",desc,null,null);
   bridge.visibleAnnotations=new ArrayList<>(List.of(redirect));
   if(old.visibleAnnotations!=null)old.visibleAnnotations.remove(redirect);if(old.invisibleAnnotations!=null)old.invisibleAnnotations.remove(redirect);
   set(points.getFirst(),"target","L"+STATE+";setBedOccupied"+BED_CALL);
+  // The moved redirect cannot keep the module's own selectors: their refmap values name vanilla's bodies,
+  // and the patch renumbered the wake lambda, so at apply time they would bridge the sleep path alone. The
+  // selectors are rewritten to the two hosts just proven, exactly as the monster-check row rewrites its own.
+  set(redirect,"method",new ArrayList<>(hosts));
   InsnList code=bridge.instructions;LabelNode nativePath=new LabelNode(),perform=new LabelNode(),end=new LabelNode();
   code.add(new VarInsnNode(Opcodes.ALOAD,2));code.add(new VarInsnNode(Opcodes.ALOAD,3));
   code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,LEVEL,"getBlockState","("+POSITION+")L"+STATE+";",false));code.add(new VarInsnNode(Opcodes.ASTORE,6));
@@ -140,14 +158,15 @@ public final class FabricEntityMixinAnchors {
   code.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,STATE,"setBedOccupied",BED_CALL,false));code.add(end);code.add(new FrameNode(Opcodes.F_SAME,0,null,0,null));code.add(new InsnNode(Opcodes.RETURN));
   bridge.maxStack=5;bridge.maxLocals=7;mixin.methods.add(bridge);return 1;
  }
- /** fabric-entity-events-v1 5.0.4/5.0.5's onGetSleepingDirection: one Operation.call, then MODIFY_SLEEPING_DIRECTION. */
+ /** The pinned 0.116.17 module's onGetSleepingDirection, as its remap names it: one Operation.call, then
+ * MODIFY_SLEEPING_DIRECTION — the same body the 5.0.4/5.0.5 pin was first derived from. */
  static final String SLEEP_DIRECTION_BODY="6a7ab73c3bbee71f32b7af99490b87be878b9208bda2296f9240638ad59d7a73";
  private static final String DIRECTION="Lnet/minecraft/core/Direction;";
  /** Fabric's MODIFY_SLEEPING_DIRECTION wraps vanilla's BedBlock.getBedOrientation in LivingEntity.getBedOrientation —
   * what the sleeping body is drawn and the sleeping camera faced by. NeoForge's body asks the block instead
   * (isBed, getBedDirection) and never calls it, so the wrap bound nowhere. The same event is asked on the answer:
   * when the entity has a sleeping position, the native direction (FACING for a vanilla bed, the block's own for a
-  * modded one, null for a non-bed spot) goes through the listeners, as vanilla's did. */
+  * modded one, Direction.UP for a spot no bed answers on this base) goes through the listeners, as vanilla's did. */
  private static int sleepDirection(ClassNode mixin,ClassNode target) {
   MethodNode host=method(target,"getBedOrientation","()"+DIRECTION);
   if(host==null||countCalls(host,"net/minecraft/world/level/block/BedBlock","getBedOrientation","(Lnet/minecraft/world/level/BlockGetter;"+POSITION+")"+DIRECTION)!=0
@@ -157,11 +176,14 @@ public final class FabricEntityMixinAnchors {
   MethodNode old=method(mixin,"onGetSleepingDirection","(Lnet/minecraft/world/level/BlockGetter;"+POSITION+"L"+OPERATION+";)"+DIRECTION);
   if(old==null||hasGroup(old.visibleAnnotations)||hasGroup(old.invisibleAnnotations)||!bodyHash(old).equals(SLEEP_DIRECTION_BODY))return 0;
   AnnotationNode wrap=MixinFit.injectorOf(old);
+  // Both strings are the module's own: the selector is yarn "getSleepingDirection" (the refmap resolves it
+  // onto this base's getBedOrientation) and the wrapped call is yarn BedBlock.getDirection — the vanilla
+  // helper this base no longer calls, which is why the wrap is dead here in the first place.
   if(wrap==null||!wrap.desc.equals("Lcom/llamalad7/mixinextras/injector/wrapoperation/WrapOperation;")
-    ||!MixinFit.stringList(MixinFit.value(wrap,"method")).equals(List.of("getBedOrientation")))return 0;
+    ||!MixinFit.stringList(MixinFit.value(wrap,"method")).equals(List.of("getSleepingDirection")))return 0;
   List<AnnotationNode> points=MixinFit.atNodes(wrap);
   if(points.size()!=1||!"INVOKE".equals(MixinFit.value(points.getFirst(),"value"))
-    ||!("Lnet/minecraft/world/level/block/BedBlock;getBedOrientation(Lnet/minecraft/world/level/BlockGetter;"+POSITION+")"+DIRECTION).equals(MixinFit.value(points.getFirst(),"target")))return 0;
+    ||!"Lnet/minecraft/block/BedBlock;getDirection(Lnet/minecraft/world/BlockView;Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/math/Direction;".equals(MixinFit.value(points.getFirst(),"target")))return 0;
   String desc="("+DIRECTION+")"+DIRECTION;
   if(method(mixin,"neoforbric$modifySleepingDirection",desc)!=null)return 0;
   if(old.visibleAnnotations!=null)old.visibleAnnotations.remove(wrap);if(old.invisibleAnnotations!=null)old.invisibleAnnotations.remove(wrap);
@@ -194,7 +216,11 @@ public final class FabricEntityMixinAnchors {
   return 1;
  }
  private static final String OPERATION="com/llamalad7/mixinextras/injector/wrapoperation/Operation";
- private static final String EFFECT_REMOVED="(L"+LIVING+";"+EFFECT+")Z";
+ // NeoForge 21.1's removeAllEffects asks EventHooks.onEffectRemoved(LivingEntity, MobEffectInstance, EffectCure) —
+ // the per-effect question the clear-all veto wraps. The 26.x pin spelled it without the EffectCure argument,
+ // which no body of this base answers.
+ private static final String EFFECT_CURE="Lnet/neoforged/neoforge/common/EffectCure;";
+ private static final String EFFECT_REMOVED="(L"+LIVING+";"+EFFECT+EFFECT_CURE+")Z";
  private static final String ALLOW_EARLY="net/fabricmc/fabric/api/entity/event/v1/effect/ServerMobEffectEvents$AllowEarlyRemove";
  private static final String CONTEXT="Lnet/fabricmc/fabric/api/entity/event/v1/effect/EffectEventContext;";
  /** {@code -Dneoforbric.balmEffectVeto=off} leaves balm's clear-all effect veto on the dead activeEffects.clear(). */

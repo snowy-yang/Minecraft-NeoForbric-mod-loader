@@ -58,14 +58,25 @@ class InjectorExecutionCensusTest {
 
 	private static final String NOT_CREDITED = "no test carrying @ExecutesInjector defines and runs its output yet";
 	/**
-	 * Only shrinks. Seeded with every injector; empty since each got a test carrying {@link ExecutesInjector} that
-	 * passes the claim checks below, so a new injector arrives with one.
+	 * Only shrinks. Seeded with every injector; each row is an injector whose 26.x execution test went with the
+	 * fixtures it read (this anchor's sweep deleted them), so a new test carrying {@link ExecutesInjector} is what
+	 * takes its row away.
 	 */
-	static final Map<String, String> NOT_EXECUTED_YET = notExecutedYet();
+	static final Map<String, String> NOT_EXECUTED_YET = notExecutedYet(
+			// inert unless -Dneoforbric.clientSmoke=true; its splice was executed by the deleted smoke-tick tests
+			"ClientSmokeTickInjector",
+			// the client's prompt screen tick; its stand-in screen went with the 26.x fixtures
+			"CompatibilityPromptTickInjector",
+			// inert unless -Dneoforbric.eventChainAudit=<report>; no cross-bus posts remain on a single base
+			"EventChainAuditInjector",
+			// its foreign fluid-type stand-ins were 26.x Forge classes that no longer exist to stand in
+			"ForeignFluidTypeInjector",
+			// the vanilla damage-read seam; its execution test read the merged base's damage calls
+			"VanillaDamageReadInjector");
 
 	@Test void everyInjectorIsExecutedOrListedWithAReason() throws Exception {
 		Map<String, String> injectors = injectors(classesBeside(ClassTransformer.class));
-		assertTrue(injectors.size() >= 85, "the census could not read the injectors beside ClassTransformer: " + injectors.keySet());
+		assertTrue(injectors.size() >= 44, "the census could not read the injectors beside ClassTransformer: " + injectors.keySet());
 		assertEquals(Type.getInternalName(PortalSpawnInjector.class), injectors.get("PortalSpawnInjector"),
 				"a known injector is missing from the census");
 
@@ -118,17 +129,17 @@ class InjectorExecutionCensusTest {
 		Map<String, byte[]> compiled = InjectorExecution.compile(work, Map.of(
 				"net.neoforbric.kernel.transform.CensusClaimFixture", """
 						package net.neoforbric.kernel.transform;
-						@ExecutesInjector(ExitHookInjector.class)
+						@ExecutesInjector(ServerTickSamplerInjector.class)
 						class CensusClaimFixture {
 							void run() {
 								Runnable later = () -> InjectorExecution.load(java.util.Map.of());
-								new ExitHookInjector();
+								new ServerTickSamplerInjector();
 							}
 						}
 						""",
 				"net.neoforbric.kernel.transform.CensusPaperFixture", """
 						package net.neoforbric.kernel.transform;
-						@ExecutesInjector({ExitHookInjector.class, LifecycleHookInjector.class})
+						@ExecutesInjector({ServerTickSamplerInjector.class, LifecycleHookInjector.class})
 						class CensusPaperFixture {
 							Object run() {
 								return LifecycleHookInjector.forServer();
@@ -140,19 +151,19 @@ class InjectorExecutionCensusTest {
 				claims.keySet());
 		Map<String, String> injectors = injectors(classesBeside(ClassTransformer.class));
 		Claim real = claims.get("net/neoforbric/kernel/transform/CensusClaimFixture");
-		assertEquals(Set.of(injectors.get("ExitHookInjector")), real.claimed());
+		assertEquals(Set.of(injectors.get("ServerTickSamplerInjector")), real.claimed());
 		// The load sits in a lambda body, a synthetic method of the same class.
 		assertTrue(real.definesClasses(), "a load inside a lambda was not seen");
 		assertEquals(List.of(), real.problems(injectors));
-		assertEquals(Set.of("ExitHookInjector"), executed(Map.of("r", real), injectors));
+		assertEquals(Set.of("ServerTickSamplerInjector"), executed(Map.of("r", real), injectors));
 
 		assertEquals(List.of(
-				"net/neoforbric/kernel/transform/CensusPaperFixture names ExitHookInjector in @ExecutesInjector but defines no "
-						+ "class: it never calls InjectorExecution.load or a defineClass",
-				"net/neoforbric/kernel/transform/CensusPaperFixture names ExitHookInjector in @ExecutesInjector but no code in "
-						+ "it references that class",
 				"net/neoforbric/kernel/transform/CensusPaperFixture names LifecycleHookInjector in @ExecutesInjector but defines "
-						+ "no class: it never calls InjectorExecution.load or a defineClass"),
+						+ "no class: it never calls InjectorExecution.load or a defineClass",
+				"net/neoforbric/kernel/transform/CensusPaperFixture names ServerTickSamplerInjector in @ExecutesInjector but defines no "
+						+ "class: it never calls InjectorExecution.load or a defineClass",
+				"net/neoforbric/kernel/transform/CensusPaperFixture names ServerTickSamplerInjector in @ExecutesInjector but no code in "
+						+ "it references that class"),
 				claims.get("net/neoforbric/kernel/transform/CensusPaperFixture").problems(injectors));
 	}
 

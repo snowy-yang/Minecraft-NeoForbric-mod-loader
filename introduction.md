@@ -497,12 +497,15 @@ Notable repairs by family (read each class's javadoc for the case that motivated
   twins of re-typed fields), `MethodBodyNeuter`.
 - **Packs and data** — `DataPackHookInjector`, `ClientPackHookInjector`, `PackMetadataFailSoftInjector`,
   `PackOverlayMutabilityInjector`, `NullPackGuardInjector`, `PackScreenHiddenFilterInjector`,
-  `RegistryDirectoryOwnerInjector`, `RegistryAliasParityInjector` (§9).
+  `RegistryDirectoryOwnerInjector` (§9).
 - **UI** — `ModsButtonRedirector` (NeoForge's pause-menu lambda opens `KernelModListScreen`),
   `HudElementBridgeInjector`, `CreativePagerBridgeInjector`, `EarlyKeyMappingRegistrationInjector`.
 - **Instrumentation** — `ClientSmokeTickInjector` (inert unless `-Dneoforbric.clientSmoke=true`),
   `ServerTickSamplerInjector`, `CompatibilityPromptTickInjector`,
-  `ServerCompatibilityTickInjector`.
+  `ServerCompatibilityTickInjector` — the dedicated server's completed-tick seam: it splices
+  `KernelServerCompatibilityTicks.onCompatibilityTick` before every plain return of
+  `MinecraftServer.tickServer`, so late required losses stop a strict server through the game's own
+  saving path.
 - **Hardening** — `ChunkExecutorGuardInjector` (refuses work offered to a stopped server's chunk executor;
   `-Dneoforbric.chunkExecutorGuard=off`).
 
@@ -638,11 +641,11 @@ directly, keeps fabric-registry-sync's callback off it), `MixinOverloadPin`
 overload its handler fits — only when the first cannot take the handler; otherwise it is explained),
 `MixinMergedTwin` (`$neoforbricneo` renamed anonymous twins), `MixinAnonymousRetarget` + `MergedBaseAnonymousDrift`
 (renumbered `Outer$N`), `MixinAtWidenedCall` and
-`MixinWrapOperationShim` (calls the carrier widened or reordered; a `@Redirect` follows only a widened static call on a
+`MixinWrapOperationShim` (calls the patch widened or reordered; a `@Redirect` follows only a widened static call on a
 reviewed `REDIRECTABLE` row, through a wrapper that drops the appended arguments — creativecore's
 `RegistryFriendlyByteBuf.decorator`, whose buffers then say `ConnectionType.OTHER`, so NeoForge's connection-aware codecs
 use vanilla's wire format on them), `MixinRelocatedCall`, `MixinSubtypeOwnerRetarget` (the same call made through
-another owner: a subtype, or the merged type of a field the merge widened — `RangedBowAttackGoal.mob` made
+another owner: a subtype, or the re-typed field NeoForge's patch widened — `RangedBowAttackGoal.mob` made
 `Monster.lookAt` into `Mob.lookAt` — where the point gets the ordinal of the call through the field and the handler a
 guard so it runs only while the field holds vanilla's type), `MixinShearsRelay`, `MixinHandlerShim`, `MixinAtShape`
 (`at=[…]` vs `at=…` across Mixin forks), `MixinLocalsCapture` (`CAPTURE_FAILHARD → CAPTURE_FAILSOFT`),
@@ -764,32 +767,25 @@ stack passes through a method with a recorded conflict, `CrashAttribution` names
 
 ## 8. Event bridges
 
-On the patched base a Forge-family hook and NeoForge's own can compete for the same call site and one wins; the loser's hook
-is dead code, so that family's listeners sit on a bus nobody posts to. A MinecraftForge mod needs an instance of
-exactly `net.minecraftforge.…Event`, so re-emission is intrinsic.
+Gone with MinecraftForge support, and this section records what went and what stayed. The 26.x kernel kept a
+**re-emission multiplexer**: 96 `GameEventBridge` rows, each re-posting one Forge-family event a merged base
+had orphaned, installed by `boot.GameEventMultiplexer` with game-side halves `runtime.KernelGame*Events` and
+`KernelGameResultBridges`, verified by `net.neoforbric.api.EventBridges.verify`. On this anchor none of that
+has work to do: there is one Forge family, its events are NeoForge's own, and the patched base posts them
+itself — a MinecraftForge listener has no class to listen through, and no bridge exists to reach it.
 
-- **Inventory** — `net.neoforbric.api.GameEventBridge` enumerates 96 bridges, each with the event, its install pass
-  and its **cost** in player terms. Passes: `GAME_BUS` (both sides), `CLIENT_GAME_BUS`, `CLIENT_MOD_BUS`,
-  `CLIENT_INIT`, `REGISTRATION`, `CLIENT_HUD`, `ON_DEMAND`.
-- **Verification** — `net.neoforbric.api.EventBridges.verify(pass)` compares achieved against declared and names what
-  is missing with its cost; a bridge that fails to install costs a feature and throws nothing, so this is the only
-  way it becomes visible.
-- **Implementation** — `boot.GameEventMultiplexer` installs the bus bridges; the game-side halves are
-  `runtime.KernelGame*Events` (tick, server lifecycle, player, level, world, block, entity, damage, tracking,
-  client tick/render/input/network/resource/screen-mouse events) and `KernelGameResultBridges` for the two whose
-  MinecraftForge side returns a value. Cancellable events forward the cancellation back. Transformers land the
-  bridges that are not bus-to-bus (`ForgeDamageSeamsInjector`, `ForgeCreativeTabsInjector`,
-  `ForgeSpawnPlacementsInjector`, `ForgeClientConsumersInjector`, `ForgeBlockTintInjector`,
-  `ForgeOverlayNeuterInjector`/`KernelForgeOverlayLayers`, …).
-- **The other directions** — NeoForge events the patched body no longer posts (`ItemTooltipEvent` via
-  `KernelItemTooltips`, `ScreenEvent.Opening/Closing` via `NeoScreenEventsInjector`, conversion `Post` via
-  `NeoConversionPostInjector`); Fabric API events fired from NeoForge's own sites where Fabric's mixin cannot fit
-  (`KernelHudBridge` for
-  `HudElementRegistry`, `FabricFuelValuesInjector`, tooltip and block-break adapters).
-- **Audits** — `HookCallSiteCensus` (which hooks of `ForgeEventFactory`/`ForgeEventFactoryClient`/NeoForge
-  `ClientHooks` the base still calls), `DeadEventAudit` + `ForgeBusSubscriptions` (who listens to a dead
-  event, including subscriptions an annotation scan cannot see), `DeadHookWorklist` (the join, ordered by how many
-  installed jars notice), `EventChainAudit` (every cross-bus post, checked by one rule set; gate-m41).
+What survived the deletion, because it audits this base rather than bridging to a lost one:
+
+- **`HookCallSiteCensus`** — which hooks of NeoForge `ClientHooks`/`EventHooks` the base still calls, offline
+  and at boot.
+- **`DeadHookWorklist`** — the join of the census's dead hooks with the jars actually waiting on them,
+  ordered by how many installed mods notice (mentions of the 26.x Hurt/Damage/Attack seams it used to read
+  stay in its javadoc as history).
+- **NeoForge-direction re-emission survives as transform seam repairs** — where NeoForge's patch moved a
+  vanilla call a Fabric mod hooks, the repair is a `*Injector` on the base (`VanillaDamageReadInjector` and
+  kin), not a bus bridge; each is listed in §6 with its switch.
+- **Fabric API events whose mixin cannot fit the patched base** are still fired from NeoForge's own call
+  sites (`KernelHudBridge` for `HudElementRegistry`; the tooltip and block-break adapters, §7.4).
 
 ## 9. Datapacks, resources and data
 
@@ -798,11 +794,11 @@ exactly `net.minecraftforge.…Event`, so re-emission is intrinsic.
 A genuine loader turns every mod jar into a pack by walking `ModList`'s mod files. The kernel publishes mods into
 `ModList` with `modFiles` empty, so that walk finds nothing. `DataPackHookInjector` →
 `KernelLifecycle.onServerDataPacks` → `KernelDataPacks` / `runtime.KernelDataPackSource` serve each Forge-family
-jar's `data/` — and both carriers' (`c:` convention tags, `neoforge:` damage types and data maps exist only there).
+jar's `data/` — and the carrier's (`c:` convention tags, `neoforge:` damage types and data maps exist only there).
 Metadata is read through NeoForge's `ResourcePackLoader.readWithOptionalMeta`, keeping root-pack overlays. Where
-the carriers ship the same file, tags are additive and NeoForge wins last-wins files. Fabric mods' data is served
-by fabric-api's own resource loader as on Fabric. `KernelPackFinders` lets a MinecraftForge mod add its own pack
-finder (`-Dneoforbric.modDataPacks=off` disables the Forge-family packs).
+the carrier and a mod ship the same file, tags are additive and NeoForge wins last-wins files. Fabric mods' data
+is served by fabric-api's own resource loader as on Fabric. `KernelPackFinders` lets a Forge-family mod add its
+own pack finder (`-Dneoforbric.modDataPacks=off` disables the Forge-family packs).
 
 ### 9.2 Client assets
 
@@ -821,23 +817,25 @@ merge mutating a list fabric-api has frozen (`KernelPackRepair` documents both).
 
 ### 9.4 Conditions, registries, data maps, worldgen
 
-- **Resource conditions** — three evaluators, because the merged `RegistryLoadTask` carries both families' patches:
-  `runtime.KernelFabricConditions` (`fabric:load_conditions`; fabric-api's own two mixins cannot fit),
-  `KernelNeoConditions`, `KernelForgeConditions` — each keeps one dialect from failing another's files.
+- **Resource conditions** — two evaluators: `runtime.KernelFabricConditions`
+  (`fabric:load_conditions`; fabric-api's own two mixins cannot fit) and `KernelNeoConditions` — each
+  keeps one dialect from failing another's files. (26.x carried a third, `KernelForgeConditions`, for
+  MinecraftForge's own condition files; it is gone with the ecosystem that read them.)
 - **Registry directories** — `RegistryDirectoryOwnerInjector` / `KernelRegistryDirectories`: `registryDirPath`
-  answers as the owning ecosystem does. **Aliases** — `RegistryAliasParityInjector` / `KernelRegistryAliases`.
-  **Reflection** — `RegistryWrapperAccessInjector` makes MinecraftForge's `NamespacedWrapper` and
-  `NamespacedDefaultedWrapper` (27 builtin registries on the merged game, block and item among them, plus
-  MinecraftForge's own three) public as they load, as the `MappedRegistry` they stand in for is, so a method a mod
-  looks up on `registry.getClass()` can be invoked (`-Dneoforbric.publicRegistryWrappers=off`). `Class.getMethod` also
-  resolves the types of every public method of each class it searches (from the runtime class up to the first that
-  declares a match; `getMethods` searches them all), so `RegistrySyncParityInjector` adds fabric-api's
-  `remap(Object2IntMap, RemapMode)` to the wrapper only when the game loader has those types
-  (`RegistrySyncParityInjector.forGameLoader`). Without fabric-api that method named a class that is not there, and
-  `getMethods()` and every lookup that reached `NamespacedWrapper` (`getOptional`, `keySet`, …) threw
-  `NoClassDefFoundError`.
-- **Datapack registries** — `KernelLifecycle.registerDataPackRegistries` posts `DataPackRegistryEvent.NewRegistry`,
-  declares MinecraftForge's biome/structure modifier registries and mirrors Fabric dynamic registries both ways.
+  answers as the owning ecosystem does. **Aliases** — `KernelRegistryAliases` resolves fabric-side aliases on
+  lookups fabric's mixin does not cover (both platforms now add `addAlias` to the same `MappedRegistry`;
+  26.x's `RegistryAliasParityInjector`, which wove the reading half into eight vanilla lookups because the
+  merged base had lost NeoForge's own, went with the wrappers it worked around), and
+  `PostMixinFixups.askTheRegistryWhetherAnAliasTargetExists` keeps fabric's alias-target warning reading the
+  registry's real key set (`-Dneoforbric.aliasPresenceParity=off` leaves it as Mixin wove it).
+  (26.x also made MinecraftForge's `NamespacedWrapper`/`NamespacedDefaultedWrapper` public and added
+  fabric-api's `remap(Object2IntMap, RemapMode)` to them — `RegistryWrapperAccessInjector` +
+  `RegistrySyncParityInjector`, both deleted with the wrappers they reached into: this base's registries are
+  NeoForge's own, and no wrapper stands between a mod and them.)
+- **Datapack registries** — `KernelLifecycle.registerDataPackRegistries` posts `DataPackRegistryEvent.NewRegistry`
+  so mods can declare their own; posting it on the baseline bus is also what makes NeoForge's own
+  `neoforge:biome_modifier`/`neoforge:structure_modifier` datapack registries resolvable, and it mirrors
+  Fabric dynamic registries both ways.
 - **Data maps** — NeoForge data maps are loaded (`KernelNeoDataMapWatch`, `KernelNeoWorldgen`). Every holder-based
   lookup ends in `Holder.Reference.getData`, which asked `key()` and threw `Trying to access unbound value` for a value
   not registered yet; vanilla's oxidation, waxing and stripping maps answer for any block. `UnboundHolderDataInjector`
@@ -849,7 +847,7 @@ merge mutating a list fabric-api has frozen (`KernelPackRepair` documents both).
   one line), naming it, its registry and the asking stack — the throw native NeoForge would have given is still reported,
   but the lookup still answers "no data". The WARN says the value was not registered when its registry closed, not
   that it never will be: a registry can be unfrozen, and NeoForbric reopens them for the Fabric client entrypoints.
-- **Worldgen** — MinecraftForge biome/structure modifiers ride inside NeoForge's single modifier pass
+- **Worldgen** — datapack-driven biome/structure modifiers ride NeoForge's single modifier pass, the one its own patches run (`KernelNeoWorldgen`); the kernel declares the datapack registries they read (previous row) so the modifiers resolve, and no second ecosystem's driver exists to duplicate. Data maps are watched by the same class, with a fallback for lookups that arrive before the map (`-Dneoforbric.neoDataMapFallback=off`).
   (`runtime.KernelForgeWorldgen`; `-Dneoforbric.forgeWorldgen=off`, with `ForgeWorldgenShippers` naming the mods
   that then lose it). `NativeCoremodParity`, `BiomeInfoRebaseInjector`, `BiomeLateWriteInjector` make the modified
   views read. gate-m31 holds zero-mod worldgen to vanilla's biomes and structure starts at the same seed.
@@ -862,11 +860,9 @@ translating pairwise:
 | Type | Role |
 | --- | --- |
 | `Ecosystem`, `Side` | the one ecosystem and side vocabulary |
-| `ForeignType` | 58 rows mapping one Forge-family concept to its MinecraftForge and NeoForge class names — names only; per-family divergence stays data |
+| `ForeignType` | rows mapping one Forge-family concept to this base's NeoForge class names — names only |
 | `DiscoveredMod`, `UnifiedDependency`, `VersionPredicate`, `ModIds` | the mod and dependency model |
 | `ModPresence`, `ModCatalog` | "is X running", and the list a player sees with status `OK` / `DEGRADED` / `FAILED` |
-| `GameEventBridge`, `EventBridges` | the bridge inventory and its verification |
-| `ForgeLoadingList` | what MinecraftForge's `LoadingModList` is built from |
 | `CompatibilityFinding`, `CompatibilityFindings` | per-launch evidence ledger (§12) |
 
 It is not a stable API for mods.
@@ -1043,7 +1039,7 @@ version is installed, pins, which artifacts are present or will be built, expect
 
 Its own boot path (Knot host, eight fabric-loader substrate patches applied by `bootstrap.sh`) is not used by the
 kernel. The weld's design is documented in `neoforbric-loader/README.md` and `neoforbric-loader/run/README.md`.
-`neoforbric-installer/` is the weld's installer and is not the one released.
+The weld-generation installer this section once described is gone with it; the released one is `neoforbric-kernel-installer/` (§13).
 
 ## 15. Repository layout
 
@@ -1059,11 +1055,11 @@ NeoForbric/
 ├── neoforbric-kernel/                THE KERNEL — own Gradle build and wrapper
 │   ├── build.gradle               boot jar (release 21), runtimeJar, transferTest, staged-artifact wiring
 │   ├── gradle.properties          ASM, sponge-mixin, MixinExtras, SAT4J, NightConfig … versions
-│   ├── src/main/java/net/neoforbric/api/          the unified API (15 files)
-│   ├── src/main/java/net/neoforbric/kernel/       boot (73), transform (99), mixin (50), fabric (12),
-│   │                                           metadata (11), access (7), classloading (5), discovery (4),
-│   │                                           interop (5), ui (5), util (5), mapping (3), soak (2)
-│   ├── src/main/java/net/fabricmc/             vendored Fabric API surface (37 files)
+│   ├── src/main/java/net/neoforbric/api/          the unified API (12 files)
+│   ├── src/main/java/net/neoforbric/kernel/       boot (69), transform (70), mixin (66), fabric (14), metadata
+│   │                                           (fabric/ + forge manifest parsers), access (7), classloading (6),
+│   │                                           discovery (5), interop (4), ui (5), util (7), mapping (5), soak (2)
+│   ├── src/main/java/net/fabricmc/             vendored Fabric API surface (38 files)
 │   ├── src/main/resources/                     Mixin service registrations; mixin census tables
 │   ├── src/runtime/                            GAME side, net.neoforbric.kernel.runtime (+ soak/, transfer/)
 │   ├── src/test/, src/transferTest/            unit tests; transfer-engine tests
@@ -1075,7 +1071,7 @@ NeoForbric/
 ├── neoforbric-kernel-installer/      THE INSTALLER — src/main/java/net/neoforbric/installer/kernel/, packaging/
 │
 ├── neoforbric-loader/                first generation; merge tools + artifact pipeline (§14)
-├── neoforbric-installer/             the first generation's installer
+├── neoforbric-kernel-installer/       the installer players run (§13)
 └── fabric-loader/                 gitignored upstream checkout for neoforbric-loader
 ```
 
@@ -1128,10 +1124,9 @@ java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report 
 | m8, m10 | multiloader `pack.mcmeta` sections do not delete or break a pack |
 | m9, m27 | client into a world and out cleanly with the 97-jar pack; a fresh non-black frame |
 | m11 | a config-driven mod stack on a dedicated server |
-| m12–m16 | client↔server over a real socket; a Paper anti-cheat; a pure Fabric server; MinecraftForge channels and handshake |
+| m12–m14 | client↔server over a real socket; a Paper anti-cheat; a pure Fabric server |
 | m17 | the installer's profile, launched the way a launcher does |
 | m18, m19, m20 | cross-ecosystem presence; a nested library initialised once; unmet dependency reaches the player |
-| m21, m26, m28, m29 | MinecraftForge setup, client registration events, configs + live file watcher, capabilities |
 | m22, m23 | quitting survives a replaced kernel jar; elytra flight |
 | m24, m24b, m30 | a failing mod, a mod whose metadata cannot be read, and a partly failing mod, attributed on every surface |
 | m24c | a jar listed in `neoforbric-disabled.txt` is loaded by nobody and named in the load report; a server only logs the crash-suspects offer |
@@ -1243,7 +1238,8 @@ Break one and the failure usually surfaces far from the cause.
 2. **`MIXIN` is terminal.** Nothing registers into it through `TransformChain`; Mixin is served pre-Mixin bytes;
    the post-Mixin stage order is fixed.
 3. **Loader identity exists before the first class reaches the Mixin transformer.** Seeding after that point
-   lets a guest plugin's `<clinit>` decide MinecraftForge's `dist` forever.
+   lets a guest plugin's `<clinit>` decide the loader's cached `dist` forever (FML's `FMLEnvironment`
+   stores it in a one-shot `static final`).
 4. **One registration window, one freeze.** Content registration happens between `unfreeze` and
    `closeRegistrationWindow`; the client reopens once, for its entrypoints, and re-freezes.
 5. **The lifecycle trigger is redirected or the kernel does not boot.**
@@ -1266,7 +1262,7 @@ Break one and the failure usually surfaces far from the cause.
   planned work (§20), and until it lands a guest fabric jar still reads intermediary names.
 - **The game base is NeoForge's game, unmerged.** NFRT's binary-patched result is used as-is: no second ecosystem is
   spliced into it, so there are no conflict resolutions to report. What a mod loses because NeoForbric cannot supply
-  it is reported instead — `DeadEventAudit`, `HookCallSiteCensus`, `FieldDriftAudit`, `AbiLinkAudit`,
+  it is reported instead — `HookCallSiteCensus` + `DeadHookWorklist`, `FieldDriftAudit`, `AbiLinkAudit`,
   `CapabilityUseAudit` — and where a repair exists it is one general rule, not a case named after a mod. A jar
   declaring itself a MinecraftForge mod (`META-INF/mods.toml` only) is one no loader here runs; `CapabilityUseAudit`
   names those that ask for a capability system this instance does not carry.

@@ -57,9 +57,8 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * {@code -Dneoforbric.multiLoaderPreference=neoforge,minecraftforge,fabric}.
  *
  * <p>The default order prefers a Forge-family claim over Fabric because the Forge/NeoForge baselines are ALWAYS
- * present on the merged base, whereas a jar's Fabric side typically declares a dependency on fabric-api that the
- * user may not have installed; and NeoForge before traditional Forge because NeoForge won most of the byte-merge,
- * so its glue's hooks are the most likely to be intact.
+ * present on the base, whereas a jar's Fabric side typically declares a dependency on fabric-api that the
+ * user may not have installed.
  */
 public final class MultiLoaderArbiter {
 	private static final List<Ecosystem> DEFAULT_PREFERENCE =

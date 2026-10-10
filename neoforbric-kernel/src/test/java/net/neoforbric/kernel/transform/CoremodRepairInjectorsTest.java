@@ -26,23 +26,7 @@ class CoremodRepairInjectorsTest {
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 
 	@AfterEach void reset() {
-		for (String key : List.of(NativeCoremodParity.PROPERTY, NativeCoremodParity.BIOME,
-				LiquidBlockFluidInjector.PROPERTY)) System.clearProperty(key);
-	}
-
-	@Test void theLiquidBlocksGetterReadsTheFieldBeforeTheSupplier() throws Exception {
-		byte[] original = NativeCoremodParityTest.read(MERGED, LiquidBlockFluidInjector.OWNER);
-		byte[] out = new LiquidBlockFluidInjector().transform(LiquidBlockFluidInjector.TARGET, original, null);
-		assertNotSame(original, out);
-		MethodNode getter = method(node(out), "getFluid", "()L" + LiquidBlockFluidInjector.FLUID + ";");
-		List<AbstractInsnNode> real = java.util.Arrays.stream(getter.instructions.toArray()).filter(i -> i.getOpcode() >= 0).toList();
-		assertTrue(real.get(1) instanceof FieldInsnNode f && f.name.equals("fluid"), "the field first");
-		assertTrue(real.get(3) instanceof JumpInsnNode j && j.getOpcode() == Opcodes.IFNONNULL);
-		assertNotNull(find(getter, FieldInsnNode.class, f -> f.name.equals("supplier")), "then the supplier");
-		new Analyzer<>(new BasicVerifier()).analyze(LiquidBlockFluidInjector.OWNER, getter);
-		assertSame(out, new LiquidBlockFluidInjector().transform(LiquidBlockFluidInjector.TARGET, out, null), "a second pass changes nothing");
-		System.setProperty(LiquidBlockFluidInjector.PROPERTY, "off");
-		assertSame(original, new LiquidBlockFluidInjector().transform(LiquidBlockFluidInjector.TARGET, original, null));
+		for (String key : List.of(NativeCoremodParity.PROPERTY, NativeCoremodParity.BIOME)) System.clearProperty(key);
 	}
 
 	@Test void neoForgesBiomePassStartsFromTheBiomesCurrentInfo() throws Exception {
@@ -86,15 +70,10 @@ class CoremodRepairInjectorsTest {
 				.filter(i -> i instanceof MethodInsnNode c && c.owner.equals(biome) && c.name.startsWith("getModified")).count();
 		long before = node.methods.stream().flatMap(m -> java.util.Arrays.stream(m.instructions.toArray()))
 				.filter(i -> i instanceof MethodInsnNode c && c.owner.equals(biome) && c.name.startsWith("getModified")).count();
-		assertEquals(16, views - before);
+		// 1.21.1: NeoForge 21.1 added five more modified-view call sites than 26.x had.
+		assertEquals(21, views - before);
 		System.setProperty(NativeCoremodParity.BIOME, "off");
 		assertSame(original, new BiomeLateWriteInjector().transform(BiomeLateWriteInjector.TARGET, original, null));
-	}
-
-	@Test void theMasterSwitchCoversTheLiquidRepairToo() throws Exception {
-		byte[] original = NativeCoremodParityTest.read(MERGED, LiquidBlockFluidInjector.OWNER);
-		System.setProperty(NativeCoremodParity.PROPERTY, "off");
-		assertSame(original, new LiquidBlockFluidInjector().transform(LiquidBlockFluidInjector.TARGET, original, null));
 	}
 
 	private static <T extends AbstractInsnNode> T find(MethodNode m, Class<T> type, java.util.function.Predicate<T> test) {

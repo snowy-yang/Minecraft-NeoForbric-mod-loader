@@ -25,35 +25,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import net.neoforbric.kernel.util.NeoForbricLog;
 
 /**
- * Resolves a registry alias for the registries whose lookups are traditional-Forge wrappers.
+ * Resolves registry aliases for lookups a Forge-family mod makes through the kernel: the reading half
+ * fabric-registry-sync's mixin would have woven into the vanilla lookups.
  *
  * <p>A registry alias lets a mod rename an entry without breaking the old id: {@code waystones:waystone} is an
  * alias for {@code waystones:andesite_waystone}, and waystones' own datapack still says {@code waystones:waystone}.
- * Both loader families support this — NeoForge in {@code BaseMappedRegistry}, fabric-api in
- * {@code fabric-registry-sync-v0}'s {@code MappedRegistryMixin} — and on a genuine instance exactly one of those is
+ * Both platforms support aliases — NeoForge in {@code BaseMappedRegistry}, fabric-api in
+ * fabric-registry-sync-v0's {@code SimpleRegistryMixin} — and on a genuine instance exactly one of those is
  * live and complete.
  *
- * <p>On the merged base NEITHER is complete. NeoForge's {@code IRegistryExtension.addAlias} did not survive the
- * byte merge at all: the merged {@code MappedRegistry} has no {@code addAlias}. fabric-api's mixin does, and it
- * wins by default — so a NEOFORGE mod's alias call lands in fabric-api's map, which is fine. But fabric-api
- * implements the READING half as {@code @ModifyVariable} on eight {@code MappedRegistry} lookups, and
- * {@code BuiltInRegistries.BLOCK} on the merged base is a {@code net.minecraftforge.registries
- * .NamespacedDefaultedWrapper} — a {@code MappedRegistry} subclass that OVERRIDES every one of those eight to
- * delegate to a {@code ForgeRegistry}. {@code addAlias} is mixin-ADDED, so it is inherited and works. The eight
- * readers are overridden, so the rewrite never runs. Aliases are recorded and never honoured.
+ * <p>On this base both exist on the same class: vanilla 1.21.1's {@code MappedRegistry} extends NeoForge's
+ * {@code BaseMappedRegistry}, whose {@code addAlias} is a real inherited method, and fabric's mixin ADDS its own
+ * {@code addAlias} onto {@code MappedRegistry} when fabric-api is installed — a subclass method Mixin wove, which
+ * is the one virtual dispatch reaches. The two keep SEPARATE maps: NeoForge resolves aliases inside its own
+ * lookups ({@code Registry#get}, key set iteration), fabric's inside its {@code @ModifyVariable}s on the same
+ * lookups. What fabric's mix of the reading half cannot do is serve the lookups that never pass through it —
+ * a Forge-family mod iterating the registry through NeoForge's alias-aware API while the id it was handed is a
+ * FABRIC-side alias — and this class is the kernel's answer for those paths: it reads fabric-api's map (so an
+ * alias registered through either ecosystem resolves) and mirrors fabric's semantics exactly —
+ * {@code aliases.getOrDefault(id, id)} for a {@code ResourceLocation}, and for a {@code ResourceKey} a
+ * null-safe lookup that rebuilds the key in the same registry — because the point is parity, not a second
+ * opinion. (26.x needed this for the opposite reason, recorded as history: there the merge had DELETED
+ * NeoForge's {@code addAlias} and wrapped every builtin registry in a MinecraftForge {@code NamespacedWrapper}
+ * that overrode all eight of fabric's readers, so aliases were recorded and never honoured.)
  *
- * <p>What that costs: waystones' own {@code configured_feature} JSON says {@code waystones:waystone}, the block
- * lookup misses, {@code Failed to parse waystones:waystone from pack …}, and because waystones also adds those ids
- * to the VANILLA {@code minecraft:enchantable/durability} tag, that tag drops too and vanilla's own
- * {@code minecraft:mending}, {@code unbreaking} and {@code vanishing_curse} fail to parse with it. One unresolved
- * alias takes the whole registry load down. It stayed invisible only because nothing read a Forge-family mod's
- * {@code data/} until {@link KernelDataPacks} started serving it.
- *
- * <p>This class is the reading half, put back on the wrapper by {@code RegistryAliasParityInjector}. It mirrors
- * fabric-api's semantics exactly — {@code aliases.getOrDefault(id, id)} for an {@code Identifier}, and for a
- * {@code ResourceKey} a null-safe lookup that rebuilds the key in the same registry — because the point is parity,
- * not a second opinion. It reads fabric-api's map rather than keeping one of its own, so an alias registered
- * through either ecosystem resolves in both.
  */
 public final class KernelRegistryAliases {
 	/** {@code off} restores the unresolved behaviour — i.e. puts the silently-ignored aliases back. */

@@ -651,11 +651,12 @@ public final class KernelBoot {
 		// pass starting from the biome's current climate, and the biome's getters yielding to a later replacement.
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.BiomeInfoRebaseInjector());
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.BiomeLateWriteInjector());
-		// A merge repair beside them, not a coremod: MinecraftForge's liquid getter over NeoForge's constructor.
-		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.LiquidBlockFluidInjector());
 		// The only performance measurement in the tree. Beside the smoke tick because it is the same shape:
 		// one static call at the head of a tick, no mixin config, nothing new in the list a gate asserts on.
 		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.ServerTickSamplerInjector());
+		// The dedicated server's late-loss stop: findings that appear after boot are consumed once per
+		// completed tick, at the boundary where a stop still goes through the game's own saving path.
+		chain.register(TransformPhase.COREMOD, new net.neoforbric.kernel.transform.ServerCompatibilityTickInjector());
 
 		// Every hook the chain splices into the game is read from the kernel jar at its first use; a jar replaced
 		// or unreadable mid-session breaks that use. Gate M22 measured it (KernelRegistryRevert on leaving a

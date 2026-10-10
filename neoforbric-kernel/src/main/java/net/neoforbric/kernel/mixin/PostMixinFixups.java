@@ -108,22 +108,26 @@ public final class PostMixinFixups {
 	 * Makes fabric-registry-sync's "alias target doesn't exist" warning ask the registry, not its vanilla map.
 	 *
 	 * <p>The mixin-added {@code MappedRegistry.addAlias} warns when {@code !this.byLocation.containsKey(target)}.
-	 * On the merged base {@code BuiltInRegistries.BLOCK} and {@code ITEM} are MinecraftForge
-	 * {@code NamespacedWrapper}s: their {@code register} goes to a {@code ForgeRegistry} and never writes the
-	 * inherited {@code byLocation}, so the check fails even when the target was registered first. More Nemo's
-	 * Woodcutter Variants registers each woodcutter and then aliases its old id to it, and every one of them — 11
-	 * blocks and 11 items — logged "Adding … as an alias for …, but the latter doesn't exist" on NeoForbric and nowhere
-	 * else. The alias itself was recorded and resolves (RegistryAliasParityInjector); only the warning was wrong.
+	 * On this base {@code byLocation} is the registry's real map (1.21.1's builtin registries are NeoForge's own
+	 * {@code MappedRegistry}s — no wrapper overrides the lookups), so the warning fires only when the target really
+	 * is missing from that one map. But both platforms add {@code addAlias} to the same class — NeoForge's as a
+	 * real {@code BaseMappedRegistry} method, fabric's as the Mixin-woven subclass method virtual dispatch
+	 * reaches — and they keep separate maps; an alias registered on one side is invisible to the other's
+	 * exact, non-resolving membership check. The 26.x symptom that made this repair worth having is recorded
+	 * as history: there the merged base wrapped {@code BuiltInRegistries.BLOCK} in a MinecraftForge
+	 * {@code NamespacedWrapper} whose {@code register} never wrote the inherited {@code byLocation}, so More
+	 * Nemo's Woodcutter Variants — 11 blocks and 11 items — logged "Adding … as an alias for …, but the latter
+	 * doesn't exist" on NeoForbric and nowhere else, and the aliases resolved anyway.
 	 *
-	 * <p>The map read becomes {@code this.keySet()}, whose {@code contains} is the same exact, non-resolving lookup:
-	 * {@code byLocation}'s key set on a vanilla or NeoForge registry, the ForgeRegistry's own names on a wrapper.
-	 * Not {@code containsKey(Identifier)}, which fabric-api's {@code @ModifyVariable} and the parity injector both
-	 * resolve through aliases, so an alias chain would change what the warning says. The answer then goes through
-	 * {@code KernelRegistryAliases.aliasTargetPresent}, which also knows NeoForge's own alias-first order.
+	 * <p>The map read becomes {@code this.keySet()}, whose {@code contains} is the same exact, non-resolving
+	 * membership question asked through the registry's own API rather than one implementation field. The answer
+	 * then goes through {@code KernelRegistryAliases.aliasTargetPresent}, which also knows NeoForge's own
+	 * alias-first order. Not {@code containsKey(Identifier)}, which fabric-api's {@code @ModifyVariable} resolves
+	 * through aliases, so an alias chain would change what the warning says.
 	 *
 	 * <p>Only the warning's check, found by the text right after it. The collision check before it ("already
-	 * present in registry", which throws) reads the same map for the ALIAS, and is left alone: making it see the
-	 * wrapper's names would turn a collision the game accepts today into a crash for a Forge-family mod.
+	 * present in registry", which throws) reads the same map for the ALIAS, and is left alone: making it see
+	 * aliases would turn a collision the game accepts today into a crash.
 	 * Straight-line replacement with the same stack shape (the receiver, then the id, then a boolean), so every
 	 * frame stays valid. {@code -Dneoforbric.aliasPresenceParity=off} leaves the method as Mixin wove it.
 	 */

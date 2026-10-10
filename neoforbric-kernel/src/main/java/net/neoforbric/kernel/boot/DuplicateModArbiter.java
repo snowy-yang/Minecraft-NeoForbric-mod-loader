@@ -841,7 +841,7 @@ public final class DuplicateModArbiter {
 	}
 
 	/**
-	 * {@code -Dneoforbric.nestedDupePreference}, defaulting to NEOFORGE, then FABRIC, then traditional FORGE.
+	 * {@code -Dneoforbric.nestedDupePreference}, defaulting to NEOFORGE, then FABRIC.
 	 *
 	 * <p>Deliberately not the top-level order. A duplicate there is two builds of a mod the USER chose, and the
 	 * pack they built around it is the one whose glue is most likely intact. A nested jar is chosen by nobody: it
