@@ -136,7 +136,7 @@ class KernelCompatibilityPromptsTest {
 	@Test void aReplacingModCannotDismissTheWarningAndLeaveThePlayerInTheWorld() throws Exception {
 		try (Fixture fixture = fixture()) {
 			fixture.enterWorld(); loseFeature(); fixture.tick();
-			fixture.gui.getClass().getField("current").set(fixture.gui, null);
+			fixture.type.getField("screen").set(fixture.minecraft, null);
 			fixture.tick();
 			assertEquals(List.of("screen:KernelCompatibilityScreen", "screen:KernelCompatibilityScreen"), fixture.events(),
 					"the warning comes straight back");
@@ -164,7 +164,7 @@ class KernelCompatibilityPromptsTest {
 			loseSpawnerInput(); fixture.tick();
 			assertEquals("KernelCompatibilityScreen", fixture.screen().getClass().getSimpleName());
 			assertTrue(Files.exists(report), "the file the Mods screen points at exists by the time the prompt is up");
-			assertTrue(Files.readString(report).contains("spawner-finalize-input"), Files.readString(report));
+			assertTrue(Files.readString(report).contains("call-site-unproven"), Files.readString(report));
 			assertTrue(Files.readString(machine).contains("\"confirmedRequired\":1"), Files.readString(machine));
 		} finally {
 			net.neoforbric.kernel.boot.KernelLoadReport.setRunDir(null);
@@ -272,10 +272,15 @@ class KernelCompatibilityPromptsTest {
 					public class Minecraft {
 					 public final net.minecraft.client.gui.Gui gui = new net.minecraft.client.gui.Gui();
 					 public net.minecraft.client.multiplayer.ClientLevel level;
+					 public net.minecraft.client.gui.screens.Screen screen;
 					 public static final java.util.List<String> events = new java.util.ArrayList<>();
 					 public boolean running = true;
 					 public boolean isRunning() { return running; }
-					 public void disconnectWithSavingScreen() { events.add("save"); level = null; }
+					 public net.minecraft.client.gui.screens.Overlay getOverlay() { return gui.overlay(); }
+					 public void setScreen(net.minecraft.client.gui.screens.Screen next) {
+					  gui.setScreen(next); screen = next;
+					 }
+					 public void disconnect() { events.add("save"); level = null; }
 					 public void stop() { events.add("stop"); running = false; }
 					}
 					"""),
@@ -284,7 +289,6 @@ class KernelCompatibilityPromptsTest {
 					import net.minecraft.client.gui.screens.*;
 					public class Gui {
 					 public Screen current; public boolean loading; public boolean fail;
-					 public Screen screen() { return current; }
 					 public Overlay overlay() { return loading ? new Overlay() : null; }
 					 public void setScreen(Screen screen) {
 					  if (fail) throw new IllegalStateException("cannot draw");
@@ -340,10 +344,10 @@ class KernelCompatibilityPromptsTest {
 			minecraft = type.getConstructor().newInstance(); gui = type.getField("gui").get(minecraft);
 		}
 		void tick() throws Exception { loader.loadClass("net.neoforbric.kernel.runtime.KernelCompatibilityPrompts").getMethod("tick", type).invoke(null, minecraft); }
-		Object screen() throws Exception { return gui.getClass().getMethod("screen").invoke(gui); }
+		Object screen() throws Exception { return type.getField("screen").get(minecraft); }
 		void answer(boolean yes) throws Exception { loader.loadClass("net.minecraft.client.gui.screens.ConfirmScreen").getMethod("respond", boolean.class).invoke(screen(), yes); }
 		void setScreen(String simpleName) throws Exception {
-			gui.getClass().getField("current").set(gui, loader.loadClass("net.minecraft.client.gui.screens." + simpleName).getConstructor().newInstance());
+			type.getField("screen").set(minecraft, loader.loadClass("net.minecraft.client.gui.screens." + simpleName).getConstructor().newInstance());
 		}
 		String message() throws Exception {
 			return text("message");
