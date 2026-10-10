@@ -66,7 +66,7 @@ import net.neoforbric.kernel.mixin.MixinFit;
  */
 @ResourceLock("system-properties")
 class FabricHooksCallTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar")
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar")
 			.normalize();
 
 	private static final String HOOKS = "net/fabricmc/loader/impl/game/minecraft/Hooks";

@@ -69,7 +69,7 @@ class PushAndRunTest {
         var result = python("""
                 import ntpath
                 import common
-                instance = ntpath.join('D:' + chr(92), "Jerry's MC", 'versions', '26.2-neoforbric')
+                instance = ntpath.join('D:' + chr(92), "Jerry's MC", 'versions', '1.21.1-neoforbric')
                 command = m.stop_command(instance)
                 path = lambda name: m.ps(ntpath.join(instance, name))
                 record, options, temporary = path('options.txt.neoforbric-sweep'), path('options.txt'), path('options.txt.neoforbric-tmp')

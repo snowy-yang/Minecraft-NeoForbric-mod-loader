@@ -169,7 +169,7 @@ class FabricBlockBreakMixinAdapterTest {
 	}
 
 	private static ClassNode merged() throws Exception {
-		return game(Fixture.STAGED, TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar"));
+		return game(Fixture.STAGED, TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar"));
 	}
 
 	private static ClassNode vanilla() throws Exception {

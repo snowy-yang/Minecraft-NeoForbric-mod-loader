@@ -268,12 +268,12 @@ class CrashSuspectOfferTest {
 
 	@Test
 	void theWholeLoopFromACrashReportToASkippedJar() throws Exception {
-		Path crashing = fabricJar("supermartijn642corelib-1.1.24a-forge-mc26.2.jar", "supermartijn642corelib");
+		Path crashing = fabricJar("supermartijn642corelib-1.1.24a-forge-mc1.21.1.jar", "supermartijn642corelib");
 		ModCatalog.publish(List.of(new ModCatalog.Entry(Ecosystem.FABRIC, "supermartijn642corelib", "Core Lib", "1.0", "",
-				List.of(), "supermartijn642corelib-1.1.24a-forge-mc26.2.jar", "", "")));
+				List.of(), "supermartijn642corelib-1.1.24a-forge-mc1.21.1.jar", "", "")));
 		Path reports = Files.createDirectories(game.resolve("crash-reports"));
 		Files.writeString(reports.resolve("crash-2026-10-03.txt"), "java.lang.IllegalStateException: null menu type\n"
-				+ "\tat neoforbric/com.supermartijn642.core.X.y(X.java:1) ~[supermartijn642corelib-1.1.24a-forge-mc26.2.jar:?] {}\n");
+				+ "\tat neoforbric/com.supermartijn642.core.X.y(X.java:1) ~[supermartijn642corelib-1.1.24a-forge-mc1.21.1.jar:?] {}\n");
 		CrashAttribution.setRunDir(game, 0);
 		CrashAttribution.run();
 

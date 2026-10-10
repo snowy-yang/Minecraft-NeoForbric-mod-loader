@@ -31,32 +31,32 @@ import net.fabricmc.loader.api.VersionParsingException;
 class KernelVersionTest {
 	@Test
 	void parsesTheRealEcosystemVersions() throws VersionParsingException {
-		// fabric-api, Jade, the game, and a nested fabric-api module respectively.
-		assertTrue(KernelVersion.parse("0.154.0+26.2") instanceof SemanticVersion);
-		assertTrue(KernelVersion.parse("26.2.9+fabric") instanceof SemanticVersion);
-		assertTrue(KernelVersion.parse("26.2") instanceof SemanticVersion);
+		// fabric-api, NeoForge, the game, and a nested fabric-api module respectively.
+		assertTrue(KernelVersion.parse("0.116.17+1.21.1") instanceof SemanticVersion);
+		assertTrue(KernelVersion.parse("21.1.256") instanceof SemanticVersion);
+		assertTrue(KernelVersion.parse("1.21.1") instanceof SemanticVersion);
 		assertTrue(KernelVersion.parse("2.0.4+ece063239e") instanceof SemanticVersion);
 	}
 
 	@Test
 	void buildMetadataIsCarriedButDoesNotAffectOrdering() throws VersionParsingException {
-		SemanticVersion v = KernelVersion.parseSemantic("0.154.0+26.2");
+		SemanticVersion v = KernelVersion.parseSemantic("0.116.17+1.21.1");
 
-		assertEquals("26.2", v.getBuildKey().orElseThrow());
-		assertEquals("0.154.0+26.2", v.getFriendlyString());
+		assertEquals("1.21.1", v.getBuildKey().orElseThrow());
+		assertEquals("0.116.17+1.21.1", v.getFriendlyString());
 		// SemVer §10: build metadata is ignored in precedence.
-		assertEquals(0, v.compareTo(KernelVersion.parse("0.154.0+other")));
+		assertEquals(0, v.compareTo(KernelVersion.parse("0.116.17+other")));
 	}
 
 	@Test
 	void absentTrailingComponentsReadAsZero() throws VersionParsingException {
-		SemanticVersion v = KernelVersion.parseSemantic("26.2");
+		SemanticVersion v = KernelVersion.parseSemantic("1.21");
 
 		assertEquals(2, v.getVersionComponentCount());
-		assertEquals(26, v.getVersionComponent(0));
-		assertEquals(2, v.getVersionComponent(1));
+		assertEquals(1, v.getVersionComponent(0));
+		assertEquals(21, v.getVersionComponent(1));
 		assertEquals(0, v.getVersionComponent(2));
-		assertEquals(0, v.compareTo(KernelVersion.parse("26.2.0")));
+		assertEquals(0, v.compareTo(KernelVersion.parse("1.21.0")));
 	}
 
 	@Test

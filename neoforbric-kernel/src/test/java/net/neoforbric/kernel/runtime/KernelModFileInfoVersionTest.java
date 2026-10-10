@@ -92,10 +92,10 @@ class KernelModFileInfoVersionTest {
 
     @Test
     void aPalReleaseVersionSupportsItsActualContainsCall() throws Exception {
-        Path jar = fixture("pal.jar", "META-INF/neoforge.mods.toml", "1.2.6+mc.26.2", null);
+        Path jar = fixture("pal.jar", "META-INF/neoforge.mods.toml", "1.2.6+mc.1.21.1", null);
         try (URLClassLoader runtime = runtimeLoader()) {
             String version = version(info(runtime, jar));
-            assertEquals("1.2.6+mc.26.2", version);
+            assertEquals("1.2.6+mc.1.21.1", version);
             assertFalse(version.contains("dev"), "PAL must stay on its production branch, not be forced into dev mode");
         }
     }

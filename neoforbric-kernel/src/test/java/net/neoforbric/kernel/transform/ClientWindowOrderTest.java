@@ -55,7 +55,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * so a merged base that moves either one silently reopens one of those two failures. Neither injector had a test.
  */
 class ClientWindowOrderTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private static final String MINECRAFT = "net.minecraft.client.Minecraft";
 	private static final String OPTIONS = "net/minecraft/client/Options";

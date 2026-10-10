@@ -53,7 +53,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * and, on a real sixteen-jar NeoForbric pack, three of them.
  */
 class ModsButtonRedirectorTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	/**
 	 * The Forge-family button does not live in one fixed class, and pinning it to one is the mistake the

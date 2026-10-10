@@ -43,7 +43,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * {@code KernelKeyMappingMap}'s view of {@code ALL}: LiquidBounce reads it on every key press in a screen.
  */
 class MergedBaseKeyMappingMapTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String KEY_MAPPING = "net/minecraft/client/KeyMapping";
 
 	@Test

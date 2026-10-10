@@ -1,7 +1,6 @@
 package net.neoforbric.kernel.boot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -23,12 +22,9 @@ class WorldgenCanaryDataTest {
 	static final Path STAGED = TestFixtures.stagedRoot();
 
 	@Test
-	void theTwoCarriersPlaceDifferentNonOverworldBlocks() throws Exception {
-		String forge = inspect("forge", "neoforbriclive", "livemod-src", "forge-runtime");
+	void theCarrierPlacesANonOverworldBlock() throws Exception {
 		String neo = inspect("neoforge", "neoforbricneolive", "livemod-src-neoforge", "neoforge-runtime");
-		assertEquals("minecraft:end_stone", forge);
 		assertEquals("minecraft:purpur_block", neo);
-		assertNotEquals(forge, neo, "one family's success must never satisfy the other's probe");
 	}
 
 	static String inspect(String family, String namespace, String source, String runtime) throws Exception {

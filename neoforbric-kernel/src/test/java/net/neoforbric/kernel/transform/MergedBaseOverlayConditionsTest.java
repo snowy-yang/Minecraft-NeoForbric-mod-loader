@@ -43,7 +43,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /** The one insertion in the merged {@code OverlayEntry.listCodecForPackType}, and the funnel premise around it. */
 class MergedBaseOverlayConditionsTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String SECTION = "net/minecraft/server/packs/OverlayMetadataSection";
 
 	@Test

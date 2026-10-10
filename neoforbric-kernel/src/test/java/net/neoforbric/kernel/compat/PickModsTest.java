@@ -26,7 +26,8 @@ class PickModsTest {
             Path excluded = temp.resolve("previous.json");
             Files.writeString(excluded, "[{\"slug\":\"mod-0\"},{\"slug\":\"mod-1\"},{\"slug\":\"mod-2\"}]");
             Map<String, String> environment = Map.of("MODRINTH_API", fixture.api(), "SEED", "20260919",
-                    "EXCLUDE_MANIFEST", excluded.toString(), "WANT_FABRIC", "4", "WANT_NEO", "0", "WANT_FORGE", "0");
+                    "EXCLUDE_MANIFEST", excluded.toString(), "WANT_FABRIC", "4", "WANT_NEO", "0", "WANT_FORGE", "0",
+                    "MC_VERSION", "1.21.1");
             for (String run : new String[]{"one", "two"}) {
                 var result = DriverTools.script("pick_mods.py", environment, temp.resolve(run).resolve("mods").toString(), "--resolve-only");
                 assertEquals(0, result.exit(), result.output());
@@ -42,7 +43,7 @@ class PickModsTest {
 
     @Test void namedResolutionReportsUnavailableAndNeverSubstitutesNeoForgeForForge() throws Exception {
         try (Fixture fixture = new Fixture()) {
-            var result = DriverTools.script("pick_mods.py", Map.of("MODRINTH_API", fixture.api()),
+            var result = DriverTools.script("pick_mods.py", Map.of("MODRINTH_API", fixture.api(), "MC_VERSION", "1.21.1"),
                     temp.resolve("mods").toString(), "--slugs", "mod-3=fabric,absent=forge,mod-4=forge", "--resolve-only");
             assertEquals(2, result.exit(), result.output());
             assertTrue(result.output().contains("RESOLVED picked mod-3=fabric"), result.output());
@@ -54,13 +55,13 @@ class PickModsTest {
 
     @Test void downloadChecksDigestAndSanitizesWindowsFilenames() throws Exception {
         try (Fixture fixture = new Fixture()) {
-            var result = DriverTools.script("pick_mods.py", Map.of("MODRINTH_API", fixture.api()),
+            var result = DriverTools.script("pick_mods.py", Map.of("MODRINTH_API", fixture.api(), "MC_VERSION", "1.21.1"),
                     temp.resolve("mods").toString(), "--slugs", "mod-3=fabric");
             assertEquals(0, result.exit(), result.output());
             assertArrayEquals(JAR, Files.readAllBytes(temp.resolve("mods/mod-3_.jar")));
             assertTrue(Files.readString(temp.resolve("manifest.json")).contains("\"sha1_ok\": true"));
             fixture.corrupt = true;
-            result = DriverTools.script("pick_mods.py", Map.of("MODRINTH_API", fixture.api()),
+            result = DriverTools.script("pick_mods.py", Map.of("MODRINTH_API", fixture.api(), "MC_VERSION", "1.21.1"),
                     temp.resolve("bad/mods").toString(), "--slugs", "mod-3=fabric");
             assertEquals(2, result.exit(), result.output());
             assertTrue(result.output().contains("hash/size mismatch"), result.output());
@@ -88,7 +89,7 @@ class PickModsTest {
                 } else if (path.endsWith("/version")) {
                     String slug = path.split("/")[3];
                     String version = slug.equals("absent") ? "[]" : "[{\"project_id\":\"" + slug + "\",\"id\":\"" + slug
-                            + "-v\",\"version_number\":\"1\",\"loaders\":[\"fabric\"],\"game_versions\":[\"26.2\"],\"files\":[{\"primary\":true,"
+                            + "-v\",\"version_number\":\"1\",\"loaders\":[\"fabric\"],\"game_versions\":[\"1.21.1\"],\"files\":[{\"primary\":true,"
                             + "\"filename\":\"" + slug + "?.jar\",\"size\":" + JAR.length + ",\"hashes\":{\"sha1\":\"" + hash
                             + "\"},\"url\":\"" + api().replace("/v2", "") + "/files/" + slug + ".jar\"}]}]";
                     body = version.getBytes(StandardCharsets.UTF_8);

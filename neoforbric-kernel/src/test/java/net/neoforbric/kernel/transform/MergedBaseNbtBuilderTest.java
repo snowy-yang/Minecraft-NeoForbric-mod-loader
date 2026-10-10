@@ -37,7 +37,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * constructor, and idempotence.
  */
 class MergedBaseNbtBuilderTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path FORGE_RUNTIME = TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar");
 	private static final String COMPOUND_TAG = "net/minecraft/nbt/CompoundTag";
 	private static final String BUILDER = "net/minecraftforge/common/util/INBTBuilder$Builder";

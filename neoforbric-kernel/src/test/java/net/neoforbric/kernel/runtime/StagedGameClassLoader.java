@@ -12,10 +12,10 @@ import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * The compiled game-side classes over the staged game and Minecraft 26.2's own libraries, for tests that initialise
+ * The compiled game-side classes over the staged game and Minecraft 1.21.1's own libraries, for tests that initialise
  * game classes off-game; they skip when any of it is absent.
  *
- * <p>The libraries are the ones 26.2's version JSON names, as build.gradle resolves them for the transfer tests — not
+ * <p>The libraries are the ones 1.21.1's version JSON names, as build.gradle resolves them for the transfer tests — not
  * the newest-looking cached jar per artifact: by name "9.0.19" sorts after "10.0.21", and that picked a
  * datafixerupper two majors older than the game's.
  */
@@ -28,14 +28,14 @@ public final class StagedGameClassLoader {
 	public static List<URL> urls() throws Exception {
 		Path run = TestFixtures.stagedRoot();
 		Path compiled = Path.of(System.getProperty("user.dir"), "build", "classes", "java", "runtime").normalize();
-		Path base = run.resolve("neoforge-base/patched-mc-neoforge-26.2.jar"), neo = run.resolve("neoforge-runtime/neoforge-runtime.jar");
+		Path base = run.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar"), neo = run.resolve("neoforge-runtime/neoforge-runtime.jar");
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(base) && Files.isRegularFile(neo),
 				"the staged game is absent");
 		TestFixtures.require(Fixture.GAME_SIDE, Files.isDirectory(compiled), "the compiled game side is absent");
 		List<URL> urls = new ArrayList<>(List.of(compiled.toUri().toURL(), base.toUri().toURL(), neo.toUri().toURL()));
 		Path libraries = TestFixtures.minecraftDir().resolve("libraries");
-		Path version = libraries.resolveSibling("versions/26.2/26.2.json");
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(version), "no local Minecraft 26.2 version JSON");
+		Path version = libraries.resolveSibling("versions/1.21.1/1.21.1.json");
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(version), "no local Minecraft 1.21.1 version JSON");
 		Matcher artifact = ARTIFACT_PATH.matcher(Files.readString(version));
 		while (artifact.find()) {
 			Path jar = libraries.resolve(artifact.group(1));

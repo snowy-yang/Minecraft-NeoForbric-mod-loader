@@ -77,7 +77,7 @@ class FabricEntrypointStorageTest {
 	void setUp() {
 		KernelFabricLoader.resetForTests();
 		RAN.clear();
-		loader = KernelFabricLoader.create(EnvType.CLIENT, dir, dir.resolve("config"), new String[0], "26.2");
+		loader = KernelFabricLoader.create(EnvType.CLIENT, dir, dir.resolve("config"), new String[0], "1.21.1");
 		loader.setGameLoader(getClass().getClassLoader());
 		// Registered in Fabric Loader's order, by mod id, which KernelFabricEcosystem.build ends with: "corelib"
 		// sorts before "dependent", so the library comes first here as it does natively.
@@ -156,7 +156,7 @@ class FabricEntrypointStorageTest {
 	void aServerEntrypointAddedDuringMainRunsOnADedicatedServer() throws Exception {
 		KernelFabricLoader.resetForTests();
 		KernelFabricEcosystem.resetPhasesForTests();
-		loader = KernelFabricLoader.create(EnvType.SERVER, dir, dir.resolve("config"), new String[0], "26.2");
+		loader = KernelFabricLoader.create(EnvType.SERVER, dir, dir.resolve("config"), new String[0], "1.21.1");
 		loader.setGameLoader(getClass().getClassLoader());
 		register("corelib", "{\"main\":[\"" + AddsServerDuringMain.class.getName() + "\"],\"server\":[\""
 				+ LibServer.class.getName() + "\"]}", "{\"fabricloader\":\"*\"}");

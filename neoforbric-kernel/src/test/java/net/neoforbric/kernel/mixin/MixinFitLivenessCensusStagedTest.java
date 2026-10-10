@@ -51,7 +51,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * for KernelBoot's guest scan; a multi-loader jar's config is given to the loader the default arbitration picks. The report is written to
  * {@code build/reports/mixin-liveness-census.txt}.
  *
- * <p>And the same judgment set against stock 26.2 ({@link #vanillaAnchorsTheMergedBaseLostArePinned}): every anchor a
+ * <p>And the same judgment set against stock 1.21.1 ({@link #vanillaAnchorsTheMergedBaseLostArePinned}): every anchor a
  * Fabric mixin names that resolves on vanilla and does not on the merged base after the kernel's transforms and anchor
  * movers — a call whose owner the merge's field widening changed, a call a carrier widened or replaced, a method it
  * reshaped (a name that now binds an overload the handler was not written for), a field it re-typed. That is the class
@@ -62,7 +62,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  */
 @ResourceLock("system-properties")
 class MixinFitLivenessCensusStagedTest {
-	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path INTEROP = TestFixtures.stagedRoot().resolve("merged-base/forge-runtime-interop.jar");
 	private static final Path NEO_RUNTIME = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Map<String, Path> PACKS = new LinkedHashMap<>();
@@ -376,7 +376,7 @@ class MixinFitLivenessCensusStagedTest {
 	private static final String ANCHOR_PACKS = "NEOFORBRIC_ANCHOR_PACKS";
 
 	/**
-	 * fabric-api's anchors that resolve on stock 26.2 and not on the merged base as the kernel's verdict judges it, as
+	 * fabric-api's anchors that resolve on stock 1.21.1 and not on the merged base as the kernel's verdict judges it, as
 	 * {@code config:mixin | anchor} — 66 of them. Each is a loss the kernel replaces elsewhere (its networking codec and
 	 * configuration wraps are PayloadInterop's, its HUD layers KernelHudBridge's, its fuel, hopper, use-on and sound hooks
 	 * bridges or adapters of their own that the verdict does not ask, its item tooltip hooks the Fabric tooltip bridge's
@@ -508,7 +508,7 @@ class MixinFitLivenessCensusStagedTest {
 			}
 			lost.put(corpus.getKey(), lines);
 		}
-		StringBuilder summary = new StringBuilder("vanilla anchor census: anchors that resolve on stock 26.2 and not on the merged base\n");
+		StringBuilder summary = new StringBuilder("vanilla anchor census: anchors that resolve on stock 1.21.1 and not on the merged base\n");
 		for (var corpus : lost.entrySet()) summary.append("  ").append(corpus.getKey()).append(": ").append(corpus.getValue().size()).append('\n');
 		report.insert(0, summary.append('\n'));
 		Files.createDirectories(Path.of("build/reports"));
@@ -614,7 +614,7 @@ class MixinFitLivenessCensusStagedTest {
 		return out;
 	}
 
-	/** Stock 26.2's game classes; anything else is not the game's and resolves. */
+	/** Stock 1.21.1's game classes; anything else is not the game's and resolves. */
 	private static Function<String, byte[]> vanillaResolver(Path vanilla) throws IOException {
 		Map<String, byte[]> classes = read(Files.readAllBytes(vanilla), n -> n.endsWith(".class"));
 		return name -> name.startsWith("net/minecraft/") || name.startsWith("com/mojang/") ? classes.get(name) : null;

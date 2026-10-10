@@ -31,7 +31,7 @@ class PortalSpawnInjectorTest {
 	@AfterEach void reset() { System.clearProperty(PortalSpawnInjector.PROPERTY); }
 
 	@Test void onlyTheHookOwnerChangesOnTheRealBase() throws Exception {
-		byte[] original = staged("neoforge-base/patched-mc-neoforge-26.2.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
+		byte[] original = staged("neoforge-base/patched-mc-neoforge-1.21.1.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
 		byte[] changed = injector.transform(PortalSpawnInjector.TARGET, original, context);
 		assertNotSame(original, changed);
 		ClassNode after = parse(changed);
@@ -49,7 +49,7 @@ class PortalSpawnInjectorTest {
 	}
 
 	@Test void switchedOffTheRealBaseIsLeftExactlyAsTheCarrierShippedIt() throws Exception {
-		byte[] original = staged("neoforge-base/patched-mc-neoforge-26.2.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
+		byte[] original = staged("neoforge-base/patched-mc-neoforge-1.21.1.jar", PortalSpawnInjector.TARGET.replace('.', '/'));
 		System.setProperty(PortalSpawnInjector.PROPERTY, "off");
 		assertSame(original, injector.transform(PortalSpawnInjector.TARGET, original, context));
 		assertTrue(injector.anchors().anchors().isEmpty());

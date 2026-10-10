@@ -27,7 +27,7 @@ import net.fabricmc.api.EnvType;
  *       NeoForge-registered or vanilla one still is;</li>
  *   <li>and, unclaimed, the client's register answered by fabric-api before NeoForge.</li>
  * </ul>
- * Not run here: the HEDGE initialisation guard (inert since NeoForge 26.2.0.88). The injector has no switch of its
+ * Not run here: the HEDGE initialisation guard (inert since NeoForge 21.1.256). The injector has no switch of its
  * own: {@code -Dneoforbric.commonNetworkInterop=off} is read where KernelBoot registers it.
  */
 @ExecutesInjector(CommonNetworkInteropInjector.class)

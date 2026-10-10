@@ -35,7 +35,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * player's world — re-read the field, do not re-bless the count.
  */
 class MergedBaseLeftNullFieldsTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path FORGE_RUNTIME = TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar");
 
 	/** owner#field → expected GETFIELD readers anywhere in the merged base. */

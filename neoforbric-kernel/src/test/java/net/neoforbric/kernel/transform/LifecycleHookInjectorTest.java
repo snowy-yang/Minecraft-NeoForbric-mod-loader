@@ -51,7 +51,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  */
 @ExecutesInjector(LifecycleHookInjector.class)
 class LifecycleHookInjectorTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private final LifecycleHookInjector injector = new LifecycleHookInjector();
 

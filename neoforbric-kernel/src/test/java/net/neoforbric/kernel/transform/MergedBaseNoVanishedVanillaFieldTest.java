@@ -67,7 +67,7 @@ import org.objectweb.asm.tree.FieldNode;
  * <p>The comparison is made AFTER the kernel's compat transformer has run, because that is what the game sees.
  */
 class MergedBaseNoVanishedVanillaFieldTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	/**
 	 * Stock Minecraft, from the same local install the staged artifacts were derived from — the same lookup the
@@ -90,7 +90,7 @@ class MergedBaseNoVanishedVanillaFieldTest {
 	void noVanillaFieldDescriptorHasVanishedBeyondTheKnownSet() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping whole-artifact scan");
 		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA),
-				"stock 26.2 absent at " + VANILLA + " — set MC_DIR to a Minecraft install to run this scan");
+				"stock 1.21.1 absent at " + VANILLA + " — set MC_DIR to a Minecraft install to run this scan");
 
 		List<String> vanished = new ArrayList<>();
 		int scanned = 0;

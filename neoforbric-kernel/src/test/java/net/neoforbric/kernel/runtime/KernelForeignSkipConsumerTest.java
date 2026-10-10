@@ -12,13 +12,13 @@ import org.junit.jupiter.api.Test;
 /** Actual compiled filter + real DataResult. The baseline consumer demonstrates the cast failure. */
 class KernelForeignSkipConsumerTest {
  @Test void knownMarkerSkipsDataWhileNormalOptionalAndDecodeErrorsRemainIntact()throws Exception{
-  Path game=TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+  Path game=TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
   Path compiled=Path.of("build/classes/java/runtime");
   TestFixtures.require(Fixture.STAGED,Files.exists(game),"the staged merged base required");
   TestFixtures.require(Fixture.GAME_SIDE,Files.exists(compiled),"actual game-side compilation required");
   Path mc=TestFixtures.minecraftDir();
-  TestFixtures.require(Fixture.MC_LIBRARIES,Files.isRegularFile(mc.resolve("versions/26.2/26.2.json")),"no local Minecraft 26.2 version JSON");
-  var json=com.electronwill.nightconfig.json.JsonFormat.fancyInstance().createParser().parse(Files.newBufferedReader(mc.resolve("versions/26.2/26.2.json")));
+  TestFixtures.require(Fixture.MC_LIBRARIES,Files.isRegularFile(mc.resolve("versions/1.21.1/1.21.1.json")),"no local Minecraft 1.21.1 version JSON");
+  var json=com.electronwill.nightconfig.json.JsonFormat.fancyInstance().createParser().parse(Files.newBufferedReader(mc.resolve("versions/1.21.1/1.21.1.json")));
   List<URL> urls=new ArrayList<>(List.of(compiled.toUri().toURL(),game.toUri().toURL()));
   List<? extends com.electronwill.nightconfig.core.UnmodifiableConfig> libraries=json.get("libraries");
   for(var library:libraries){String name=library.get(List.of("downloads","artifact","path"));if(name!=null&&Files.isRegularFile(mc.resolve("libraries").resolve(name)))urls.add(mc.resolve("libraries").resolve(name).toUri().toURL());}

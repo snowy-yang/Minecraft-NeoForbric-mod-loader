@@ -50,7 +50,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /** The three twins over the real merged classes, and the write shapes that put them there. */
 class MergedBaseWidenedFieldTwinsTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	@AfterEach
 	void reset() {

@@ -63,7 +63,7 @@ class FabricModMetadataParserTest {
 			    {"config": "fabric-lifecycle-events-v1.client.mixins.json", "environment": "client"}
 			  ],
 			  "jars": [{"file": "META-INF/jars/nested.jar"}],
-			  "depends": {"fabricloader": ">=0.18.4", "minecraft": ["~26.2-", "26.3"]},
+			  "depends": {"fabricloader": ">=0.18.4", "minecraft": ["~1.21.1-", "1.21.2"]},
 			  "breaks": {"badmod": "*"},
 			  "description": "Events for the game's lifecycle.",
 			  "custom": {"fabric-api:module-lifecycle": "stable", "neoforbric:probe": {"kind": "fabric", "n": 3}},

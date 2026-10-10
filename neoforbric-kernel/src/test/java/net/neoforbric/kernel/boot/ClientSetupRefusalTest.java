@@ -48,7 +48,7 @@ class ClientSetupRefusalTest {
 	}
 
 	private static Path merged() {
-		Path jar = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar").normalize();
+		Path jar = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(jar), "staged merged base absent");
 		return jar;
 	}

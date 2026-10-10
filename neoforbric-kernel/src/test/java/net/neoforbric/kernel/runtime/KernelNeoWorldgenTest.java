@@ -145,13 +145,12 @@ class KernelNeoWorldgenTest {
 	private static URLClassLoader gameSideLoader() throws Exception {
 		Path compiled = Path.of(System.getProperty("user.dir"), "build", "classes", "java", "runtime").normalize();
 		Path run = TestFixtures.stagedRoot();
-		Path forgeRt = run.resolve("forge-runtime/forge-runtime.jar");
 		Path neoRt = run.resolve("neoforge-runtime/neoforge-runtime.jar");
-		Path merged = run.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(forgeRt) && Files.isRegularFile(neoRt) && Files.isRegularFile(merged),
+		Path merged = run.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(neoRt) && Files.isRegularFile(merged),
 				"the staged artifacts are absent");
 		TestFixtures.require(Fixture.GAME_SIDE, Files.isDirectory(compiled), "the game-side set is not compiled");
-		List<URL> urls = new ArrayList<>(List.of(compiled.toUri().toURL(), forgeRt.toUri().toURL(), neoRt.toUri().toURL(), merged.toUri().toURL()));
+		List<URL> urls = new ArrayList<>(List.of(compiled.toUri().toURL(), neoRt.toUri().toURL(), merged.toUri().toURL()));
 		for (String pattern : List.of("com/mojang/datafixerupper", "com/google/code/gson", "com/mojang/brigadier", "com/google/guava/guava",
 				"it/unimi/dsi/fastutil", "org/slf4j/slf4j-api", "org/apache/logging/log4j/log4j-api",
 				"io/netty/netty-common", "io/netty/netty-buffer", TestFixtures.nettyCodecLibrary(), "io/netty/netty-transport", "io/netty/netty-handler",

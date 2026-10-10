@@ -142,7 +142,7 @@ class VersionPredicateTest {
 	void buildMetadataIsIgnoredWhilePreReleaseStillOrdersBelow() {
 		assertEquals(0, VersionPredicate.compare("6.3.3+72073ef09e", "6.3.3"));
 		assertTrue(VersionPredicate.matches(">=6.3.3", "6.3.3+72073ef09e"));
-		assertTrue(VersionPredicate.matches("<=0.9.1", "0.9.1+mc26.2"));
+		assertTrue(VersionPredicate.matches("<=0.9.1", "0.9.1+mc1.21.1"));
 		assertTrue(VersionPredicate.matches("=1.2.3", "1.2.3+build7"));
 
 		assertTrue(VersionPredicate.compare("1.0-beta", "1.0") < 0, "a dash is still a pre-release");
@@ -172,7 +172,7 @@ class VersionPredicateTest {
 	@Test
 	void trailingZerosArePaddingAndAQualifierPrecedesTheBareVersion() {
 		assertEquals(0, VersionPredicate.compare("1.0.0", "1.0"));
-		assertTrue(VersionPredicate.compare("26.2.0.7.1", "26.2.0.7") > 0);
+		assertTrue(VersionPredicate.compare("1.21.1.7.1", "1.21.1.7") > 0);
 		assertTrue(VersionPredicate.compare("1.0-beta", "1.0") < 0, "the semver pre-release rule");
 		assertTrue(VersionPredicate.compare("1.0.1", "1.0.beta") > 0, "a number outranks a qualifier");
 	}

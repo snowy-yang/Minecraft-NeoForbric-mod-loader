@@ -51,7 +51,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  */
 class MergedBaseWorldgenDriversTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEO_CARRIER = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final String KERNEL = "net/neoforbric/kernel/runtime/KernelNeoWorldgen";
 

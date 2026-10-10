@@ -53,7 +53,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * repository's merge emits.
  */
 class MergedBaseSpawnReasonTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String ENTRY = "net/minecraft/world/entity/Mob.class";
 	private static final String OWNER = "net/minecraft/world/entity/Mob";
 	private static final String SPAWN_REASON = "Lnet/minecraft/world/entity/EntitySpawnReason;";

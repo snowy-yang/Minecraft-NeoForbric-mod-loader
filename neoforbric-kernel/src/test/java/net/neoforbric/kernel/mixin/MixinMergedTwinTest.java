@@ -48,7 +48,7 @@ import org.objectweb.asm.tree.ClassNode;
  */
 @ResourceLock("system-properties")
 class MixinMergedTwinTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar").normalize();
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 	private static final String TARGET = "net.minecraft.network.protocol.common.custom.CustomPacketPayload$1";
 
 	@Test

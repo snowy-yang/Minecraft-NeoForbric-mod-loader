@@ -1,6 +1,6 @@
 # Kernel development and verification
 
-Start from the repository root with a full **JDK 25+** and **Python 3.9+**. No Fabric substrate checkout,
+Start from the repository root with a full **JDK 21+** and **Python 3.9+**. No Fabric substrate checkout,
 player installer, existing game installation, or manually assembled game jars are required for the new
 workflow. `tools/dev.py` uses the installer's artifact builder and the kernel from your current source.
 
@@ -11,10 +11,10 @@ python3 tools/dev.py client
 ```
 
 On Windows, use `py tools/dev.py client` (or `python` if that is your Python command). The first run
-prepares the game automatically: it downloads Minecraft 26.2, assembles both carriers and the merged base,
-checks their links, downloads platform libraries/assets and pinned Fabric API/Energy APIs, builds the two
-canary mods the unit tests read (`neoforbric-loader/run/livemod-src*`, as `build-testmods.sh` does), then builds and
-launches the kernel. Later launches reuse those inputs and rebuild changed kernel source.
+prepares the game automatically: it downloads Minecraft 1.21.1 and the NeoForge 21.1.256-patched base,
+assembles the NeoForge runtime carrier, checks their links, downloads platform libraries/assets and the
+pinned Fabric API (0.116.17+1.21.1) and Energy APIs, remaps the intermediary-named API modules into the
+base's Mojmap namespace, builds the canary mods the unit tests read, then builds and launches the kernel. Later launches reuse those inputs and rebuild changed kernel source.
 
 Everything goes under `neoforbric-kernel/.dev/`: `minecraft/` holds upstream downloads and build caches,
 `staged/run/` holds the assembled game inputs, `api/` holds the compile APIs, `client/` and `server/`

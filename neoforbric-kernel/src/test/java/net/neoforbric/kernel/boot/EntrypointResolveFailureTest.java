@@ -141,7 +141,7 @@ class EntrypointResolveFailureTest {
 	private KernelFabricLoader loader() throws Exception {
 		var constructor = KernelFabricLoader.class.getDeclaredConstructor(EnvType.class, Path.class, Path.class, String[].class, String.class);
 		constructor.setAccessible(true);
-		KernelFabricLoader loader = constructor.newInstance(EnvType.SERVER, directory, directory.resolve("config"), new String[0], "26.2");
+		KernelFabricLoader loader = constructor.newInstance(EnvType.SERVER, directory, directory.resolve("config"), new String[0], "1.21.1");
 		ClassLoader broken = new ClassLoader(getClass().getClassLoader()) {
 			@Override
 			protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {

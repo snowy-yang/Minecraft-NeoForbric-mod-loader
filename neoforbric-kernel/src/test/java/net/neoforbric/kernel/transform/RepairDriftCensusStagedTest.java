@@ -44,7 +44,7 @@ class RepairDriftCensusStagedTest {
 	@TempDir Path temporary;
 
 	private static List<Path> stagedJars() {
-		return List.of(RUN.resolve("neoforge-base/patched-mc-neoforge-26.2.jar"),
+		return List.of(RUN.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar"),
 				RUN.resolve("neoforge-runtime/neoforge-runtime.jar"),
 				RUN.resolve("forge-runtime/forge-runtime.jar"));
 	}

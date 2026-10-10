@@ -54,7 +54,7 @@ import org.objectweb.asm.tree.MethodNode;
  * by one bush each, in different places — the same noise vanilla has against itself.
  */
 class MergedBaseSavedHeightmapsTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	private static final String CHUNK_STATUS = "net/minecraft/world/level/chunk/status/ChunkStatus";
 	private static final String WIDENED = "chunkSaveHeightmaps";
@@ -62,7 +62,7 @@ class MergedBaseSavedHeightmapsTest {
 
 	@Test
 	void vanillaHasNoSecondHeightmapSetToBeginWith() throws Exception {
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 26.2 jar at " + VANILLA);
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
 		List<String> fields = new ArrayList<>();
 		for (FieldNode field : read(entry(VANILLA)).fields) fields.add(field.name);
 		assertTrue(fields.contains(VANILLA_SHAPED), "vanilla must carry the field this repair aims at");

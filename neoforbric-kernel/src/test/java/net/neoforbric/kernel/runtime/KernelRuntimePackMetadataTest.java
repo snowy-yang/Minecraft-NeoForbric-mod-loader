@@ -94,11 +94,11 @@ class KernelRuntimePackMetadataTest {
 	}
 
 	private static Path merged() {
-		return TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+		return TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	}
 
 	/**
-	 * The merged game plus Minecraft 26.2's own library set, read from the launcher's version JSON — the list the
+	 * The merged game plus Minecraft 1.21.1's own library set, read from the launcher's version JSON — the list the
 	 * build resolves for the game side's test linkage too. The pack codec reaches {@code ExtraCodecs}, whose
 	 * static initialiser touches half a dozen libraries, so a hand-picked list is one class away from breaking.
 	 */
@@ -106,8 +106,8 @@ class KernelRuntimePackMetadataTest {
 		Path merged = merged();
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(merged), "the staged merged game is absent");
 		Path libraries = TestFixtures.minecraftDir().resolve("libraries");
-		Path versionJson = libraries.getParent().resolve("versions/26.2/26.2.json");
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(versionJson), "no 26.2 version JSON beside the local Minecraft libraries");
+		Path versionJson = libraries.getParent().resolve("versions/1.21.1/1.21.1.json");
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(versionJson), "no 1.21.1 version JSON beside the local Minecraft libraries");
 		List<URL> urls = new ArrayList<>(List.of(merged.toUri().toURL()));
 		java.util.regex.Matcher path = java.util.regex.Pattern.compile("\"path\"\\s*:\\s*\"([^\"]+\\.jar)\"")
 				.matcher(Files.readString(versionJson, StandardCharsets.UTF_8));
@@ -115,7 +115,7 @@ class KernelRuntimePackMetadataTest {
 			Path library = libraries.resolve(path.group(1));
 			if (Files.isRegularFile(library)) urls.add(library.toUri().toURL());
 		}
-		TestFixtures.require(Fixture.MC_LIBRARIES, urls.size() > 1, "none of 26.2's libraries is in the local Minecraft install");
+		TestFixtures.require(Fixture.MC_LIBRARIES, urls.size() > 1, "none of 1.21.1's libraries is in the local Minecraft install");
 		return new URLClassLoader(urls.toArray(new URL[0]), KernelRuntimePackMetadataTest.class.getClassLoader());
 	}
 }

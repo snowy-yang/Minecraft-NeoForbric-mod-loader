@@ -27,7 +27,7 @@ class NestedPresenceAndEnumPathsTest {
         assertEquals(path.toString(),ModPresence.metadata("spectrelib").getSource());KernelBoot.publishNestedPresence(List.of(path));assertEquals(1,ModPresence.forgeFamilyMods().size());
     }
     @Test void followsEachModDeclaredEnumResource() throws Exception {
-        Path path=jar(Map.of("META-INF/neoforge.mods.toml",manifest("[[mods]]\nmodId=\"first\"\nversion=\"1\"\nenumExtensions=\"enum/26.2.json\"\n[[mods]]\nmodId=\"second\"\nversion=\"1\"\nenumExtensions=\"enum/second.json\"\n"),"enum/26.2.json","first-payload","enum/second.json","second-payload","META-INF/enumextensions.json","wrong"));
+        Path path=jar(Map.of("META-INF/neoforge.mods.toml",manifest("[[mods]]\nmodId=\"first\"\nversion=\"1\"\nenumExtensions=\"enum/1.21.1.json\"\n[[mods]]\nmodId=\"second\"\nversion=\"1\"\nenumExtensions=\"enum/second.json\"\n"),"enum/1.21.1.json","first-payload","enum/second.json","second-payload","META-INF/enumextensions.json","wrong"));
         var declarations=NeoEnumExtensions.declarationsForJar(new NeoForbricModDiscoverer(),path);assertEquals(Set.of("first","second"),declarations.keySet());assertEquals("first-payload",new String(declarations.get("first"),StandardCharsets.UTF_8));assertEquals("second-payload",new String(declarations.get("second"),StandardCharsets.UTF_8));
     }
     @Test void conventionalResourceStillWorks() throws Exception {

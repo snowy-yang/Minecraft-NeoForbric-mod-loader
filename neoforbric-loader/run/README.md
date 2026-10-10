@@ -1,80 +1,56 @@
-# `run/` — the pipeline that produces a runnable NeoForbric instance
+# `run/` — first-generation loader tooling (the kernel pipeline superseded it)
 
-For current kernel development, start with [the kernel development guide](../../neoforbric-kernel/run/README.md).
-This directory still supplies the shared merge tools and staged artifacts, but its `launch-*.sh` scripts
-use the first-generation loader boot path. The current player installer is `../../neoforbric-kernel-installer/`.
+For current development, start with [the kernel development guide](../../neoforbric-kernel/run/README.md) and
+the installer ([`../../neoforbric-kernel-installer/`](../../neoforbric-kernel-installer/)). This directory keeps
+the first-generation loader's tooling — the Knot-based boot path and the scripts that assemble its runtime
+carriers. It still produces shared staged artifacts the kernel's tests read.
 
 NeoForbric's loader is Apache-2.0 source. What it runs on top of is not: the Minecraft jar belongs to Mojang,
-and the MinecraftForge and NeoForge runtimes are LGPL. None of that is committed here. This directory holds
-the scripts that **fetch and assemble those pieces on your machine**, plus the launchers that put them
-together, plus the sources of the small test mods used to check that the result actually works.
+and the NeoForge runtime is LGPL. None of that is committed here. Everything the scripts produce — patched
+game jars, runtime carriers, game instances, logs, worlds — is deliberately ignored (see `../.gitignore`).
 
-Nothing in this directory is committed except the scripts, those mod sources, and one report. Everything the
-scripts produce — patched game jars, runtime carriers, game instances, logs, worlds — is deliberately
-ignored (see `../.gitignore`).
+## What is here today
 
-## Build pipeline
-
-Run in this order. Each writes into `run/` and is idempotent.
-
-| Script | Produces |
+| Script | Produces / does |
 |---|---|
-| `build-patched-forge.sh` | the traditional-MinecraftForge-patched, Mojmap-named MC 26.2 jar. Forge patches the game with BinaryPatcher + MCPConfig, not NeoForm, so this is the Forge analogue of NFRT. |
-| `assemble-neoforge-runtime.sh` | `neoforge-runtime.jar` — the same for NeoForge. |
-| `build-merged-base.sh` | `patched-mc-merged-26.2.jar` — vanilla 26.2 carrying **both** the MinecraftForge and the NeoForge injections in one jar, which is what lets all three ecosystems load in one instance. Compiles and runs `src/tools/MergedBaseBuilder`. |
-| `dedupe-runtime-overlap.sh` | resolves split packages between the two runtime carriers. Both bundle their own copies of third-party classes (maven-artifact, terminalconsoleappender, annotation jars); in one shared JPMS layer that is a split package, and `Configuration.resolve()` rejects it outright. |
-| `build-testmods.sh` | compiles the canary mods from `livemod-src/` and `livemod-src-neoforge/` against the runtime-supplied Forge and patched MC. |
+| `assemble-neoforge-runtime.sh` | `neoforge-runtime.jar` — the Knot-loaded NeoForge API + registration bridge carrier. The kernel's staged tree names it `neoforge-runtime/neoforge-runtime.jar`. |
+| `launch-1.21.11.sh` | MC **1.21.11** through the NeoForbric loader, on the Fabric **intermediary** namespace: vanilla obf jar + Fabric's intermediary + natives from a local Fabric profile. This is the loader path's 1.21.x anchor. |
+| `launch-client-26.2.sh`, `launch-server-26.2.sh` | MC **26.2** boots on the NeoForge-patched, Mojmap-named base — identity mode, no intermediary remap. Kept for the 26.2 generation they were written against; the current kernel anchor is 1.21.1 (see the kernel's `launch-kernel-server.sh`). |
+| `regress-client.sh` | Client regression gate: quick-play into a fixed singleplayer world, wait for the client-ready canary. |
+| `regress-real-mods.sh` | The standing regression gate for loader-side changes: substrate patches, unit tests, a headless registration baseline, and a real server boot with real third-party mods. |
+| `build-testmods.sh` | Compiles the canary mods from `livemod-src-neoforge/` against the runtime-supplied patched MC. |
+| `check-merged-links.sh` | The integration/release link gate — every named jar must exist and its committed symbol baseline must match. Missing inputs are failures; nothing is rebuilt here. |
+| `test-link-check.sh` | Self-test for MergedLinkChecker's baseline mode, on synthetic jars — no staged artifacts needed. |
+| `verify-substrate-patches.sh` | The required `../fabric-loader` substrate patches still match `patches/fabric-loader/*.patch`. |
 
-`merged-base/merge-conflicts.txt` is the report `build-merged-base.sh` writes: every class where the two
-Forge families' injections collided, and which side won. It is the one build output that **is** committed,
-because which way each conflict resolved is a design decision worth reviewing rather than re-deriving.
-
-## Launchers
-
-| Script | Instance |
-|---|---|
-| `launch-server-merged.sh` | dedicated server on the merged base, both runtimes staged — Fabric + MinecraftForge + NeoForge in one process. |
-| `launch-client-merged.sh` | the client equivalent, with both bridge mods staged. |
-| `launch-server-26.2.sh` | MC 26.2 on the NeoForge-patched base only. |
-| `launch-1.21.11.sh` | the older 1.21.11 path, which runs on the Fabric intermediary namespace rather than Mojmap. |
-
-MC 26.2 ships deobfuscated, so on 26.2 NeoForbric runs in identity mode — no intermediary remap. The 1.21.11
-launcher is the one that still needs an `intermediary` mapping and a Fabric profile for LWJGL natives.
+MC 26.2 ships deobfuscated, so the 26.2 launchers run in identity mode. The 1.21.x path is the one that needs
+an `intermediary` mapping and a Fabric profile for LWJGL natives.
 
 Launchers read your Minecraft directory from `$MC_DIR`; several scripts default to the macOS location.
 Inspect the selected script's platform assumptions before using it on another operating system.
 
 ## Mod sources
 
-- `bridge-src/`, `bridge-src-neoforge/` — NeoForbric's own bridge mods. Each opens the Fabric-content window
-  inside the genuine Forge-family registration span, so Fabric-registered content lands in the same window
-  Forge mods register in.
-- `livemod-src/`, `livemod-src-neoforge/` — canaries. They exercise a traditional-Forge `SimpleChannel`, a
-  server config that must sync over the socket, gameplay events, and cross-ecosystem mod-presence lookups,
-  and log a line per outcome. Built by `build-testmods.sh`.
-- `testmod-src/` — minimal Fabric and Forge probe mods, used to check that discovery classifies each one
-  correctly and that a remapped Forge class links against the live game.
+- `bridge-src-neoforge/` — NeoForbric's own bridge mod. It opens the Fabric-content window inside the
+  genuine Forge-family registration span, so Fabric-registered content lands in the same window NeoForge
+  mods register in.
+- `livemod-src-neoforge/` — the canaries: a server config that must sync over the socket, gameplay events,
+  and cross-ecosystem mod-presence lookups, each logging a line per outcome. Built by `build-testmods.sh`.
+- `testmod-src/` — minimal Fabric and NeoForge probe mods, used to check that discovery classifies each one
+  correctly and that a remapped class links against the live game.
 
 ## Checks
 
-- `verify-substrate-patches.sh` — the eight required `../fabric-loader` patches still match
+- `verify-substrate-patches.sh` — the required `../fabric-loader` patches still match
   `patches/fabric-loader/*.patch`. Compared against the pinned upstream release, so it passes whether you
   left them as working-tree changes or committed them. `../../bootstrap.sh` runs it for you.
-- `regress-real-mods.sh` — the standing regression gate: substrate patches, unit tests, a headless
-  registration baseline, and a real server boot with real third-party mods.
-- `regress-merged-client.sh` — quick-plays the merged client into a fixed world and disconnects cleanly,
-  covering the protocol / known-pack / registry-sync path that only shows up on the client.
+- `regress-real-mods.sh` — the standing regression gate for loader-side changes: substrate patches, unit
+  tests, a headless registration baseline, and a real server boot with real third-party mods.
 
-## Running the pipeline
+## Historical note
 
-```bash
-cd ..                    # the repository root
-./bootstrap.sh           # fetch and patch the fabric-loader substrate
-cd neoforbric-loader
-./gradlew jar runtimeJar # the two loader jars
-run/build-patched-forge.sh
-# ... then a launcher
-```
-
-These scripts assume a working JDK, `git`, and network access to Mojang's and Forge's Maven repositories.
-They are development tools — for the current installer, see `../../neoforbric-kernel-installer/`.
+The tables above replace a pipeline that no longer exists in this directory: `build-patched-forge.sh`
+(traditional-MinecraftForge-patched 26.2 jar — Forge support is removed from the project),
+`build-merged-base.sh` + `dedupe-runtime-overlap.sh` (the both-families merged jar — the kernel now boots
+NeoForge's own patched 1.21.1 base instead), and the `launch-*-merged.sh` pair. The kernel's
+`patched-mc-neoforge-1.21.1.jar` is staged by `tools/dev.py prepare`, not by anything here.

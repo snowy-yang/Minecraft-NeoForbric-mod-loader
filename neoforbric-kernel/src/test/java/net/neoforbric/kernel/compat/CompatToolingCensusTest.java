@@ -24,7 +24,7 @@ class CompatToolingCensusTest {
 		for (Path script : scripts) {
 			String text = Files.readString(script);
 			for (String forbidden : List.of("scratch" + "pad", "/Users/" + "jerry",
-					"C:\\Users\\" + "Administrator", "26.2" + "-neoforbric", "NeoForbric" + "Compat")) {
+					"C:\\Users\\" + "Administrator", "1.21.1" + "-neoforbric", "NeoForbric" + "Compat")) {
 				assertFalse(text.contains(forbidden), script + " contains machine-local literal " + forbidden);
 			}
 			var command = script.toString().endsWith(".sh")

@@ -41,7 +41,7 @@ import net.neoforbric.kernel.util.NeoForbricBranding;
 @ResourceLock("ModCatalog")
 class NeoForbricBrandingInjectorTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEOFORGE_RUNTIME = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 
 	/** NeoForge's own line counts NeoForge's ModList (one mod here); F3 shows the launcher profile and the sent brand. */
@@ -64,7 +64,7 @@ class NeoForbricBrandingInjectorTest {
 
 					public class NeoForgeVersion {
 						public static String getVersion() {
-							return "26.2.0.88";
+							return "21.1.256";
 						}
 					}
 					""",
@@ -76,7 +76,7 @@ class NeoForbricBrandingInjectorTest {
 					import net.neoforged.neoforge.common.NeoForgeVersion;
 
 					public final class BrandingControl {
-						private static String minecraft = "26.2";
+						private static String minecraft = "1.21.1";
 						private static List<String> brandings;
 
 						private static void computeBranding() {
@@ -101,7 +101,7 @@ class NeoForbricBrandingInjectorTest {
 						}
 
 						public String getLaunchedVersion() {
-							return "26.2-neoforbric";
+							return "1.21.1-neoforbric";
 						}
 					}
 					""",
@@ -123,7 +123,7 @@ class NeoForbricBrandingInjectorTest {
 
 					public class DebugEntryVersion {
 						public void display(List<String> lines) {
-							lines.add("Minecraft 26.2 (" + Minecraft.getInstance().getLaunchedVersion() + "/"
+							lines.add("Minecraft 1.21.1 (" + Minecraft.getInstance().getLaunchedVersion() + "/"
 									+ ClientBrandRetriever.getClientModName() + ")");
 						}
 					}
@@ -153,17 +153,17 @@ class NeoForbricBrandingInjectorTest {
 		ModCatalog.publish(List.of(mod(Ecosystem.FABRIC, "sodium", ""), mod(Ecosystem.NEOFORGE, "create", ""),
 				mod(Ecosystem.FABRIC, "fabric-api-base", "sodium")));
 		try {
-			assertEquals(List.of("Minecraft 26.2", NeoForbricBranding.display() + " (2 mods loaded)"), InjectorExecution.invokeStatic(
+			assertEquals(List.of("Minecraft 1.21.1", NeoForbricBranding.display() + " (2 mods loaded)"), InjectorExecution.invokeStatic(
 					loader.loadClass(NeoForbricBrandingInjector.BRANDING_CONTROL), "getBrandings"));
 		} finally {
 			ModCatalog.publish(previous);
 		}
-		assertEquals(List.of("Minecraft 26.2 (" + NeoForbricBranding.display() + "/neoforbric)"), f3(loader));
+		assertEquals(List.of("Minecraft 1.21.1 (" + NeoForbricBranding.display() + "/neoforbric)"), f3(loader));
 
 		ClassLoader merged = InjectorExecution.load(original);
-		assertEquals(List.of("Minecraft 26.2", "NeoForge 26.2.0.88 (1 mods loaded)"), InjectorExecution.invokeStatic(
+		assertEquals(List.of("Minecraft 1.21.1", "NeoForge 21.1.256 (1 mods loaded)"), InjectorExecution.invokeStatic(
 				merged.loadClass(NeoForbricBrandingInjector.BRANDING_CONTROL), "getBrandings"), "premise: the merged lines");
-		assertEquals(List.of("Minecraft 26.2 (26.2-neoforbric/neoforge)"), f3(merged));
+		assertEquals(List.of("Minecraft 1.21.1 (1.21.1-neoforbric/neoforge)"), f3(merged));
 	}
 
 	@Test void switchedOffTheStandInsAreLeftAsMerged(@TempDir Path work) throws Exception {

@@ -36,7 +36,7 @@ import net.neoforbric.api.Ecosystem;
 @ResourceLock("system-properties")
 @ResourceLock("ModCatalog")
 class MixinStubRebindTest {
-	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path POPULAR = Path.of("run/client-popular/mods");
 	private static final Path MERGED_PACK = Path.of("run/client-merged-pack/mods");
 

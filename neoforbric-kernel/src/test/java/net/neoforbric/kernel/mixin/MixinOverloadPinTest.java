@@ -354,7 +354,7 @@ class MixinOverloadPinTest {
 	@Test
 	void theRealMergedServerIsPinnedToVanillasOverload() throws Exception {
 		java.nio.file.Path merged = net.neoforbric.kernel.TestFixtures.stagedRoot()
-				.resolve("neoforge-base/patched-mc-neoforge-26.2.jar").normalize();
+				.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 		net.neoforbric.kernel.TestFixtures.requireFiles(net.neoforbric.kernel.TestFixtures.Fixture.STAGED, "the merged base", merged);
 		ClassNode server = new ClassNode();
 		try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(merged.toFile())) {

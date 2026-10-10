@@ -16,7 +16,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /** On the real merged LootPool: each family's constructor ends up writing the other family's fields. */
 class LootPoolFieldsInjectorTest {
-	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	@Test void bothConstructorsFillBothFamiliesFields() throws Exception {
 		byte[] original = lootPool();

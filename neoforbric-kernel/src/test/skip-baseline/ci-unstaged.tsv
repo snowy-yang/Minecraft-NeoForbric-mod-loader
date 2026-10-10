@@ -53,7 +53,6 @@ test	net.neoforbric.kernel.boot.KernelModLoaderClasslessTest	switchedOffTheClass
 test	net.neoforbric.kernel.boot.KernelTransferInteropTest	aBuiltGameSideAlwaysCarriesTheTransferComponent()	[fixture:game-side] no staged game jars, so no game side was built
 test	net.neoforbric.kernel.boot.KernelTransferInteropTest	onlyTheRebornHalfOfTheGameSideNamesTeamRebornEnergy()	[fixture:game-side] no staged game jars, so no game side was built
 test	net.neoforbric.kernel.boot.LaunchInputCheckTest	theStagedMergedBaseAndBothStagedCarrierSpellingsPass()	[fixture:staged] staged game artifacts absent: $ROOT/neoforbric-loader/run
-test	net.neoforbric.kernel.boot.MergedLambdaCaptureTest	noCapturedLambdaComesFromTheOtherSideOfTheMerge()	[fixture:staged] the merged base and both patched sides must be staged
 test	net.neoforbric.kernel.boot.ModMenuApiStandInShapeTest	everyPublicMemberMatchesModMenu()	[fixture:game-side] the Mod Menu API stand-in is compiled before the tests: build/classes/java/modMenuApi/com/terraformersmc/modmenu/api/ModMenuApi.class
 test	net.neoforbric.kernel.boot.ModMenuApiStandInShapeTest	everyTypeIsTheSameKindOfType()	[fixture:game-side] the Mod Menu API stand-in is compiled before the tests: build/classes/java/modMenuApi/com/terraformersmc/modmenu/api/ModMenuApi.class
 test	net.neoforbric.kernel.boot.ModMenuApiStandInShapeTest	theNullScreenFactoryMatchesModMenu()	[fixture:game-side] the Mod Menu API stand-in is compiled before the tests: build/classes/java/modMenuApi/com/terraformersmc/modmenu/util/NullScreenFactory.class
@@ -83,7 +82,7 @@ test	net.neoforbric.kernel.boot.PassiveSeederScanResultTest	offSwitchIsTheOldNot
 test	net.neoforbric.kernel.boot.RegistrationEventStepsTest	theRealMethodIsAStraightRunOfSevenCalls()	[fixture:staged] neoforge-runtime.jar not staged
 test	net.neoforbric.kernel.boot.RuntimeMixinConfigsTest	minecraftForgesRuntimeDeclaresNone()	[fixture:staged] staged MinecraftForge runtime absent
 test	net.neoforbric.kernel.boot.RuntimeMixinConfigsTest	neoForgesRuntimeJarContributesItsOwnAccessorConfig()	[fixture:staged] staged NeoForge runtime absent
-test	net.neoforbric.kernel.boot.WorldgenCanaryDataTest	theTwoCarriersPlaceDifferentNonOverworldBlocks()	[fixture:staged] build canaries with neoforbric-loader/run/build-testmods.sh
+test	net.neoforbric.kernel.boot.WorldgenCanaryDataTest	theCarrierPlacesANonOverworldBlock()	[fixture:staged] build canaries with neoforbric-loader/run/build-testmods.sh
 test	net.neoforbric.kernel.compat.PrepareWorldTest	theCarrierReadsThisFlagAndUsesItToSuppressOnlyTheExperimentalBackupPrompt()	[fixture:staged] requires current staged merged base
 test	net.neoforbric.kernel.interop.PayloadInteropPlayChannelsTest	everyNameTheRecordingSpellsExistsWhereItIsSpelled()	[fixture:third-party] fabric-api's networking module absent
 test	net.neoforbric.kernel.interop.PayloadInteropPlayChannelsTest	theConnectionProtocolConstantAndAccessorAreWhatTheMergedBaseDeclares()	[fixture:staged] staged merged base absent
@@ -542,10 +541,6 @@ test	net.neoforbric.kernel.transform.MergedBaseKeyMappingMapTest	vanillasMapIsBa
 test	net.neoforbric.kernel.transform.MergedBaseLeftNullFieldsTest	everyFieldWithAReaderIsWrittenByItsOwnerAfterTheTransformer()	[fixture:staged] staged artifact absent: $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar
 test	net.neoforbric.kernel.transform.MergedBaseLeftNullFieldsTest	forgeDataIsWrittenByForgesOwnPingHookAndNullGuardedByItsOnlyReader()	[fixture:staged] staged Forge carrier absent: $ROOT/neoforbric-loader/run/forge-runtime/forge-runtime.jar
 test	net.neoforbric.kernel.transform.MergedBaseLeftNullFieldsTest	theReaderCountsOverTheWholeBaseAreExactlyThePinnedOnes()	[fixture:staged] staged merged base absent
-test	net.neoforbric.kernel.transform.MergedBaseLostSwitchMapTest	aSecondPassChangesNothingFurther()	[fixture:staged] staged jar absent: $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar
-test	net.neoforbric.kernel.transform.MergedBaseLostSwitchMapTest	theCensusOfLostSwitchMapsIsExactlyTheTable()	[fixture:staged] staged merged base absent
-test	net.neoforbric.kernel.transform.MergedBaseLostSwitchMapTest	theFurnaceSwitchIsDecidedByDirectComparison()	[fixture:staged] staged jar absent: $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar
-test	net.neoforbric.kernel.transform.MergedBaseLostSwitchMapTest	theMappingMatchesMinecraftForgesOwnHolderClass()	[fixture:staged] Forge-patched base absent (dev-only pin)
 test	net.neoforbric.kernel.transform.MergedBaseNbtBuilderTest	aSecondPassAddsNothing()	[fixture:staged] staged artifact absent: $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar
 test	net.neoforbric.kernel.transform.MergedBaseNbtBuilderTest	anUnrelatedClassIsUntouched()	[fixture:staged] staged artifact absent: $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar
 test	net.neoforbric.kernel.transform.MergedBaseNbtBuilderTest	builderIsPublicStaticWithTheDescriptorTheCarrierCallsAndTheCarriersOwnBody()	[fixture:staged] staged artifact absent: $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar
@@ -668,7 +663,6 @@ test	net.neoforbric.kernel.transform.RecipeSyncFailSoftInjectorTest	thePayloadIs
 test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	aRegistriesThatTookFabricsModifierHandsFabricRegistriesVanillasDirectory()	[fixture:mc-libraries] ~/.minecraft/versions/26.2/26.2.jar absent — skipping real-bytes check
 test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	everyOtherRegistryEndsWhereItsOwnLoaderPutsIt()	[fixture:mc-libraries] ~/.minecraft/versions/26.2/26.2.jar absent — skipping real-bytes check
 test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	forceHandsFabricRegistriesVanillasDirectoryWithoutAsking()	[fixture:mc-libraries] ~/.minecraft/versions/26.2/26.2.jar absent — skipping real-bytes check
-test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	minecraftForgesInlineBodyIsEditedAtBothOfItsReturns()	[fixture:staged] $ROOT/neoforbric-loader/run/forge-patched/patched-mc-forge-26.2.jar absent — skipping real-bytes check
 test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	switchedOffRegistriesStaysAsMerged()	[fixture:staged] staged merged base absent
 test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	theMergedBodyIsNeoForgesAndTheEditHandsEveryAnswerToTheOwner()	[fixture:staged] staged merged base absent — skipping real-bytecode check
 test	net.neoforbric.kernel.transform.RegistryDirectoryOwnerInjectorTest	withoutFabricsModifierInRegistriesEveryRegistryKeepsTheMergedDirectory()	[fixture:staged] $ROOT/neoforbric-loader/run/merged-base/patched-mc-merged-26.2.jar absent — skipping real-bytes check

@@ -56,7 +56,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * notice. So one test defines the transformed class for real and calls it.
  */
 public class MergedBaseShutdownSaveTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private static final String INTEGRATED_SERVER = "net/minecraft/client/server/IntegratedServer";
 

@@ -159,9 +159,9 @@ class KernelDataPacksTest {
 		java.util.Set<String> taken = new java.util.LinkedHashSet<>();
 
 		assertEquals("neoforbric/data/waystones", KernelDataPacks.modPackId(
-				Path.of("waystones-26.2-1.2.3.jar"), j -> "waystones", taken));
+				Path.of("waystones-1.21.1-1.2.3.jar"), j -> "waystones", taken));
 		assertEquals("neoforbric/data/waystones", KernelDataPacks.modPackId(
-				Path.of("waystones-26.2-1.2.4.jar"), j -> "waystones", new java.util.LinkedHashSet<>()),
+				Path.of("waystones-1.21.1-1.2.4.jar"), j -> "waystones", new java.util.LinkedHashSet<>()),
 				"the same mod, updated, has to keep the same id");
 	}
 
@@ -193,7 +193,7 @@ class KernelDataPacksTest {
 	void packIdsSortIntoThePriorityStackTheGameWillApply() throws Exception {
 		Path forge = jar("forge-runtime-interop.jar", null, "data/forge/tags/item/tools.json");
 		Path neo = jar("neoforge-runtime.jar", null, "data/neoforge/damage_type/thing.json");
-		Path mod = jar("lithostitched-1.7.13-neoforge-26.2.jar", NeoForbricModDiscoverer.NEOFORGE_MANIFEST,
+		Path mod = jar("lithostitched-1.7.13-neoforge-1.21.1.jar", NeoForbricModDiscoverer.NEOFORGE_MANIFEST,
 				"data/lithostitched/recipe/x.json");
 		// A mod whose name sorts before both carriers' — the id, not the file name, has to carry the order.
 		Path early = jar("aaa-mod.jar", NeoForbricModDiscoverer.NEOFORGE_MANIFEST, "data/aaa/recipe/x.json");
@@ -207,13 +207,13 @@ class KernelDataPacksTest {
 				"neoforbric/carrier/1-forge-runtime-interop",
 				"neoforbric/carrier/2-neoforge-runtime",
 				"neoforbric/data/aaa-mod",
-				"neoforbric/data/lithostitched-1.7.13-neoforge-26.2"), sorted);
+				"neoforbric/data/lithostitched-1.7.13-neoforge-1.21.1"), sorted);
 	}
 
 	@Test
 	void packIdsDropTheExtensionOnly() {
-		assertEquals("lithostitched-1.7.13-neoforge-26.2",
-				KernelDataPacks.stripExtension("lithostitched-1.7.13-neoforge-26.2.jar"));
+		assertEquals("lithostitched-1.7.13-neoforge-1.21.1",
+				KernelDataPacks.stripExtension("lithostitched-1.7.13-neoforge-1.21.1.jar"));
 		assertEquals("noextension", KernelDataPacks.stripExtension("noextension"));
 	}
 

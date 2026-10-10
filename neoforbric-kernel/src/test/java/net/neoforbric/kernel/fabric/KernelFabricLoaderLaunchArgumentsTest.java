@@ -36,10 +36,10 @@ class KernelFabricLoaderLaunchArgumentsTest {
 	@Test
 	void removesTheCredentialsAndTheValuesBehindThem() {
 		String[] sanitized = KernelFabricLoader.sanitized(new String[] {
-				"--username", "Jerry", "--accessToken", "eyJhbGciOi.secret", "--version", "26.2-neoforbric",
+				"--username", "Jerry", "--accessToken", "eyJhbGciOi.secret", "--version", "1.21.1-neoforbric",
 				"--uuid", "0d1e2f", "--xuid", "991122", "--gameDir", "."});
 
-		assertArrayEquals(new String[] {"--version", "26.2-neoforbric", "--gameDir", "."}, sanitized);
+		assertArrayEquals(new String[] {"--version", "1.21.1-neoforbric", "--gameDir", "."}, sanitized);
 		assertFalse(List.of(sanitized).contains("eyJhbGciOi.secret"),
 				"the token's VALUE is the part that must not survive");
 	}
@@ -55,9 +55,9 @@ class KernelFabricLoaderLaunchArgumentsTest {
 
 	@Test
 	void aCredentialFlagAtTheVeryEndDoesNotRunOffTheArray() {
-		String[] sanitized = KernelFabricLoader.sanitized(new String[] {"--version", "26.2", "--accessToken"});
+		String[] sanitized = KernelFabricLoader.sanitized(new String[] {"--version", "1.21.1", "--accessToken"});
 
-		assertArrayEquals(new String[] {"--version", "26.2"}, sanitized);
+		assertArrayEquals(new String[] {"--version", "1.21.1"}, sanitized);
 	}
 
 	@Test

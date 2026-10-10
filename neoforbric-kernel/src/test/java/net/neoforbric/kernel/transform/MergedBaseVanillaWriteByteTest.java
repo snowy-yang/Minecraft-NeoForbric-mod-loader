@@ -35,7 +35,7 @@ import org.objectweb.asm.tree.MethodNode;
  * the same owners, the same descriptors, as often.
  */
 class MergedBaseVanillaWriteByteTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEO_RUNTIME = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	private static final String EXTENSION = "net/neoforged/neoforge/common/extensions/IFriendlyByteBufExtension";
@@ -67,7 +67,7 @@ class MergedBaseVanillaWriteByteTest {
 
 	@Test void everyMergedSiteBecomesTheCallVanillaMakes() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 26.2 jar at " + VANILLA);
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
 		Map<String, Integer> repaired = new TreeMap<>();
 		try (ZipFile merged = new ZipFile(MERGED_BASE.toFile()); ZipFile vanilla = new ZipFile(VANILLA.toFile())) {
 			for (ZipEntry entry : Collections.list(merged.entries())) {

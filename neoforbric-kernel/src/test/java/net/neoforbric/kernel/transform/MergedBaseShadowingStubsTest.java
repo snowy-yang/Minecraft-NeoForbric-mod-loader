@@ -50,7 +50,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * fight over. That crash happened in classes whose chain had none.
  */
 class MergedBaseShadowingStubsTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private static final String VEHICLE = "net/minecraft/world/entity/vehicle/VehicleEntity";
 

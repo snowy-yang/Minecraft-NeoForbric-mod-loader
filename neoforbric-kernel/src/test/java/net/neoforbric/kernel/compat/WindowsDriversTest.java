@@ -164,11 +164,11 @@ class WindowsDriversTest {
                 common.acknowledge_first_run(instance)
                 fresh = json.loads((instance / 'config/wover/client.json').read_text())
                 assert fresh == {'internal': {'did_present_welcome_screen': True}}, fresh
-                (instance / 'config/wover/client.json').write_text(json.dumps({'create_version': '26.201.2',
+                (instance / 'config/wover/client.json').write_text(json.dumps({'create_version': '1.21.1.2',
                     'internal': {'did_present_welcome_screen': False}, 'general': {'check_for_new_versions': True}}))
                 common.acknowledge_first_run(instance)
                 merged = json.loads((instance / 'config/wover/client.json').read_text())
-                assert merged == {'create_version': '26.201.2', 'internal': {'did_present_welcome_screen': True},
+                assert merged == {'create_version': '1.21.1.2', 'internal': {'did_present_welcome_screen': True},
                                   'general': {'check_for_new_versions': True}}, merged
                 (instance / 'config/wover/client.json').write_text('not json')
                 common.acknowledge_first_run(instance)

@@ -27,7 +27,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /** {@code WeightedVariants.first}: one Forge reader in the base, zero writers — the merge dropped Forge's write. */
 class MergedBaseWeightedVariantsFirstTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String OWNER = "net/minecraft/client/renderer/block/dispatch/WeightedVariants";
 
 	@Test

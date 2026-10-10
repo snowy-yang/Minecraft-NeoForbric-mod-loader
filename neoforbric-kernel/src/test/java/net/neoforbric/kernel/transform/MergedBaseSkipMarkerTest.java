@@ -43,7 +43,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * Unrepaired, one condition-gated data file whose condition is false stops the server starting.
  */
 class MergedBaseSkipMarkerTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String ENTRY = "net/minecraft/server/packs/resources/SimpleJsonResourceReloadListener.class";
 	private static final String BINARY = "net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener";
 	private static final String KERNEL = "net/neoforbric/kernel/runtime/KernelFabricConditions";

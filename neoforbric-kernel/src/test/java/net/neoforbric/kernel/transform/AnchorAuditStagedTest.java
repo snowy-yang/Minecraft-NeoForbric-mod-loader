@@ -51,7 +51,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  */
 class AnchorAuditStagedTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String MINECRAFT = "net.minecraft.client.Minecraft";
 	private static final String ENTRY = "net/minecraft/client/Minecraft.class";
 	private static final String OPTIONS = "net/minecraft/client/Options";

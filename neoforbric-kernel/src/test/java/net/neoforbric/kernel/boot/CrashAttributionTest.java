@@ -77,9 +77,9 @@ class CrashAttributionTest {
 	/** A trace whose only frame of interest is the overwritten method, under Minecraft's jar and name. */
 	private static final String THROUGH_FIND = "java.lang.ClassCastException: class a cannot be cast to class b\n"
 			+ "\tat neoforbric/net.minecraft.util.ClassInstanceMultiMap.find(ClassInstanceMultiMap.java:62) "
-			+ "~[patched-mc-merged-26.2.jar:?] {}\n"
+			+ "~[patched-mc-merged-1.21.1.jar:?] {}\n"
 			+ "\tat neoforbric/net.minecraft.world.level.entity.EntitySection.getEntities(EntitySection.java:40) "
-			+ "~[patched-mc-merged-26.2.jar:?] {}\n";
+			+ "~[patched-mc-merged-1.21.1.jar:?] {}\n";
 
 	private static ModCatalog.Entry mod(String id, String name, String jar) {
 		return new ModCatalog.Entry(Ecosystem.FABRIC, id, name, "1.0", "", List.of(), jar, "", "");
@@ -149,10 +149,10 @@ class CrashAttributionTest {
 		// carrying the merged base's jar.
 		ModCatalog.publish(List.of(
 				mod("sodium", "Sodium", "sodium-fabric-0.9.0.jar"),
-				mod("minecraft", "Minecraft", "patched-mc-merged-26.2.jar")));
+				mod("minecraft", "Minecraft", "patched-mc-merged-1.21.1.jar")));
 		String trace = "java.lang.NullPointerException\n"
 				+ "\tat neoforbric/net.minecraft.client.Minecraft.handler$chm000$sodium$loadConfig"
-				+ "(Minecraft.java:11106) ~[patched-mc-merged-26.2.jar:?] {}\n";
+				+ "(Minecraft.java:11106) ~[patched-mc-merged-1.21.1.jar:?] {}\n";
 
 		List<CrashAttribution.Suspect> suspects = CrashAttribution.suspects(trace);
 
@@ -207,7 +207,7 @@ class CrashAttributionTest {
 		ModCatalog.publish(List.of(mod("sodium", "Sodium", "sodium-fabric-0.9.0.jar")));
 		String trace = "java.lang.IllegalStateException\n"
 				+ "\tat neoforbric/net.minecraft.client.Minecraft.handler$zpf000$mutableSpecialElementRenderers"
-				+ "(Minecraft.java:900) ~[patched-mc-merged-26.2.jar:?] {}\n";
+				+ "(Minecraft.java:900) ~[patched-mc-merged-1.21.1.jar:?] {}\n";
 
 		assertEquals(List.of(), CrashAttribution.suspects(trace));
 	}
@@ -255,7 +255,7 @@ class CrashAttributionTest {
 	void aCrashThroughAMethodTwoModsOverwriteNamesBothOfThem() {
 		ModCatalog.publish(List.of(mod("lithium", "Lithium", "lithium-fabric-0.25.3+mc26.2.jar"),
 				mod("vmp", "Very Many Players", "vmp-fabric-mc26.2-0.2.0.jar"),
-				mod("minecraft", "Minecraft", "patched-mc-merged-26.2.jar")));
+				mod("minecraft", "Minecraft", "patched-mc-merged-1.21.1.jar")));
 		MixinOverlapLint.publish(List.of(overlap(MixinOverlapLint.Rule.R1, "lithium", "vmp")));
 
 		List<CrashAttribution.Suspect> suspects = CrashAttribution.suspects(THROUGH_FIND);

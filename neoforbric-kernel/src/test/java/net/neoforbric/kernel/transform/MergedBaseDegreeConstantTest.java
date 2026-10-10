@@ -51,7 +51,7 @@ import org.objectweb.asm.tree.MethodNode;
  * and the whole point of the defect is that a plausible-looking number was the wrong one.
  */
 class MergedBaseDegreeConstantTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	private static final String ENTITY = "net/minecraft/world/entity/Entity";
 	private static final double HALF_TURN = 180.0;
@@ -83,7 +83,7 @@ class MergedBaseDegreeConstantTest {
 	@Test
 	void vanillaCarriesTheSameLiteralAndNeverTheExpression() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 26.2 jar at " + VANILLA);
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
 		ClassNode vanilla = read(entry(VANILLA, ENTITY + ".class"));
 		assertEquals(0, sites(vanilla), "vanilla does not carry the unfolded expression; if it does, the premise "
 				+ "of this repair is wrong");

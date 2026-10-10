@@ -253,7 +253,7 @@ def java_bin(requested=None):
     return shutil.which('java') or 'java'
 
 
-def java_environment(java, minimum=25):
+def java_environment(java, minimum=21):
     result = subprocess.run([java, '-XshowSettings:properties', '-version'], capture_output=True, text=True, check=True)
     values = dict(re.findall(r'^\s*(java\.specification\.version|java\.home|os\.arch)\s*=\s*(.*?)\s*$',
                              result.stderr + result.stdout, re.M))

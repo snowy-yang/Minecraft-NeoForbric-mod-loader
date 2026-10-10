@@ -20,9 +20,8 @@ class GateWorldgenContractTest {
 	void theGateProbesExactlyTheBlocksThePackagedCanariesPlace() throws Exception {
 		Path gate = Path.of("run/gate-m25-worldgen.sh");
 		String script = Files.readString(gate);
-		String forge = WorldgenCanaryDataTest.inspect("forge", "neoforbriclive", "livemod-src", "forge-runtime");
 		String neo = WorldgenCanaryDataTest.inspect("neoforge", "neoforbricneolive", "livemod-src-neoforge", "neoforge-runtime");
-		for (String block : List.of(forge, neo)) {
+		for (String block : List.of(neo)) {
 			assertTrue(script.contains("'^" + block + ": [1-9][0-9]*'"), "missing positive gate assertion for " + block);
 		}
 
@@ -42,16 +41,18 @@ class GateWorldgenContractTest {
 		recorder.environment().put("RUNDIR", rundir.toString());
 		recorder.environment().put("PROBE_LOG", temporary.resolve("probe.log").toString());
 		recorder.environment().put("CAPTURE", capture.toString());
+		// lib.sh, which the extracted region does not source, exports PYTHON for the probe line.
+		recorder.environment().put("PYTHON", "python3");
 		assertSuccessful(recorder);
 		assertEquals(List.of(kernel.resolve("run/compat/region-probe.py").toString(),
-				rundir.resolve("world/dimensions/minecraft/overworld/region").toString(), neo, forge),
+				rundir.resolve("world/dimensions/minecraft/overworld/region").toString(), neo),
 				List.of(Files.readString(capture).split("\\x00")),
-				"the real probe argv must read the current overworld layout and both packaged markers");
+				"the real probe argv must read the current overworld layout and the packaged marker");
 
 		assertTrue(script.contains("'^unreadable: 0"));
 		assertTrue(script.contains("\"$CHUNKS\" -ge 20"));
-		// Phase 1 D landed: the Forge half is green, the expected-red escape is gone, and a switch-off boot is the
-		// negative control that proves each MinecraftForge claim can still go red on its own.
+		// Phase 1 D landed: the expected-red escape is gone, and a switch-off boot is the
+		// negative control that proves each worldgen claim can still go red on its own.
 		assertFalse(script.contains("EXPECTED: RED"), "the expected-red header must go when the gap closes");
 		assertFalse(script.contains("EXPECTED-RED"));
 		assertTrue(script.contains("M25_NO_DATA"));

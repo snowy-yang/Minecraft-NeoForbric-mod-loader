@@ -58,7 +58,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * generated ones, where vanilla against itself differed in 0 and 10.
  */
 class MergedBaseRandomSourcePrecisionTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final List<String> SOURCES = List.of(
 			"net/minecraft/world/level/levelgen/XoroshiroRandomSource",
 			"net/minecraft/world/level/levelgen/BitRandomSource");

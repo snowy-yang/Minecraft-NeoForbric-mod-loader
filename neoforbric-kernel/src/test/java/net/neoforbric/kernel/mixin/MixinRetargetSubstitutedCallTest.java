@@ -79,7 +79,7 @@ class MixinRetargetSubstitutedCallTest {
 	private static final String PLAIN = "(" + ENTRY + MixinRetarget.CALLBACK_INFO_RETURNABLE + ")V";
 
 	private static final Path SWEEP = Path.of("build/compat-inputs/sweep90/mods");
-	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	@AfterEach
 	void reset() {

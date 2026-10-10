@@ -43,7 +43,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  */
 @ResourceLock("system-properties")
 class MixinRetargetRenamedBodyCorpusTest {
-	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path INTEROP = TestFixtures.stagedRoot().resolve("merged-base/forge-runtime-interop.jar");
 	private static final Path NEO_RUNTIME = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar");
 	/** The audit's corpus — the packs, the sweeps and the random Modrinth sample — and the pure-Fabric A/B's mods, each walked whole. */
@@ -55,7 +55,7 @@ class MixinRetargetRenamedBodyCorpusTest {
 	private static final String NEVER_RUNS = " (never runs)";
 
 	/**
-	 * Every move, as {@code mixin#handler -> renamed method}: each read against vanilla 26.2, both carriers' patched jars
+	 * Every move, as {@code mixin#handler -> renamed method}: each read against vanilla 1.21.1, both carriers' patched jars
 	 * and the merged base. The entity hooks follow NeoForge's {@code addEntityWithoutEvent} (the whole body); the anvil
 	 * hooks its {@code createResultInternal}, Fabric API's HUD wraps its four layers and davids' preview rotation its
 	 * {@code renderEntityInInventoryFollowsAngle} (pieces, handlers that need only the call); the sleep hooks the lambda

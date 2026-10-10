@@ -70,7 +70,7 @@ import net.neoforbric.kernel.mixin.MergedBaseMixinCompat;
  * Fabric.
  *
  * <p>Real bytes throughout, wherever they exist on this machine: {@code Registries}' directory methods from vanilla
- * 26.2, from the merged base and from MinecraftForge's patched game; NeoForge's own {@code prefixNamespace}; and the
+ * 1.21.1 and from the merged base; NeoForge's own {@code prefixNamespace}; and the
  * two mixin handlers that decide the outcome on native Fabric — fabric-registry-sync's {@code RegistriesMixin} and
  * WorldWeaver's {@code RegistryDataLoaderMixinEarly} — out of the sweep pack's jars. Only {@code Identifier},
  * {@code ResourceKey} and wover's "is this one of my registries" lookup are stand-ins, because the real ones drag in
@@ -80,8 +80,7 @@ import net.neoforbric.kernel.mixin.MergedBaseMixinCompat;
  */
 class RegistryDirectoryOwnerInjectorTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
-	private static final Path FORGE_PATCHED = STAGED.resolve("forge-patched/patched-mc-forge-26.2.jar");
+	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEO_RUNTIME = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	private static final Path SWEEP = Path.of("build/compat-inputs/sweep90/mods");
@@ -191,20 +190,6 @@ class RegistryDirectoryOwnerInjectorTest {
 		// componentsDirPath is datagen's, and Fabric never prefixed it.
 		assertEquals(nativeFabric.body("componentsDirPath", "owo", "owo_things"),
 				after.body("componentsDirPath", "owo", "owo_things"));
-	}
-
-	@Test
-	void minecraftForgesInlineBodyIsEditedAtBothOfItsReturns() throws Exception {
-		requireAll(FORGE_PATCHED);
-		ModPresence.publishFabric(List.of(mod(Ecosystem.FABRIC, "wover")));
-		byte[] in = classBytes(FORGE_PATCHED, REGISTRIES);
-		MethodNode original = method(node(in), "registryDirPath");
-		assertEquals(2, count(original, Opcodes.ARETURN), "MinecraftForge prefixes inline, with its own return");
-
-		Arm forge = arm(registries(FORGE_PATCHED, true));
-		assertEquals(PRESET_INFO, forge.body("elementsDirPath", "wover", PRESET_INFO));
-		assertEquals("examplemod/thing", forge.body("elementsDirPath", "examplemod", "thing"));
-		assertEquals("worldgen/biome", forge.body("elementsDirPath", "minecraft", "worldgen/biome"));
 	}
 
 	@Test
@@ -566,7 +551,7 @@ class RegistryDirectoryOwnerInjectorTest {
 		return new RegistryDirectoryOwnerInjector().transform(RegistryDirectoryOwnerInjector.TARGET, bytes, null);
 	}
 
-	/** Each input under its own fixture kind: stock 26.2, the staged jars and the sweep's mods are on different machines. */
+	/** Each input under its own fixture kind: stock 1.21.1, the staged jars and the sweep's mods are on different machines. */
 	private static void requireAll(Path... inputs) {
 		for (Path input : inputs) {
 			TestFixtures.require(NativeCoremodParityTest.fixtureOf(input), Files.isRegularFile(input),
@@ -618,11 +603,5 @@ class RegistryDirectoryOwnerInjectorTest {
 			if (insn instanceof MethodInsnNode call && call.owner.equals(owner) && call.name.equals(name)) return true;
 		}
 		return false;
-	}
-
-	private static int count(MethodNode method, int opcode) {
-		int n = 0;
-		for (AbstractInsnNode insn : method.instructions) if (insn.getOpcode() == opcode) n++;
-		return n;
 	}
 }

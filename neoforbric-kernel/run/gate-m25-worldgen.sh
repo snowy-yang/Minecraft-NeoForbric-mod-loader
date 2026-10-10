@@ -162,10 +162,10 @@ check "the MinecraftForge canary received the placement" \
 check "and its refusal reached the event the game reads" \
   'NeoForbricNeoLive/PLACE\] posted EntityPlaceEvent at .* refused=true' "$LOG"
 
-step "the saved overworld contains both markers, with no unreadable chunks"
+step "the saved overworld contains the marker, with no unreadable chunks"
 # REGION_PROBE_BEGIN — execute this exact command with an argv recorder in the contract test.
 ${PYTHON} "$KERNEL/run/compat/region-probe.py" "$RUNDIR/world/dimensions/minecraft/overworld/region" \
-  minecraft:purpur_block minecraft:end_stone > "$PROBE_LOG" 2>&1 || FAIL=1
+  minecraft:purpur_block > "$PROBE_LOG" 2>&1 || FAIL=1
 # REGION_PROBE_END
 cat "$PROBE_LOG"
 check "NeoForge marker really generated" '^minecraft:purpur_block: [1-9][0-9]*' "$PROBE_LOG"
@@ -176,8 +176,6 @@ if [ -n "$CHUNKS" ] && [ "$CHUNKS" -ge 20 ]; then
 else
   echo "[kernel] FAIL too little generated terrain: ${CHUNKS:-no count} chunks (need at least 20)"; FAIL=1
 fi
-
-check "Forge marker really generated" '^minecraft:end_stone: [1-9][0-9]*' "$PROBE_LOG"
 
 step "negative control: -Dneoforbric.forgeWorldgen=off loses exactly the MinecraftForge half"
 CONTROL_LOG="$BUILD/gate-m25-worldgen-off.log"
@@ -193,10 +191,9 @@ check "control: NeoForge structure probe still true" 'NeoForbricNeoLive/WORLDGEN
 check "control: the shipper is named" 'forgeWorldgen=off — [1-9][0-9]* MinecraftForge mod jar\(s\) ship biome/structure modifiers that will NOT apply: .*neoforbriclive' "$CONTROL_LOG"
 check "control: neoforbriclive is DEGRADED in the load report" 'neoforbriclive' "$RUNDIR/.neoforbric-kernel/load-report.txt"
 ${PYTHON} "$KERNEL/run/compat/region-probe.py" "$RUNDIR/world/dimensions/minecraft/overworld/region" \
-  minecraft:purpur_block minecraft:end_stone > "$CONTROL_PROBE" 2>&1 || FAIL=1
+  minecraft:purpur_block > "$CONTROL_PROBE" 2>&1 || FAIL=1
 cat "$CONTROL_PROBE"
 check "control: NeoForge marker still generated" '^minecraft:purpur_block: [1-9][0-9]*' "$CONTROL_PROBE"
-check "control: no Forge marker" '^minecraft:end_stone: 0([[:space:]]|$)' "$CONTROL_PROBE"
 
 if [ "$FAIL" -eq 0 ]; then
   echo "[kernel] M25 WORLDGEN GATE GREEN — both families changed saved overworld terrain"

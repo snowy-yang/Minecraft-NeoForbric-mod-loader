@@ -25,7 +25,7 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 @ResourceLock("system-properties")
 class NativeCoremodParityTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path FORGE = STAGED.resolve("merged-base/forge-runtime-interop.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	/** tools/dev.py prepare downloads NeoForge's universal jar here; its coremods jar is nested inside. */
@@ -146,7 +146,7 @@ class NativeCoremodParityTest {
 	}
 
 	@Test void vanillasShapeAndTheSwitchesLeaveClassesAlone() throws Exception {
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "vanilla 26.2 absent");
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "vanilla 1.21.1 absent");
 		byte[] vanillaPot = read(VANILLA, POT);
 		assertSame(vanillaPot, NativeCoremodParity.apply(POT, vanillaPot), "vanilla's getter reads the field; nothing to route");
 		for (String property : List.of(NativeCoremodParity.PROPERTY, NativeCoremodParity.FLOWER_POT)) {

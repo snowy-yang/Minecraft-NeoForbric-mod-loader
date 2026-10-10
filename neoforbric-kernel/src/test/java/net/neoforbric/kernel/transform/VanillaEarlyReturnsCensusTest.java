@@ -48,14 +48,14 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
  * <p>Regenerate with {@code NEOFORBRIC_WRITE_EARLY_RETURNS=1} after a base rebuild.
  */
 class VanillaEarlyReturnsCensusTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path VANILLA = TestFixtures.vanillaJar();
 	private static final String CAMERA_UPDATE = "net/minecraft/client/Camera#update(Lnet/minecraft/client/DeltaTracker;)V";
 
 	@Test
 	void theShippedTableIsExactlyWhatTheArtifactsSay() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 26.2 jar at " + VANILLA);
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
 
 		TreeSet<String> rows = new TreeSet<>();
 		int folded = 0;

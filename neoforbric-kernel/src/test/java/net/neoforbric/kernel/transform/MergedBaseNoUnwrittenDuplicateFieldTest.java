@@ -60,7 +60,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * one. That distinction is structural and is asserted in {@link MergedBaseParticleProvidersTest}.
  */
 class MergedBaseNoUnwrittenDuplicateFieldTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	@Test
 	void everyDuplicatedFieldNameHasAWriterForEveryOneOfItsTypes() throws Exception {

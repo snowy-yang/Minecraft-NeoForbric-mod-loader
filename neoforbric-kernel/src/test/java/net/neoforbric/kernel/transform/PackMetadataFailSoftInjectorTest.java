@@ -66,7 +66,7 @@ import net.fabricmc.api.EnvType;
  */
 @ExecutesInjector(PackMetadataFailSoftInjector.class)
 class PackMetadataFailSoftInjectorTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private static final String NEST = "net/minecraft/server/packs/resources/ResourceMetadata$";
 	private static final String HOOK_OWNER = "net/neoforbric/kernel/boot/KernelPackMetadata";

@@ -59,7 +59,7 @@ import org.objectweb.asm.tree.MethodNode;
  */
 class KernelClientPackSourceTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
-	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEO_CARRIER = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path FORGE_CARRIER = STAGED.resolve("forge-runtime/forge-runtime.jar");
 	private static final Path RUNTIME = Path.of(System.getProperty("neoforbric.testRuntimeClasses", "build/classes/java/runtime"));
@@ -217,8 +217,8 @@ class KernelClientPackSourceTest {
 	}
 
 	private static List<URL> minecraftLibraries() throws IOException {
-		Path version = MC.resolve("versions/26.2/26.2.json");
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(version), "Minecraft 26.2 version json absent");
+		Path version = MC.resolve("versions/1.21.1/1.21.1.json");
+		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(version), "Minecraft 1.21.1 version json absent");
 		var json = com.electronwill.nightconfig.json.JsonFormat.fancyInstance().createParser()
 				.parse(Files.newBufferedReader(version));
 		List<URL> urls = new ArrayList<>();

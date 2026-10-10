@@ -49,7 +49,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * running all three; the brand and its separator go, the asterisk vanilla uses for a modified game stays.
  */
 class MergedBaseWindowTitleTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private static final String MINECRAFT = "net/minecraft/client/Minecraft";
 

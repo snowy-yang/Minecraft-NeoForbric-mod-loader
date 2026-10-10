@@ -47,7 +47,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * links against something that is not there.
  */
 class MergedBaseCapabilityStubsTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
 	private static final List<String> ROOTS = List.of(
 			"net/minecraft/world/entity/Entity",

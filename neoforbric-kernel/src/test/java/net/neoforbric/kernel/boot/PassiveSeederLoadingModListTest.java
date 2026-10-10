@@ -122,7 +122,7 @@ class PassiveSeederLoadingModListTest {
 	@Test void versionArgumentsAreReadByTheNativeNeoForgeParser() throws Exception {
 		ClassLoader game = neoForgeLoader();
 		Class<?> parser = Class.forName("net.neoforged.fml.loading.ProgramArgs", true, game);
-		for (String version : List.of("26.2", "26.2.1")) {
+		for (String version : List.of("1.21.1", "1.21.2")) {
 			Object args = parser.getMethod("from", String[].class).invoke(null, (Object) PassiveSeeder.neoForgeVersionArguments(version));
 			assertEquals(version, parser.getMethod("remove", String.class).invoke(args, "fml.mcVersion"));
 		}
@@ -138,7 +138,7 @@ class PassiveSeederLoadingModListTest {
 	void aModReadsItsOwnFilesThroughTheSeededList() throws Exception {
 		ClassLoader game = neoForgeLoader();
 		Path mods = Files.createDirectories(tmp.resolve("mods"));
-		Path jar = mods.resolve("[Lambd的动态光源] kerneltestmod-1+26.2.jar");
+		Path jar = mods.resolve("[Lambd的动态光源] kerneltestmod-1+1.21.1.jar");
 		writeModJar(jar, "kerneltestmod", "1", "Kernel Test Mod", true);
 		try (var zip = java.nio.file.FileSystems.newFileSystem(jar)) {
 			Files.writeString(zip.getPath("kerneltestmod.toml"), "enabled = true\n");

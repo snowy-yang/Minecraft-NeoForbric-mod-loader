@@ -55,7 +55,7 @@ import org.objectweb.asm.tree.MethodNode;
  */
 class MergedBaseFrameRecomputerTest {
 	private static final Path RUN = TestFixtures.stagedRoot();
-	private static final Path MERGED = RUN.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED = RUN.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final Path NEO_RT = RUN.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final Path IPN = RUN.resolve("mods/InventoryProfilesNext-forge-26.2-2.3.7.jar");
 	private static final String VICTIM = "org/anti_ad/mc/ipnext/item/ItemTypeExtensionsKt";

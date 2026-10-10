@@ -57,7 +57,7 @@ class KernelHudBridgeTest {
 	private static final Path NEOFORGE_RUNTIME =
 			TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar").normalize();
 	private static final Path MERGED_BASE =
-			TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar").normalize();
+			TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 	private static final Path CLIENT_MODS =
 			Path.of(System.getProperty("user.dir"), "run", "client-kernel", "mods").normalize();
 

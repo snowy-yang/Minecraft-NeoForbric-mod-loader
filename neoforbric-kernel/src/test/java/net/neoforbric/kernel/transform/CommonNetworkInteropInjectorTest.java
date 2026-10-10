@@ -51,7 +51,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * {@code isOther} test, a site NeoForge already guards is left alone, and the real class still verifies.
  */
 class CommonNetworkInteropInjectorTest {
-	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String LISTENER = "net/minecraft/client/multiplayer/ClientConfigurationPacketListenerImpl";
 	private static final String LISTENER_NAME = LISTENER.replace('/', '.');
 	private static final String CONNECTION_TYPE = "net/neoforged/neoforge/network/connection/ConnectionType";
@@ -107,7 +107,7 @@ class CommonNetworkInteropInjectorTest {
 			assertTrue(neoForgeGuardsInitialisationItself(),
 					"the carrier dropped ClientConfigurationPacketListenerImpl.initializedConnection, so the kernel "
 							+ "splices no guard — and NeoForge must then be guarding re-initialisation itself. It "
-							+ "does so from 26.2.0.88 via runConnectionInitialization + the CONNECTION_INITIALIZED "
+							+ "does so from 21.1.256 via runConnectionInitialization + the CONNECTION_INITIALIZED "
 							+ "channel attribute. If neither guard exists, every join re-runs the whole "
 							+ "initialisation: every mod's server config rebuilt, filters re-injected, register "
 							+ "payload re-sent");

@@ -25,10 +25,10 @@ import org.junit.jupiter.api.parallel.ResourceLock;
  */
 @ResourceLock("ModCatalog") @ResourceLock("system-properties")
 class NestedFabricRequirementsTest {
-	private static final String GAME = "26.2";
+	private static final String GAME = "1.21.1";
 	private static final String JAVA = String.valueOf(Runtime.version().feature());
-	private static final String KEPT_BACK = "[NeoForbric/JiJ] nested host-mc26-1 1 in host.jar loaded although Fabric Loader would "
-			+ "leave it out (minecraft >=26.1 <=26.1.2 does not include 26.2): host requires host-mc26-1 >=1, and nothing else "
+	private static final String KEPT_BACK = "[NeoForbric/JiJ] nested host-mc1.20 1 in host.jar loaded although Fabric Loader would "
+			+ "leave it out (minecraft >=1.20 <=1.20.2 does not include 1.21.1): host requires host-mc1.20 >=1, and nothing else "
 			+ "installed meets that";
 	@TempDir Path root;
 
@@ -42,21 +42,21 @@ class NestedFabricRequirementsTest {
 		var decision = new DuplicateModArbiter.Decision[1];
 		String log = capture(() -> decision[0] = DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME));
 		// One line for each left-out mod, the one it bundles included.
-		assertEquals(List.of("[NeoForbric/JiJ] nested host-mc26-1 1 in host.jar left out: minecraft >=26.1 <=26.1.2 does not "
-				+ "include 26.2 — Fabric Loader does not load it either", "[NeoForbric/JiJ] nested inner 1 in host-mc26-1.jar left out: only mods left out bundle it — Fabric Loader does not "
+		assertEquals(List.of("[NeoForbric/JiJ] nested host-mc1.20 1 in host.jar left out: minecraft >=1.20 <=1.20.2 does not "
+				+ "include 1.21.1 — Fabric Loader does not load it either", "[NeoForbric/JiJ] nested inner 1 in host-mc1.20.jar left out: only mods left out bundle it — Fabric Loader does not "
 				+ "load it either"), jijLines(log));
 		var plan = DuplicateModArbiter.currentPlan();
-		assertEquals(Set.of("host-mc26-2"), nestedIds(plan));
-		Path old = only(plan, "host-mc26-1");
+		assertEquals(Set.of("host-mc1.21.1"), nestedIds(plan));
+		Path old = only(plan, "host-mc1.20");
 		assertTrue(plan.inventory().nodes().get(old).excluded());
 		assertTrue(decision[0].suppressed(old), "the left-out build must not reach the classpath");
 		assertFalse(decision[0].rescueJars().contains(old), "nor be lent a class as a last resort");
-		assertEquals(Map.of(old, "minecraft >=26.1 <=26.1.2 does not include 26.2", only(plan, "inner"),
+		assertEquals(Map.of(old, "minecraft >=1.20 <=1.20.2 does not include 1.21.1", only(plan, "inner"),
 				"only mods left out bundle it"), plan.inventory().leftOut());
 		assertTrue(plan.inventory().keptBack().isEmpty());
 		FabricModDiscovery discovery = new FabricModDiscovery(EnvType.SERVER, root.resolve("legacy-cache"));
 		discovery.discover(mods());
-		assertEquals(Set.of("host", "host-mc26-2"), ids(discovery));
+		assertEquals(Set.of("host", "host-mc1.21.1"), ids(discovery));
 		assertTrue(plan.verify(discovery.getClasspathJars()));
 	}
 
@@ -64,7 +64,7 @@ class NestedFabricRequirementsTest {
 		installViaFabricShape();
 		System.setProperty(NestedFabricRequirements.SWITCH, "off");
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
-		assertEquals(Set.of("host-mc26-1", "inner", "host-mc26-2"), nestedIds(DuplicateModArbiter.currentPlan()));
+		assertEquals(Set.of("host-mc1.20", "inner", "host-mc1.21.1"), nestedIds(DuplicateModArbiter.currentPlan()));
 		assertTrue(DuplicateModArbiter.currentPlan().inventory().leftOut().isEmpty());
 	}
 
@@ -76,25 +76,25 @@ class NestedFabricRequirementsTest {
 		FabricModDiscovery discovery = new FabricModDiscovery(EnvType.SERVER, root.resolve("jij"));
 		discovery.setPlatform(NestedFabricRequirements.Platform.running(GAME));
 		String log = capture(() -> discovery.discover(mods()));
-		assertEquals(Set.of("host", "host-mc26-2"), ids(discovery));
+		assertEquals(Set.of("host", "host-mc1.21.1"), ids(discovery));
 		assertEquals(2, discovery.getClasspathJars().size());
-		assertEquals(List.of("[NeoForbric/JiJ] nested host-mc26-1 1 in host.jar left out: minecraft >=26.1 <=26.1.2 does not "
-				+ "include 26.2 — Fabric Loader does not load it either", "[NeoForbric/JiJ] nested inner 1 in host-mc26-1.jar left out: only mods left out bundle it — Fabric Loader does not "
+		assertEquals(List.of("[NeoForbric/JiJ] nested host-mc1.20 1 in host.jar left out: minecraft >=1.20 <=1.20.2 does not "
+				+ "include 1.21.1 — Fabric Loader does not load it either", "[NeoForbric/JiJ] nested inner 1 in host-mc1.20.jar left out: only mods left out bundle it — Fabric Loader does not "
 				+ "load it either"), jijLines(log));
 	}
 
 	@Test void whatOnlyALeftOutModProvidesOrBundlesIsLeftOutWithIt() throws Exception {
 		byte[] addon = fabric("addon", "1", Map.of("META-INF/jars/addonlib.jar", fabric("addonlib", "1", Map.of(), "")),
-				",\"depends\":{\"host-mc26-1\":\"*\"}");
+				",\"depends\":{\"host-mc1.20\":\"*\"}");
 		byte[] compat = fabric("compat", "1", Map.of(), ",\"depends\":{\"nobody-installed-this\":\"*\"}");
-		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261(), "META-INF/jars/addon.jar", addon,
+		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious(), "META-INF/jars/addon.jar", addon,
 				"META-INF/jars/compat.jar", compat), ""));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
 		// A dependency nothing installed meets is DependencyAudit's to report, as it was: only what Fabric Loader
 		// provably could not load here is left out.
 		assertEquals(Set.of("compat"), nestedIds(plan));
-		assertEquals("it requires host-mc26-1 *, and every installed build of that is left out",
+		assertEquals("it requires host-mc1.20 *, and every installed build of that is left out",
 				plan.inventory().leftOut().get(only(plan, "addon")));
 		assertEquals("only mods left out bundle it", plan.inventory().leftOut().get(only(plan, "addonlib")));
 		assertEquals("only mods left out bundle it", plan.inventory().leftOut().get(only(plan, "inner")));
@@ -108,7 +108,7 @@ class NestedFabricRequirementsTest {
 	@Test void aNewerNestedCopyThisGameCannotRunDoesNotDisplaceAnOlderOneItCan() throws Exception {
 		install("a.jar", fabric("a", "1", Map.of("META-INF/jars/lib.jar", fabric("lib", "1", Map.of(), "")), ""));
 		install("b.jar", fabric("b", "1", Map.of("META-INF/jars/lib.jar", fabric("lib", "2", Map.of(),
-				",\"depends\":{\"minecraft\":\"~26.1\"}")), ""));
+				",\"depends\":{\"minecraft\":\"~1.20\"}")), ""));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(List.of("1"), plan.nestedFiles().stream().map(p -> plan.inventory().nodes().get(p).claim().versionOf("lib")).toList());
@@ -117,7 +117,7 @@ class NestedFabricRequirementsTest {
 	@Test void theNewestNestedCopyStillWinsWhenEveryCopyCanRun() throws Exception {
 		install("a.jar", fabric("a", "1", Map.of("META-INF/jars/lib.jar", fabric("lib", "1", Map.of(), "")), ""));
 		install("b.jar", fabric("b", "1", Map.of("META-INF/jars/lib.jar", fabric("lib", "2", Map.of(),
-				",\"depends\":{\"minecraft\":\"~26.2\"}")), ""));
+				",\"depends\":{\"minecraft\":\"~1.21.1\"}")), ""));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(List.of("2"), plan.nestedFiles().stream().map(p -> plan.inventory().nodes().get(p).claim().versionOf("lib")).toList());
@@ -125,7 +125,7 @@ class NestedFabricRequirementsTest {
 	}
 
 	@Test void aJarInModsIsNeverLeftOut() throws Exception {
-		Path chosen = install("old.jar", mc261());
+		Path chosen = install("old.jar", mcPrevious());
 		var decision = DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		assertFalse(decision.suppressed(chosen));
 		assertTrue(DuplicateModArbiter.currentPlan().selected().contains(chosen.toAbsolutePath()));
@@ -135,19 +135,19 @@ class NestedFabricRequirementsTest {
 	@Test void javaAndBreaksAreJudgedButAnUnknownGameAnUnreadableRangeAndTheLoaderLevelAreNot() throws Exception {
 		install("host.jar", fabric("host", "1", Map.of(
 				"META-INF/jars/java.jar", fabric("needs-java-99", "1", Map.of(), ",\"depends\":{\"java\":\">=99\"}"),
-				"META-INF/jars/breaks.jar", fabric("breaks-this-game", "1", Map.of(), ",\"breaks\":{\"minecraft\":\"26.2\"}"),
-				"META-INF/jars/garbled.jar", fabric("garbled-range", "1", Map.of(), ",\"depends\":{\"minecraft\":\"<<26.1!\"}"),
+				"META-INF/jars/breaks.jar", fabric("breaks-this-game", "1", Map.of(), ",\"breaks\":{\"minecraft\":\"1.21.1\"}"),
+				"META-INF/jars/garbled.jar", fabric("garbled-range", "1", Map.of(), ",\"depends\":{\"minecraft\":\"<<1.20!\"}"),
 				"META-INF/jars/loader.jar", fabric("newer-loader", "1", Map.of(), ",\"depends\":{\"fabricloader\":\">=9.0.0\"}"),
-				"META-INF/jars/mc26-1.jar", mc261()), ""));
+				"META-INF/jars/mc1.20.jar", mcPrevious()), ""));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(Set.of("garbled-range", "newer-loader"), nestedIds(plan));
 		assertEquals("java >=99 does not include " + JAVA, plan.inventory().leftOut().get(only(plan, "needs-java-99")));
-		assertEquals("it breaks minecraft 26.2, which includes 26.2", plan.inventory().leftOut().get(only(plan, "breaks-this-game")));
+		assertEquals("it breaks minecraft 1.21.1, which includes 1.21.1", plan.inventory().leftOut().get(only(plan, "breaks-this-game")));
 
 		DuplicateModArbiter.reset();
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER);
-		assertTrue(nestedIds(DuplicateModArbiter.currentPlan()).contains("host-mc26-1"), "no game version, no minecraft verdict");
+		assertTrue(nestedIds(DuplicateModArbiter.currentPlan()).contains("host-mc1.20"), "no game version, no minecraft verdict");
 	}
 
 	/**
@@ -157,18 +157,18 @@ class NestedFabricRequirementsTest {
 	 * has. Neither is left out, whichever way the walk reached it.
 	 */
 	@Test void aForgeFamilyParentsJarJarChildIsNotFabricLoadersToJudge() throws Exception {
-		byte[] somelib = fabric("somelib", "1.0.0", Map.of(), ",\"depends\":{\"minecraft\":\"~26.1\"}");
-		byte[] otherlib = fabric("otherlib", "1.0.0", Map.of(), ",\"depends\":{\"minecraft\":\"~26.1\"}");
+		byte[] somelib = fabric("somelib", "1.0.0", Map.of(), ",\"depends\":{\"minecraft\":\"~1.20\"}");
+		byte[] otherlib = fabric("otherlib", "1.0.0", Map.of(), ",\"depends\":{\"minecraft\":\"~1.20\"}");
 		install("neoparent.jar", neo("neoparent", Map.of("META-INF/jarjar/somelib.jar", somelib, "META-INF/jars/otherlib.jar", otherlib),
 				List.of("META-INF/jarjar/somelib.jar")));
-		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261()), ""));
+		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious()), ""));
 		String log = capture(() -> DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME));
 		var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(Set.of("somelib", "otherlib"), nestedIds(plan));
-		assertEquals(Set.of(only(plan, "host-mc26-1"), only(plan, "inner")), plan.inventory().leftOut().keySet());
+		assertEquals(Set.of(only(plan, "host-mc1.20"), only(plan, "inner")), plan.inventory().leftOut().keySet());
 		assertFalse(plan.inventory().nodes().get(only(plan, "somelib")).excluded());
-		assertEquals(List.of("[NeoForbric/JiJ] nested host-mc26-1 1 in host.jar left out: minecraft >=26.1 <=26.1.2 does not "
-				+ "include 26.2 — Fabric Loader does not load it either", "[NeoForbric/JiJ] nested inner 1 in mc26-1.jar left out: "
+		assertEquals(List.of("[NeoForbric/JiJ] nested host-mc1.20 1 in host.jar left out: minecraft >=1.20 <=1.20.2 does not "
+				+ "include 1.21.1 — Fabric Loader does not load it either", "[NeoForbric/JiJ] nested inner 1 in mc1.20.jar left out: "
 				+ "only mods left out bundle it — Fabric Loader does not load it either"), jijLines(log));
 	}
 
@@ -177,12 +177,12 @@ class NestedFabricRequirementsTest {
 		for (boolean fabricFirst : List.of(true, false)) {
 			reset();
 			try (var files = Files.list(mods())) { for (Path file : files.toList()) Files.delete(file); }
-			install((fabricFirst ? "a" : "b") + "-host.jar", fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261()), ""));
-			install((fabricFirst ? "b" : "a") + "-neoparent.jar", neo("neoparent", Map.of("META-INF/jarjar/mc26-1.jar", mc261()),
-					List.of("META-INF/jarjar/mc26-1.jar")));
+			install((fabricFirst ? "a" : "b") + "-host.jar", fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious()), ""));
+			install((fabricFirst ? "b" : "a") + "-neoparent.jar", neo("neoparent", Map.of("META-INF/jarjar/mc1.20.jar", mcPrevious()),
+					List.of("META-INF/jarjar/mc1.20.jar")));
 			String log = capture(() -> DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME));
 			var plan = DuplicateModArbiter.currentPlan();
-			assertEquals(Set.of("host-mc26-1", "inner"), nestedIds(plan), "fabric first: " + fabricFirst);
+			assertEquals(Set.of("host-mc1.20", "inner"), nestedIds(plan), "fabric first: " + fabricFirst);
 			assertTrue(plan.inventory().leftOut().isEmpty(), "fabric first: " + fabricFirst);
 			assertEquals(List.of(), jijLines(log), "fabric first: " + fabricFirst);
 		}
@@ -193,12 +193,12 @@ class NestedFabricRequirementsTest {
 	 * rule: that declaration is a Fabric mod's, and Fabric Loader is what reads it.
 	 */
 	@Test void aFabricModInsideAForgeFamilyModStillHasItsOwnJarsJudged() throws Exception {
-		byte[] host = fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261()), "");
+		byte[] host = fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious()), "");
 		install("neoparent.jar", neo("neoparent", Map.of("META-INF/jarjar/host.jar", host), List.of("META-INF/jarjar/host.jar")));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(Set.of("host"), nestedIds(plan));
-		assertEquals(Map.of(only(plan, "host-mc26-1"), "minecraft >=26.1 <=26.1.2 does not include 26.2", only(plan, "inner"),
+		assertEquals(Map.of(only(plan, "host-mc1.20"), "minecraft >=1.20 <=1.20.2 does not include 1.21.1", only(plan, "inner"),
 				"only mods left out bundle it"), plan.inventory().leftOut());
 	}
 
@@ -208,17 +208,17 @@ class NestedFabricRequirementsTest {
 	 * WARN says so. Both with the plan and without one.
 	 */
 	@Test void aModInModsThatRequiresALeftOutNestedModKeepsIt() throws Exception {
-		Path host = install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261()),
-				",\"depends\":{\"host-mc26-1\":\">=1\"}"));
+		Path host = install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious()),
+				",\"depends\":{\"host-mc1.20\":\">=1\"}"));
 		String log = capture(() -> DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME));
 		var plan = DuplicateModArbiter.currentPlan();
-		assertEquals(Set.of("host-mc26-1", "inner"), nestedIds(plan));
+		assertEquals(Set.of("host-mc1.20", "inner"), nestedIds(plan));
 		assertTrue(plan.inventory().leftOut().isEmpty());
-		assertEquals(Map.of(only(plan, "host-mc26-1"), new NestedFabricRequirements.KeptBack(
-				"minecraft >=26.1 <=26.1.2 does not include 26.2", "host requires host-mc26-1 >=1, and nothing else installed "
+		assertEquals(Map.of(only(plan, "host-mc1.20"), new NestedFabricRequirements.KeptBack(
+				"minecraft >=1.20 <=1.20.2 does not include 1.21.1", "host requires host-mc1.20 >=1, and nothing else installed "
 				+ "meets that")), plan.inventory().keptBack());
 		assertEquals(List.of(KEPT_BACK), jijLines(log));
-		assertFalse(plan.inventory().nodes().get(only(plan, "host-mc26-1")).excluded());
+		assertFalse(plan.inventory().nodes().get(only(plan, "host-mc1.20")).excluded());
 
 		var present = new NeoForbricModDiscoverer().discoverJar(host);
 		String audit = capture(() -> DependencyAudit.report(present, plan.nestedFiles(), Side.DEDICATED_SERVER));
@@ -229,7 +229,7 @@ class NestedFabricRequirementsTest {
 		FabricModDiscovery discovery = new FabricModDiscovery(EnvType.SERVER, root.resolve("jij"));
 		discovery.setPlatform(NestedFabricRequirements.Platform.running(GAME));
 		String legacy = capture(() -> discovery.discover(mods()));
-		assertEquals(Set.of("host", "host-mc26-1", "inner"), ids(discovery));
+		assertEquals(Set.of("host", "host-mc1.20", "inner"), ids(discovery));
 		assertEquals(List.of(KEPT_BACK), jijLines(legacy));
 	}
 
@@ -238,17 +238,17 @@ class NestedFabricRequirementsTest {
 		for (boolean viaJarJarChild : List.of(false, true)) {
 			reset();
 			try (var files = Files.list(mods())) { for (Path file : files.toList()) Files.delete(file); }
-			install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261()), ""));
+			install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious()), ""));
 			Path neoparent = install("neoparent.jar", viaJarJarChild
 					? neo("neoparent", Map.of("META-INF/jarjar/needs-old.jar", fabric("needs-old", "1", Map.of(),
-							",\"depends\":{\"host-mc26-1\":\"*\"}")), List.of("META-INF/jarjar/needs-old.jar"), "")
-					: neo("neoparent", Map.of(), List.of(), "[[dependencies.neoparent]]\nmodId=\"host-mc26-1\"\ntype=\"required\"\n"
+							",\"depends\":{\"host-mc1.20\":\"*\"}")), List.of("META-INF/jarjar/needs-old.jar"), "")
+					: neo("neoparent", Map.of(), List.of(), "[[dependencies.neoparent]]\nmodId=\"host-mc1.20\"\ntype=\"required\"\n"
 							+ "versionRange=\"[1,)\"\n"));
 			DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 			var plan = DuplicateModArbiter.currentPlan();
-			assertTrue(nestedIds(plan).contains("host-mc26-1"), "via JarJar child: " + viaJarJarChild);
-			assertEquals((viaJarJarChild ? "needs-old requires host-mc26-1 *" : "neoparent requires host-mc26-1 >=1")
-					+ ", and nothing else installed meets that", plan.inventory().keptBack().get(only(plan, "host-mc26-1")).because());
+			assertTrue(nestedIds(plan).contains("host-mc1.20"), "via JarJar child: " + viaJarJarChild);
+			assertEquals((viaJarJarChild ? "needs-old requires host-mc1.20 *" : "neoparent requires host-mc1.20 >=1")
+					+ ", and nothing else installed meets that", plan.inventory().keptBack().get(only(plan, "host-mc1.20")).because());
 
 			// Without a plan, through the boot's own seam: Fabric discovery reads mods/ and Fabric jars only, so the
 			// NeoForge mod's requirement, and the Fabric jar its JarJar carries, must be handed over to it.
@@ -262,7 +262,7 @@ class NestedFabricRequirementsTest {
 			assertEquals(viaJarJarChild ? 1 : 0, jarJar.size());
 			FabricModDiscovery discovery = KernelBoot.scanFabricMods(KernelBoot.Side.SERVER, root, decision, GAME, null,
 					forgeFamily, jarJar);
-			assertEquals(Set.of("host", "host-mc26-1", "inner"), ids(discovery), "via JarJar child: " + viaJarJarChild);
+			assertEquals(Set.of("host", "host-mc1.20", "inner"), ids(discovery), "via JarJar child: " + viaJarJarChild);
 			System.clearProperty("neoforbric.crossJarArbitration");
 		}
 	}
@@ -273,10 +273,10 @@ class NestedFabricRequirementsTest {
 	 * When a left-out copy does meet it, only that one is kept.
 	 */
 	@Test void aKeptCopyOutsideTheRequiredRangeIsSaidToBeOne() throws Exception {
-		byte[] x2 = fabric("x", "2", Map.of(), ",\"depends\":{\"minecraft\":\"~26.1\"}");
+		byte[] x2 = fabric("x", "2", Map.of(), ",\"depends\":{\"minecraft\":\"~1.20\"}");
 		install("r.jar", fabric("r", "1", Map.of("META-INF/jars/x.jar", x2), ",\"depends\":{\"x\":\">=3\"}"));
 		String outOfRange = "[NeoForbric/JiJ] nested x 2 in r.jar loaded although Fabric Loader would leave it out (minecraft "
-				+ "~26.1 does not include 26.2): r requires x >=3; no installed build meets that, and no other x would load";
+				+ "~1.20 does not include 1.21.1): r requires x >=3; no installed build meets that, and no other x would load";
 		String log = capture(() -> DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME));
 		var plan = DuplicateModArbiter.currentPlan();
 		assertEquals(Set.of("x"), nestedIds(plan));
@@ -295,7 +295,7 @@ class NestedFabricRequirementsTest {
 		// A second left-out copy that does meet the range: it alone comes back, and x 2 stays out.
 		DuplicateModArbiter.reset();
 		install("s.jar", fabric("s", "1", Map.of("META-INF/jars/x.jar", fabric("x", "3", Map.of(),
-				",\"depends\":{\"minecraft\":\"~26.1\"}")), ""));
+				",\"depends\":{\"minecraft\":\"~1.20\"}")), ""));
 		capture(() -> DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME));
 		var both = DuplicateModArbiter.currentPlan();
 		Path three = both.inventory().nodes().values().stream().filter(n -> n.claim() != null && "3".equals(n.claim().versionOf("x")))
@@ -304,7 +304,7 @@ class NestedFabricRequirementsTest {
 				.map(NestedCandidateInventory.Node::path).findFirst().orElseThrow();
 		assertEquals(Set.of(three), both.inventory().keptBack().keySet());
 		assertEquals("r requires x >=3, and nothing else installed meets that", both.inventory().keptBack().get(three).because());
-		assertEquals(Map.of(two, "minecraft ~26.1 does not include 26.2"), both.inventory().leftOut());
+		assertEquals(Map.of(two, "minecraft ~1.20 does not include 1.21.1"), both.inventory().leftOut());
 		assertEquals(List.of("3"), both.nestedFiles().stream().map(p -> both.inventory().nodes().get(p).claim().versionOf("x")).toList());
 	}
 
@@ -314,10 +314,10 @@ class NestedFabricRequirementsTest {
 		install("user.jar", fabric("user", "1", Map.of(), ",\"depends\":{\"inner\":\"*\"}"));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
-		assertEquals(Set.of("host-mc26-1", "inner", "host-mc26-2"), nestedIds(plan));
+		assertEquals(Set.of("host-mc1.20", "inner", "host-mc1.21.1"), nestedIds(plan));
 		assertEquals(Map.of(only(plan, "inner"), new NestedFabricRequirements.KeptBack("only mods left out bundle it",
-				"user requires inner *, and nothing else installed meets that"), only(plan, "host-mc26-1"),
-				new NestedFabricRequirements.KeptBack("minecraft >=26.1 <=26.1.2 does not include 26.2",
+				"user requires inner *, and nothing else installed meets that"), only(plan, "host-mc1.20"),
+				new NestedFabricRequirements.KeptBack("minecraft >=1.20 <=1.20.2 does not include 1.21.1",
 						"it bundles inner (user requires inner *, and nothing else installed meets that)")), plan.inventory().keptBack());
 		assertTrue(plan.inventory().leftOut().isEmpty());
 
@@ -326,7 +326,7 @@ class NestedFabricRequirementsTest {
 		FabricModDiscovery discovery = new FabricModDiscovery(EnvType.SERVER, root.resolve("jij"));
 		discovery.setPlatform(NestedFabricRequirements.Platform.running(GAME));
 		discovery.discover(mods());
-		assertEquals(Set.of("host", "host-mc26-1", "inner", "host-mc26-2", "user"), ids(discovery));
+		assertEquals(Set.of("host", "host-mc1.20", "inner", "host-mc1.21.1", "user"), ids(discovery));
 	}
 
 	/**
@@ -336,7 +336,7 @@ class NestedFabricRequirementsTest {
 	@Test void aLeftOutCopyIsKeptWhenOnlyItMeetsALoadedModsRange() throws Exception {
 		install("a.jar", fabric("a", "1", Map.of("META-INF/jars/lib.jar", fabric("lib", "1", Map.of(), "")), ""));
 		install("b.jar", fabric("b", "1", Map.of("META-INF/jars/lib.jar", fabric("lib", "2", Map.of(),
-				",\"depends\":{\"minecraft\":\"~26.1\"}")), ""));
+				",\"depends\":{\"minecraft\":\"~1.20\"}")), ""));
 		install("c.jar", fabric("c", "1", Map.of(), ",\"depends\":{\"lib\":\">=2\"}"));
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
@@ -347,12 +347,12 @@ class NestedFabricRequirementsTest {
 
 	/** {@code off:<ids>} keeps exactly those ids out of the rule, for the player who needs one nested build anyway. */
 	@Test void aPinnedIdIsKeptAndEveryOtherStillJudged() throws Exception {
-		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc26-1.jar", mc261(),
+		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/mc1.20.jar", mcPrevious(),
 				"META-INF/jars/java.jar", fabric("needs-java-99", "1", Map.of(), ",\"depends\":{\"java\":\">=99\"}")), ""));
-		System.setProperty(NestedFabricRequirements.SWITCH, "off: host-mc26-1 ,unrelated");
+		System.setProperty(NestedFabricRequirements.SWITCH, "off: host-mc1.20 ,unrelated");
 		DuplicateModArbiter.arbitrate(mods(), EnvType.SERVER, GAME);
 		var plan = DuplicateModArbiter.currentPlan();
-		assertEquals(Set.of("host-mc26-1", "inner"), nestedIds(plan));
+		assertEquals(Set.of("host-mc1.20", "inner"), nestedIds(plan));
 		assertEquals(Set.of(only(plan, "needs-java-99")), plan.inventory().leftOut().keySet());
 
 		System.setProperty("neoforbric.crossJarArbitration", "off");
@@ -360,18 +360,18 @@ class NestedFabricRequirementsTest {
 		FabricModDiscovery discovery = new FabricModDiscovery(EnvType.SERVER, root.resolve("jij"));
 		discovery.setPlatform(NestedFabricRequirements.Platform.running(GAME));
 		discovery.discover(mods());
-		assertEquals(Set.of("host", "host-mc26-1", "inner"), ids(discovery));
+		assertEquals(Set.of("host", "host-mc1.20", "inner"), ids(discovery));
 	}
 
 	private void installViaFabricShape() throws Exception {
-		byte[] current = fabric("host-mc26-2", "1", Map.of(), ",\"depends\":{\"minecraft\":[\"26.2\",\"26.3\"],\"host\":\"*\"}");
-		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/host-mc26-2.jar", current, "META-INF/jars/host-mc26-1.jar", mc261()),
-				",\"depends\":{\"minecraft\":[\"26.1\",\"26.1.1\",\"26.1.2\",\"26.2\",\"26.3\"]}"));
+		byte[] current = fabric("host-mc1.21.1", "1", Map.of(), ",\"depends\":{\"minecraft\":[\"1.21.1\",\"1.21.2\"],\"host\":\"*\"}");
+		install("host.jar", fabric("host", "1", Map.of("META-INF/jars/host-mc1.21.1.jar", current, "META-INF/jars/host-mc1.20.jar", mcPrevious()),
+				",\"depends\":{\"minecraft\":[\"1.20\",\"1.20.1\",\"1.20.2\",\"1.21.1\",\"1.21.2\"]}"));
 	}
 	/** Built for the previous Minecraft line, with a nested jar of its own. */
-	private static byte[] mc261() throws Exception {
-		return fabric("host-mc26-1", "1", Map.of("META-INF/jars/inner.jar", fabric("inner", "1", Map.of(), "")),
-				",\"depends\":{\"minecraft\":\">=26.1 <=26.1.2\"}");
+	private static byte[] mcPrevious() throws Exception {
+		return fabric("host-mc1.20", "1", Map.of("META-INF/jars/inner.jar", fabric("inner", "1", Map.of(), "")),
+				",\"depends\":{\"minecraft\":\">=1.20 <=1.20.2\"}");
 	}
 	private Path mods() throws Exception { Path mods = root.resolve("mods"); Files.createDirectories(mods); return mods; }
 	private Path install(String name, byte[] bytes) throws Exception { Path path = mods().resolve(name); Files.write(path, bytes); return path; }

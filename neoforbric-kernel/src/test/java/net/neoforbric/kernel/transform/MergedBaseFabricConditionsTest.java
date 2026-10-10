@@ -52,7 +52,7 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 class MergedBaseFabricConditionsTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
 	private static final Path NEO_CARRIER = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
-	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-26.2.jar");
+	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String ENTRY = "net/neoforged/neoforge/common/conditions/ConditionalOps.class";
 	private static final String BINARY = "net.neoforged.neoforge.common.conditions.ConditionalOps";
 	private static final String KERNEL = "net/neoforbric/kernel/runtime/KernelFabricConditions";
