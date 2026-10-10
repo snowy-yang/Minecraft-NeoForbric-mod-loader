@@ -4,7 +4,7 @@
 
 **一个 Minecraft 实例，同时运行 Fabric mod 和 NeoForge mod。**
 
-版本 0.3.0 · Minecraft 26.2
+版本 0.3.0 · Minecraft 1.21.1
 
 ## 它能做什么
 
@@ -28,7 +28,7 @@ Connector 已经很成熟，NeoForbric 还不是，所以如果 Connector 已经
 - **Java。** 如果你已经能玩 Minecraft，你就已经有了。就算你从没自己装过 Java，安装器也能找到你的启动器下载的那一份。
 - **网络连接**，以及安装过程中约 730 MB 的可用磁盘空间（完成后约保留 190 MB）。
 
-你**不需要**先装 Minecraft 26.2。如果没有，安装器会自动下载。你也**不需要** Fabric 或 NeoForge，也不用去找其他任何文件：NeoForbric 需要的一切都由安装器下载并构建。不过你的 mod 照常还需要各自的前置 mod，比如大多数 Fabric mod 都需要 Fabric API。
+你**不需要**先装 Minecraft 1.21.1。如果没有，安装器会自动下载。你也**不需要** Fabric 或 NeoForge，也不用去找其他任何文件：NeoForbric 需要的一切都由安装器下载并构建。不过你的 mod 照常还需要各自的前置 mod，比如大多数 Fabric mod 都需要 Fabric API。
 
 ### 安装
 
@@ -58,9 +58,9 @@ Connector 已经很成熟，NeoForbric 还不是，所以如果 Connector 已经
 
 5. **点击 Install，然后等待。** 第一次安装需要几分钟。它在下载 Minecraft 和 NeoForge 各自的文件，并在你的电脑上把它们组装起来，因为按照法律，这些文件不能做成现成的包直接分发。安装期间请保持联网。之后再安装会复用磁盘上已有的文件，很快就能完成。
 
-6. **打开你的启动器。** 列表里会出现一个名为 **`26.2-neoforbric`** 的新版本。像启动其他版本一样启动它即可。PCL2 会把它显示成 Fabric 版本，这是正常的（见下一节）。
+6. **打开你的启动器。** 列表里会出现一个名为 **`1.21.1-neoforbric`** 的新版本。像启动其他版本一样启动它即可。PCL2 会把它显示成 Fabric 版本，这是正常的（见下一节）。
 
-   安装器不会把它加进官方 Minecraft 启动器的安装列表。在官方启动器里，你大概得自己新建一个安装，并选择 `26.2-neoforbric`。
+   安装器不会把它加进官方 Minecraft 启动器的安装列表。在官方启动器里，你大概得自己新建一个安装，并选择 `1.21.1-neoforbric`。
 
 > 想在点击 Install 之前先检查一下你的电脑？在 jar 所在的文件夹里运行这条命令。它只做检查，不写入任何东西：
 >
@@ -72,12 +72,12 @@ Connector 已经很成熟，NeoForbric 还不是，所以如果 Connector 已经
 
 **Fabric 和 NeoForge 的 mod 都放进同一个 `mods` 文件夹。** 具体是哪个文件夹取决于你的启动器，而不是 NeoForbric：
 
-- 如果你的启动器让每个版本各自独立（通常叫“版本隔离”；PCL2 和 HMCL 都能这样设置）：`.minecraft/versions/26.2-neoforbric/mods/`
+- 如果你的启动器让每个版本各自独立（通常叫“版本隔离”；PCL2 和 HMCL 都能这样设置）：`.minecraft/versions/1.21.1-neoforbric/mods/`
 - 否则就是你所选 Game directory 里共用的 `.minecraft/mods/`。所有没有独立文件夹的版本都用这个文件夹，所以 NeoForbric 也会尝试加载里面已有的 mod。
 
 安装器完成时会把这两个位置都列出来。不确定你的启动器用的是哪一个？先启动一次游戏：正确的那个 `mods` 文件夹旁边会出现一个名为 `.neoforbric-kernel` 的文件夹。
 
-你的启动器可能会把 `26.2-neoforbric` 称为 Fabric 版本。这是有意为之：启动器每个版本只显示一个 mod 加载器，所以 NeoForbric 的版本告诉它的是 Fabric。PCL2 会读取这一信息，把 `26.2-neoforbric` 当作 mod 版本，并在它的 mod 浏览器里优先推荐 Fabric 版的 mod。其他启动器可能会把它显示为普通的 Minecraft。不管怎样，NeoForbric 都会从 `mods` 文件夹加载 Fabric 和 NeoForge 的 mod。
+你的启动器可能会把 `1.21.1-neoforbric` 称为 Fabric 版本。这是有意为之：启动器每个版本只显示一个 mod 加载器，所以 NeoForbric 的版本告诉它的是 Fabric。PCL2 会读取这一信息，把 `1.21.1-neoforbric` 当作 mod 版本，并在它的 mod 浏览器里优先推荐 Fabric 版的 mod。其他启动器可能会把它显示为普通的 Minecraft。不管怎样，NeoForbric 都会从 `mods` 文件夹加载 Fabric 和 NeoForge 的 mod。
 
 有一点要注意：很多 mod 同时有 Fabric 版和 NeoForge 版。每个 mod 只放**一个**版本进文件夹。如果你放了不止一个，NeoForbric 仍然只会运行其中一个。第一次遇到这种情况时，它会把自己的选择写进 `mods` 文件夹旁边的 `neoforbric-mods.txt`，你可以在那里改选另一个版本。
 
@@ -107,7 +107,7 @@ Fabric mod 把自己的设置界面交给 Mod Menu 管理，所以只有同时�
 
 **更新**：用相同的设置运行新的安装器。你的 mods 文件夹和世界都不会被动到。从 0.2.0 升级后的第一次安装会重新构建 NeoForbric 的游戏文件，所以又要花上几分钟。
 
-**卸载**：删除 `.minecraft/versions/26.2-neoforbric/`。如果你的启动器让每个版本各自独立，这个文件夹里还存着这个版本的 mod、世界和设置，所以请先把想保留的东西复制出来。如果还想收回磁盘空间，再删除 `.minecraft/.neoforbric-build/` 和 `.minecraft/libraries/net/neoforbric/`。
+**卸载**：删除 `.minecraft/versions/1.21.1-neoforbric/`。如果你的启动器让每个版本各自独立，这个文件夹里还存着这个版本的 mod、世界和设置，所以请先把想保留的东西复制出来。如果还想收回磁盘空间，再删除 `.minecraft/.neoforbric-build/` 和 `.minecraft/libraries/net/neoforbric/`。
 
 ## 0.3.0 更新内容
 
@@ -117,7 +117,7 @@ Fabric mod 把自己的设置界面交给 Mod Menu 管理，所以只有同时�
 
 新增：
 
-- **不同加载器的 mod 之间可以互相传递物品、流体和能量**——比如 Fabric 的管道或漏斗可以给 NeoForge 或 Forge 的机器供料。
+- **不同加载器的 mod 之间可以互相传递物品、流体和能量**——比如 Fabric 的管道或漏斗可以给 NeoForge 的机器供料。
 - **当 mod 的某个部分无法工作时，开始游戏前会弹出窗口**，让你选择继续还是退出，而不是事后才发现。
 - **NeoForbric mod 列表会标出没加载完的 mod**，并说明原因。
 - **崩溃之后会生成 `crash-analysis.txt`**，列出最可能导致崩溃的 mod。
@@ -164,7 +164,7 @@ NeoForbric 与 Mojang、FabricMC、MinecraftForge 或 NeoForged 均无关联。
 
 **你的 mod 不需要做任何修改。** 它调用的是真正的 Fabric API 或 NeoForge 类，所以不存在需要你专门针对它编写代码的兼容层。NeoForbric 重新实现的是加载器：类加载、mod 发现、加载顺序、生命周期、Mixin 服务，以及 Fabric Loader 的 API（NeoForbric 自带 Fabric Loader 的公开 API 类型——这些类型保留 FabricMC 的版权——并实现了它们；Fabric Loader 本身从不运行）。游戏本身也不一样：它是 NeoForge 自己打过补丁的 jar，由安装器构建。这对你的 mod 意味着：
 
-- **游戏是 NeoForge 自己打过补丁的 jar**——带有 NeoForge 补丁的原版 26.2。NeoForge 的事件照常触发。NeoForge 自带的 coremod 不会被加载；它们所做的改写由 NeoForbric 自己完成。mixin 套不上这份补丁基底的 Fabric API 事件，改由 NeoForge 自己的调用点触发（[introduction.md §8](introduction.zh-CN.md#8-事件桥)）。
+- **游戏是 NeoForge 自己打过补丁的 jar**——带有 NeoForge 补丁的原版 1.21.1。NeoForge 的事件照常触发。NeoForge 自带的 coremod 不会被加载；它们所做的改写由 NeoForbric 自己完成。mixin 套不上这份补丁基底的 Fabric API 事件，改由 NeoForge 自己的调用点触发（[introduction.md §8](introduction.zh-CN.md#8-事件桥)）。
 - **mixin 会应用在这份补丁基底上。** NeoForbric 会放宽 mod 的 mixin 配置（`required: false`、`defaultRequire: 0`），因此目标缺失的注入器会什么也不做，而不是报错失败，除非它自己设置了 `require`。目标挪了位置的注入器，NeoForbric 会把它跟着挪过去；如果一个 mixin 的目标全都不存在，就丢弃整个 mixin（[§7](introduction.zh-CN.md#7-补丁基底上的-mixin)）。
 - **启动按 NeoForbric 的顺序进行**，与各加载器原生的顺序接近，但并不相同（[§3](introduction.zh-CN.md#3-启动顺序)）。
 - **不支持启动扩展：** NeoForge 的 `ClassProcessorProvider` 和 `coremods.json`，以及自定义的 mod 定位器或依赖定位器。目前它们会被直接跳过，不会有任何警告。
@@ -184,7 +184,7 @@ cd neoforbric-kernel && ./gradlew build
 
 **全新克隆上构建通过，并不代表游戏能启动。** 本地没有暂存的游戏 jar 时，运行时源码集和传输测试会被跳过，需要这些 jar 的测试也可能被跳过。CI 验证的是引导侧构建和独立的加载器构建；它不会启动 Minecraft。
 
-要在开发用的游戏里运行当前源码，请安装 **JDK 25+ 和 Python 3.9+**，然后在仓库根目录运行（Windows 上把 `python3` 换成 `py`）：
+要在开发用的游戏里运行当前源码，请安装 **JDK 21+ 和 Python 3.9+**，然后在仓库根目录运行（Windows 上把 `python3` 换成 `py`）：
 
 ```bash
 python3 tools/dev.py client                 # automatically prepare dependencies, build and launch

@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 **One Minecraft instance that runs Fabric mods and NeoForge mods at the same time.**
 
-Version 0.3.0 · Minecraft 26.2
+Version 0.3.0 · Minecraft 1.21.1
 
 ## What it does
 
@@ -50,7 +50,7 @@ NeoForbric is for the cases it cannot reach.
 - **An internet connection**, and about 730 MB of free disk while it works (about 190 MB is kept
   afterwards).
 
-You do **not** need to install Minecraft 26.2 first. If you do not have it, the installer downloads it.
+You do **not** need to install Minecraft 1.21.1 first. If you do not have it, the installer downloads it.
 You also do **not** need Fabric or NeoForge, and you do not need to find any other files: the
 installer downloads and builds everything NeoForbric needs. Your mods still need their own prerequisites as
 usual, for example Fabric API for most Fabric mods.
@@ -94,11 +94,11 @@ usual, for example Fabric API for most Fabric mods.
    cannot legally be handed out ready-made. Stay connected while it runs. Installing again later reuses
    what is already on disk and is quick.
 
-6. **Open your launcher.** A new version called **`26.2-neoforbric`** is in the list. Start it like any
+6. **Open your launcher.** A new version called **`1.21.1-neoforbric`** is in the list. Start it like any
    other version. PCL2 shows it as a Fabric version; that is expected (see the next section).
 
    The installer does not add it to the official Minecraft Launcher's list of installations. There you
-   would probably have to create a new installation and pick `26.2-neoforbric` yourself.
+   would probably have to create a new installation and pick `1.21.1-neoforbric` yourself.
 
 > Want to check your computer before you press Install? Run this in the folder with the jar. It only
 > looks, and writes nothing:
@@ -113,15 +113,15 @@ usual, for example Fabric API for most Fabric mods.
 your launcher, not on NeoForbric:
 
 - If your launcher keeps each version separate (often called version isolation; PCL2 and HMCL can do
-  this): `.minecraft/versions/26.2-neoforbric/mods/`
+  this): `.minecraft/versions/1.21.1-neoforbric/mods/`
 - Otherwise the shared `.minecraft/mods/` in the Game directory you chose. Every version that does not keep
   its own folder uses this one, so NeoForbric will also try to load any mods already in it.
 
 The installer names both when it finishes. Not sure which one your launcher uses? Start the game once:
 a folder called `.neoforbric-kernel` appears next to the right `mods` folder.
 
-Your launcher may call `26.2-neoforbric` a Fabric version. That is on purpose: a launcher shows only one mod
-loader per version, so NeoForbric's version tells it Fabric. PCL2 reads this, treats `26.2-neoforbric` as a
+Your launcher may call `1.21.1-neoforbric` a Fabric version. That is on purpose: a launcher shows only one mod
+loader per version, so NeoForbric's version tells it Fabric. PCL2 reads this, treats `1.21.1-neoforbric` as a
 modded version and suggests Fabric builds first in its mod browser. Other launchers may show it as plain
 Minecraft. Either way, NeoForbric loads Fabric and NeoForge mods from the `mods` folder.
 
@@ -167,7 +167,7 @@ Something else? You can report it [here](https://github.com/Ray-T-r/Minecraft-Ne
 The first install after updating from 0.2.0 builds NeoForbric's game files again, so it takes several minutes
 once more.
 
-**To uninstall**, delete `.minecraft/versions/26.2-neoforbric/`. If your launcher keeps each version
+**To uninstall**, delete `.minecraft/versions/1.21.1-neoforbric/`. If your launcher keeps each version
 separate, that folder also holds this version's mods, worlds and settings, so first copy out anything you
 want to keep. To get the disk space back as well, also delete `.minecraft/.neoforbric-build/` and
 `.minecraft/libraries/net/neoforbric/`.
@@ -186,7 +186,7 @@ does not try each mod's features, and it does not test mods together.
 New:
 
 - **Mods from different loaders can pass items, fluids and energy to each other** — for example a Fabric
-  pipe or hopper can feed a NeoForge or Forge machine.
+  pipe or hopper can feed a NeoForge machine.
 - **A window before you play when part of a mod cannot work**, so you can choose to continue or quit
   instead of finding out later.
 - **The NeoForbric mods list marks mods that did not finish loading**, and says why.
@@ -198,7 +198,7 @@ New:
 Fixed:
 
 - Crashes when smelting in a furnace, crafting or brewing with Fabric API installed, fighting the Ender
-  Dragon, using a flower pot, or placing a fluid from a Fabric or Forge mod.
+  Dragon, using a flower pot, or placing a fluid from a Fabric or NeoForge mod.
 - Some mod sets left the game on a black screen at startup.
 - Dungeons did not generate, and a seed did not give the same terrain as vanilla Minecraft.
 - Item tooltips were missing enchantments, lore, attributes and durability.
@@ -257,7 +257,7 @@ carries Fabric Loader's public API types, which keep FabricMC's copyright, and i
 Loader itself never runs). The game is different too: it is NeoForge's own patched jar, built by the
 installer. What this means for your mod:
 
-- **The game is NeoForge's own patched jar** — vanilla 26.2 carrying NeoForge's patches. NeoForge's
+- **The game is NeoForge's own patched jar** — vanilla 1.21.1 carrying NeoForge's patches. NeoForge's
   events fire as usual. The coremods NeoForge itself ships are not loaded; NeoForbric applies their
   rewrites itself. Fabric API events whose mixin cannot fit the patched base are fired from NeoForge's
   own call sites instead ([introduction.md §8](introduction.md#8-event-bridges)).
@@ -291,7 +291,7 @@ cd neoforbric-kernel && ./gradlew build
 the runtime source set and transfer tests are skipped, and tests that need those jars may also skip.
 CI verifies the boot-side build and the separate loader build; it does not launch Minecraft.
 
-To run the current source in a development game, install **JDK 25+ and Python 3.9+**, then run from the
+To run the current source in a development game, install **JDK 21+ and Python 3.9+**, then run from the
 repository root (Windows: replace `python3` with `py`):
 
 ```bash

@@ -18,7 +18,7 @@ Terminology:
 | --- | --- |
 | **ecosystem** | Fabric, NeoForge — `net.neoforbric.api.Ecosystem.FABRIC` / `NEOFORGE` |
 | **Forge family** | the FML lineage NeoForge belongs to: `mods.toml` manifests, FML, the event bus. One runtime, one manifest (`META-INF/neoforge.mods.toml`), one event bus |
-| **patched base** | `patched-mc-neoforge-26.2.jar`: NeoForge's own patched 26.2 — vanilla carrying NeoForge's patches, the one game NeoForbric runs |
+| **patched base** | `patched-mc-neoforge-1.21.1.jar`: NeoForge's own patched 1.21.1 — vanilla carrying NeoForge's patches, the one game NeoForbric runs |
 | **carrier** | `neoforge-runtime.jar`, NeoForge's runtime jar, loaded as a passive ABI provider — its classes exist, its loader lifecycle never runs |
 | **boot side / game side** | code loaded by the system class loader vs. code defined by `NeoForbricClassLoader` |
 | **guest** | anything belonging to a third-party mod (guest mixin, guest jar) |
@@ -43,10 +43,17 @@ every part of the kernel answers one of them.
    the patched base, anchors have moved, methods have been split, fields re-typed, lambdas renumbered,
    superclasses swapped.
 
-Namespace is *not* on this list for 26.2: the game ships Mojmap names, NeoForge 26.2 mods are Mojmap-compiled,
-and so are Fabric's (`KernelMappingResolver`'s javadoc records a constant-pool scan of fabric-api and Jade finding
-no intermediary symbols). The kernel runs identity mapping: `TransformContext(…, "named")`, and
-`KernelMappingResolver` answers every lookup with its input.
+Namespace is on this list for 1.21.1, and the kernel answers it in three places. The base ships Mojmap names and
+NeoForge mods are Mojmap-compiled, but real Fabric mods — fabric-api included — are **intermediary**-named
+(`class_2378`, `method_10342`): that is what a published Fabric jar carries, and a mojmap base answers none of it.
+So the build remaps the Fabric modules the kernel compiles against (`FabricModuleRemapTool`, intermediary→Mojmap
+over the staged modules), `RefmapRemapper` rewrites every module's mixin refmap — the VALUES, intermediary→mojmap,
+while the KEYS stay verbatim because the annotation strings must match the class bytes Mixin reads — and the
+kernel joins Fabric's own intermediary mappings with Mojang's to name what the loader-side sees. Without the refmap
+half, tiny-remapper rewrites the classes but every `@At` member anchor soft-skips: the refmap keeps pointing at
+intermediary names no Mojmap target answers to. (`KernelMappingResolver`'s javadoc records the 26.x-era
+constant-pool scan that found no intermediary symbols; on that anchor identity mapping was true. It is not on
+this one.)
 
 Nor are mod APIs. NeoForbric does not re-implement the Fabric API or the NeoForge APIs: a mod calls the
 genuine Fabric API mod it installed, and the genuine NeoForge classes from the carrier. What the
@@ -69,7 +76,7 @@ system class loader  (BOOT side)
      ▼
 NeoForbricClassLoader  (GAME side — the only loader that defines game/ecosystem classes)
  owned jars, in this order (KernelOwnedClasspath.compose):
-   1. patched-mc-neoforge-26.2.jar         --gameJar
+   1. patched-mc-neoforge-1.21.1.jar        --gameJar
    2. neoforge-runtime.jar                  --runtimeJar   (the carrier)
    3. Minecraft's own libraries             --libraryPath  (owned: mods mixin into DataFixerUpper & co.)
    4. kernel-bundled: mixinextras-fabric.jar, neoforbric-kernel-runtime.jar   (extracted to .neoforbric-kernel/lib/)
@@ -132,7 +139,7 @@ code. They are built on the machine that runs them — by the installer for play
 
 | Artifact | What it is |
 | --- | --- |
-| `patched-mc-neoforge-26.2.jar` | vanilla 26.2 plus NeoForge's own patches, produced by NeoFormRuntime (`NfrtRunner`, result `gameJarNoRecomp`) — NeoForge's own game jar |
+| `patched-mc-neoforge-1.21.1.jar` | vanilla 1.21.1 plus NeoForge's own patches, produced by NeoFormRuntime (`NfrtRunner`, result `gameJarNoRecomp`) — NeoForge's own game jar |
 | `neoforge-runtime.jar` | NeoForge's `-universal` jar plus the libraries its userdev config declares, merged into one jar (`NeoForgeRuntimeBuilder`) |
 
 The carrier is *passive*: its classes are defined and its event bus used, but its loader's
@@ -157,7 +164,7 @@ not stderr. `KernelBoot.launch` consumes `--gameJar`, `--runtimeJar` (repeatable
 joined by the path separator — launchers such as PCL2 keep only the last occurrence of a repeated flag) and
 `--libraryPath`; everything else, and everything after `--`, is forwarded to the game's `Main.main`. The dedicated
 server rejects `--gameDir`, so `KernelBoot` strips it on that side. The game version is read from the base jar's
-`version.json` (fallback `26.2`).
+`version.json` (fallback `1.21.1`).
 
 ### 3.2 `KernelBoot.launch`, in order
 
@@ -457,7 +464,10 @@ classpath (first-URL-wins would otherwise let it shadow the winner and contribut
 `transform.TransformPhase` fixes the order: `RAW_PATCH`, `DEOBF_REMAP`, `ENV_STRIP`, `ACCESS`, `COREMOD`,
 `FABRIC_BUILTIN`, `MIXIN`. `TransformChain` runs the chain phases (`RAW_PATCH` … `FABRIC_BUILTIN`); within a phase,
 `predepends` topologically, then `sortIndex`, then registration order. `MIXIN` is terminal and cannot be registered
-into the chain. On 26.2 nothing is registered in `RAW_PATCH` or `DEOBF_REMAP`.
+into the chain. Nothing is registered in `RAW_PATCH` or `DEOBF_REMAP` on this anchor either: the
+intermediary→Mojmap translation happens before these classes are ever served — at build time for the
+modules the kernel compiles against, and through the refmap rewrite the module remap carries (§1) — so
+by the time a guest class reaches the loader it is already in the base's namespace.
 
 What `KernelBoot` registers (91 call sites; some conditional):
 
@@ -578,11 +588,11 @@ keep none (`MixinRetarget.adopt`). A mixin the kernel leaves out by name is not 
 and no place in the `PARTIAL` count. `MixinFitReport` runs the same judgement offline:
 `MixinFitReport <merged-base.jar> <mods-dir> [--verbose]`.
 
-A miss is the merge's only if the mod's own platform had the member: vanilla 26.2 for a Fabric mod, MinecraftForge's
-or NeoForge's patched 26.2 for theirs (the config owner's ecosystem, `MixinConfigOwners.ecosystemOf`; a config no
-single mod claims is not asked). Those patched games declare methods vanilla does not — `KeyMapping.getKeyModifier()`,
-`AxeItem.canPerformAction`, NeoForge's `EnderDragon.getParts()` — and the merge dropped or retyped some of them, so
-"vanilla lacks it too" proves nothing for a MinecraftForge or NeoForge mod. An injector whose `method` selectors are
+A miss is the base's only if the mod's own platform had the member: vanilla 1.21.1 for a Fabric mod, NeoForge's
+patched 1.21.1 for theirs (the config owner's ecosystem, `MixinConfigOwners.ecosystemOf`; a config no single mod
+claims is not asked). The patched base declares methods vanilla does not — `KeyMapping.getKeyModifier()`,
+`AxeItem.canPerformAction`, NeoForge's `EnderDragon.getParts()` — and NeoForge's patches drop or retype some of
+them, so "vanilla lacks it too" proves nothing for a NeoForge mod. An injector whose `method` selectors are
 all plain names of methods that platform lacks too, and which nothing requires to inject — no `require` ≥ 1, the
 config's original `injectors.defaultRequire` 0, no `@Group`, no `mixin.debug.countInjections` — is one native Mixin
 skips without a word while the rest of the mixin applies (sponge-mixin 0.17.x and upstream Mixin 0.8.7 alike:
@@ -592,28 +602,27 @@ selector (MixinSquared's `@MixinSquared:Handler` resolves to another mixin's han
 minimum throws whatever `require` says), a dotted owner, a regex and a malformed descriptor are never answered.
 `NativeAbsentTargets` counts such an injector neither resolved nor missing and logs it on one info line, so the mixin
 is judged on the rest and, with nothing else missing, goes to Mixin whole — no finding, no policy stop. Not Enough
-Crashes' `@Inject` into `BlockEntity.populateCrashReport` (26.2 calls it `fillCrashReportCategory`) is the case.
-"The platform lacks it" is answered from the merged base's raw bytes plus the shipped difference
-`native-only-methods.txt`: per platform, the methods its game declares in vanilla's packages that the merged base does
-not (565 for vanilla, 424 for MinecraftForge, 14 for NeoForge) and the classes there only the merged base has (18, 10
-and 6). A method the raw class still declares, a class outside `net/minecraft/`/`com/mojang/`, and another mod's class
-are never called absent. The rows hold only for the base they were derived from, so the table also records that base's
+Crashes' `@Inject` into `BlockEntity.populateCrashReport` (1.21.1 calls it `fillCrashReportCategory`) is the case.
+"The platform lacks it" is answered from the base's raw bytes plus the shipped difference
+`native-only-methods.txt`: per platform, the methods its game declares in vanilla's packages that this base does
+not, and the classes there only this base has. A method the raw class still declares, a class outside
+`net/minecraft/`/`com/mojang/`, and another mod's class are never called absent. The rows hold only for the base they were derived from, so the table also records that base's
 members digest (every class in vanilla's packages with its methods' names and descriptors, bodies left out); a class
 served by a jar whose digest differs is not answered for, and one warning says so. Minecraft's own libraries under
 `com/mojang/` (brigadier, DataFixerUpper, authlib and five more) are answered from their own bytes: the kernel loads
-them beside the merged base, every platform loads the same jars (vanilla 26.2's version JSON lists them, and
-MinecraftForge 65.0.1's and NeoForge 26.2.0.88's launcher profiles inherit that list and add no `com.mojang` library),
-so the table records each of those jars' members digest too (`library` lines), and a class served by exactly one of
-them is answered like the merged base's; a library jar of another version is not. The rows describe one game per
-platform — vanilla 26.2, MinecraftForge 65.0.1's patched 26.2, NeoForge 26.2.0.88's — and the table's `platform` lines
-record those versions. A mod whose mandatory `minecraft` range, or `forge`/`neoforge` range for its platform, excludes
+them beside the base, every platform loads the same jars (vanilla 1.21.1's version JSON lists them, and NeoForge
+21.1's launcher profile inherits that list and adds no `com.mojang` library), so the table records each of those
+jars' members digest too (`library` lines), and a class served by exactly one of them is answered like the base's; a
+library jar of another version is not. The rows describe one game per platform — vanilla 1.21.1, NeoForge 21.1's
+patched 1.21.1 — and the table's `platform` lines record those versions. A mod whose mandatory `minecraft` range,
+or `neoforge` range for its platform, excludes
 that version is not native to that game (its own loader would refuse it there, and the newer game it was built for may
 declare the method), so it is not answered for and one info line names the requirement; nor is a mod whose range cannot
 be read, or whose manifest the kernel has not published (`ModPresence`). For any of those the miss is the merge's, as
 before. `-Dneoforbric.mixinFit.nativeAbsent=off` counts such an injector as a miss again.
 
-Provenance was the previous rule and was wrong: the merged base *is* NeoForge's patched Minecraft with Forge
-spliced in, so "a Forge-family class" describes most of the jar.
+Provenance was the previous rule and was wrong: the base *is* NeoForge's patched Minecraft, so "a Forge-family
+class" describes most of the jar.
 
 ### 7.4 Adapters — moving an injector to where the code went
 
@@ -714,12 +723,12 @@ to receive, so an injector an adapter already moved where it fits stays. Several
 `carrier-twins.txt`, `lambda-permutations.txt`, `uncalled-methods.txt`, `native-only-methods.txt`); `CarrierHelperCensusTest`,
 `CarrierRenameCensusTest`, `CarrierTwinCensusTest`, `UncalledMethodCensusTest` and `NativeOnlyMethodsCensusTest` re-derive
 `carrier-helpers.txt`, `carrier-renames.txt`, `carrier-twins.txt`, `uncalled-methods.txt` and `native-only-methods.txt`
-from the staged jars (`native-only-methods.txt` from the merged base, both patched games and vanilla's own jar) and pin
+from the staged jars (`native-only-methods.txt` from the base, NeoForge's patched game and vanilla's own jar) and pin
 them. A wrapper that renames a handler's body aside
 (`MixinRetarget`'s guard and R7, `MixinAtWidenedCall`'s redirect, `MixinSubtypeOwnerRetarget`'s guard) adds a mark of
 the mixin class to the name, so two mixins on one target with the same handler name do not merge into one body.
-`MixinFitLivenessCensusStagedTest` also keeps a census of the anchors a Fabric mixin names that resolve on stock 26.2
-and not on the merged base as the kernel judges it. Only fabric-api's lines are asserted (a new one fails the build);
+`MixinFitLivenessCensusStagedTest` also keeps a census of the anchors a Fabric mixin names that resolve on stock 1.21.1
+and not on this base as the kernel judges it. Only fabric-api's lines are asserted (a new one fails the build);
 any other corpus named in `NEOFORBRIC_ANCHOR_PACKS` is report-only (`build/reports/vanilla-anchor-census.txt`) — nothing
 fails on a third-party mod's line, so someone has to read the report.
 
