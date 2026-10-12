@@ -416,7 +416,7 @@ public final class KernelGuestMixinAdapter {
 			int configMinimum, List<String> suppress, NativeAbsentTargets.Context nativeView) {
 		MixinRetarget.Adoption adoption = MixinRetarget.adopt(judged, fit, resource, bytes -> MixinFit.evaluate(bytes, resource,
 				net.neoforbric.kernel.classloading.DelegationPolicy::alwaysGame, added, nativeView));
-		if (adoption == null) return false;
+		if (adoption == null) return namedAnchorRescue(configName, mixin, judged, fit, resource, added, nativeView);
 		MixinFit.Result after = adoption.after();
 		MixinRetarget.remember(adoption.plan());
 		NeoForbricLog.info("[NeoForbric/Mixin] retargeted guest mixin %s:%s — %s; verdict %s→%s",
@@ -437,6 +437,57 @@ public final class KernelGuestMixinAdapter {
 			NeoForbricLog.info("[NeoForbric/Mixin] guest mixin %s:%s still applies only partially — %s%s",
 					MixinConfigOwners.describe(configName), mixin, after.reason(), rejectionNote(after));
 		}
+		return true;
+	}
+
+	/**
+	 * The last rescue before an UNFIT mixin is dropped: the named anchor adapters, judged as Mixin will
+	 * apply the mixin. A 1.21.1-era Fabric mod's injectors carry the Yarn names they were authored with,
+	 * and those resolve through the refmap at apply time — not in the fitness read, which sees the raw
+	 * strings and answers "no anchor resolves" for anchors that bind. So before dropping the mixin, its
+	 * annotation strings are resolved through the config's own refmap (the same lookups Mixin makes), the
+	 * named adapters run on that resolved copy, and what they moved is re-judged as it will actually bind.
+	 * When that verdict is better than the one the raw strings earned, the mixin is kept exactly as the
+	 * mod shipped it — the class-serve chain applies the same adapters when Mixin loads it — and the
+	 * rescue is announced; nothing is remembered, because the bytes Mixin receives are unchanged.
+	 *
+	 * <p>Fabric's own chunk-meshing module is the case that paid for this: its SectionBuilderMixin selects
+	 * vanilla's {@code build} and redirects the seven-argument renderBatched, both resolved through its
+	 * refmap onto a base whose short compile overload is only a delegate to NeoForge's five-argument one
+	 * — every anchor of all three handlers lives in the live body, the widened render call included, and
+	 * the raw-string verdict was UNFIT for all of them ({@link FabricSectionCompilerMixinAdapter}).
+	 */
+	private static boolean namedAnchorRescue(String configName, String mixin, byte[] judged,
+			MixinFit.Result fit, Function<String, byte[]> resource, MixinAddedMembers.View added,
+			NativeAbsentTargets.Context nativeView) {
+		byte[] configJson = resource.apply(configName);
+		ConfigRefmaps.Refmap refmap = ConfigRefmaps.of(configJson, resource);
+		if (refmap == ConfigRefmaps.NONE) return false;
+		ClassNode node;
+		try {
+			node = MixinFit.parse(judged);
+		} catch (RuntimeException unreadable) {
+			return false;
+		}
+		refmap.resolve(node);
+		int moved = FabricSectionCompilerMixinAdapter.adapt(node, name -> {
+			byte[] bytes = resource.apply(name + ".class");
+			return bytes == null ? null : MixinFit.parse(bytes);
+		});
+		// The re-judging always reads the RESOLVED node, adapters or no adapters: the resolution alone is
+		// what a config's own refmap says its anchors really name, and with every named adapter switched
+		// off that is exactly the verdict the off-run should report — a PARTIAL the merge can keep and
+		// whose unattached injectors get relaxed, not a mixin dropped as unfit. The bytes Mixin loads are
+		// the mod's own either way; only the judging copy is rewritten.
+		org.objectweb.asm.ClassWriter writer = new org.objectweb.asm.ClassWriter(0);
+		node.accept(writer);
+		MixinFit.Result after = MixinFit.evaluate(writer.toByteArray(), resource,
+				net.neoforbric.kernel.classloading.DelegationPolicy::alwaysGame, added, nativeView);
+		if (after.verdict() == fit.verdict() && after.unresolved().size() >= fit.unresolved().size()) return false;
+		NeoForbricLog.info("[NeoForbric/Mixin] named anchor rescue kept guest mixin %s:%s — %s; verdict %s→%s (%s)",
+				MixinConfigOwners.describe(configName), mixin,
+				moved == 0 ? "its refmap-resolved anchors bind" : moved + " anchor(s) the named adapters moved",
+				fit.verdict(), after.verdict(), after.reason());
 		return true;
 	}
 

@@ -27,12 +27,15 @@ import net.neoforbric.kernel.mixin.FabricSectionCompilerMixinAdapter;
  * {@code @Redirect}; both select {@code compile} by name, so Mixin binds them to the stub. With the adapter both move
  * to the live overload — the setup through a generated wrapper that takes the extra list and hands the original its
  * own arguments — and every block is emitted by Fabric's renderer, with NeoForge's geometry kept. With
- * {@code -Dneoforbric.fabricChunkRendering=off} both injectors find nothing in the stub and are reported, and the
- * chunk is tessellated by vanilla.
+ * {@code -Dneoforbric.fabricChunkRendering=off} the mixin stays as its module authored it: the rescue's
+ * refmap-resolved judging keeps it (a PARTIAL, not the UNFIT the raw strings earned), but nothing renames its
+ * intermediary-named {@code @Shadow} and nothing moves its handlers, so Mixin fails the application on the
+ * shadow and the kernel reports the one failed apply — and the chunk is tessellated by vanilla.
  */
 class FabricSectionCompilerMixinAdapterWeaveTest {
 	private static final Path SOURCES = Path.of("src/test/resources/weave/fabricsectioncompiler");
 	private static final String CONFIG = "fabricsectioncompiler.mixins.json";
+	private static final String REFMAP = "fabricsectioncompiler-refmap.json";
 	private static final String MOD = "fabricsectioncompiler";
 	private static final String COMPILER = "net/minecraft/client/renderer/chunk/SectionCompiler";
 	private static final String FABRIC_QUADS = "quads=[fabric:stone, fabric:ctm_glass, neoforge:fluid]";
@@ -44,20 +47,21 @@ class FabricSectionCompilerMixinAdapterWeaveTest {
 	private static WeaveHarness.Result off;
 
 	@BeforeAll static void weaveBoth() throws Exception {
-		fixture = WeaveHarness.fixture(work, MOD, sources(), Map.of(CONFIG, SOURCES.resolve(CONFIG)), List.of("-g"));
+		fixture = WeaveHarness.fixture(work, MOD, sources(),
+				Map.of(CONFIG, SOURCES.resolve(CONFIG), REFMAP, SOURCES.resolve(REFMAP)), List.of("-g"));
 		adapted = run("adapted", Map.of(FabricSectionCompilerMixinAdapter.PROPERTY, "on"));
 		off = run("off", Map.of(FabricSectionCompilerMixinAdapter.PROPERTY, "off"));
 	}
 
 	@Test void fabricsRendererEmitsEveryBlockOfTheLiveCompile() throws Exception {
 		assertTrue(adaptedHolds(adapted), adapted.describe() + "\nfindings: " + adapted.findings());
-		assertTrue(adapted.printed("[NeoForbric/Renderer] Fabric's renderer setup and block emission now run in the live chunk compile overload"),
+		assertTrue(adapted.printed("[NeoForbric/Renderer] Fabric's chunk-meshing take-over now runs in the live section compile body"),
 				adapted.describe());
 		assertTrue(WeaveHarness.hasMergedMethod(adapted.defined(COMPILER)), adapted.describe());
 		WeaveHarness.assertWovenAndVerified(adapted, COMPILER, fixture);
 	}
 
-	@Test void withTheSwitchOffTheChunkIsTessellatedByVanillaAndBothInjectorsAreReported() throws Exception {
+	@Test void withTheSwitchOffTheModuleCannotApplyItsTakeoverIsReportedAndVanillaTessellates() throws Exception {
 		assertTrue(offHolds(off), off.describe() + "\nfindings: " + off.findings());
 		WeaveHarness.assertWovenAndVerified(off, COMPILER, fixture);
 	}
@@ -73,10 +77,13 @@ class FabricSectionCompilerMixinAdapterWeaveTest {
 	}
 
 	private static boolean offHolds(WeaveHarness.Result run) {
-		List<WeaveHarness.Finding> losses = losses(run);
-		return run.printed(WeaveHarnessMain.DONE + " " + VANILLA_QUADS) && losses.size() == 2
-				&& losses.stream().anyMatch(f -> f.id().contains("#beforeLoopCompile"))
-				&& losses.stream().anyMatch(f -> f.id().contains("#tesselateBlockProxy"));
+		// With the adapter off nothing renames the module's intermediary-named @Shadow, so the one thing
+		// the off-run reports is the mixin's own failed application — a mixin-level finding, not the
+		// per-injector losses the 26.x-era module (whose shadow was Mojmap-authored) produced.
+		List<WeaveHarness.Finding> failed = run.findings().stream()
+				.filter(f -> f.modId().equals(MOD) && f.required() && f.id().startsWith("mixin:")
+						&& f.detail().contains("failed to apply")).toList();
+		return run.printed(WeaveHarnessMain.DONE + " " + VANILLA_QUADS) && failed.size() == 1;
 	}
 
 	/** Every required injector of the mod the runtime audit reports, at any confidence. */
