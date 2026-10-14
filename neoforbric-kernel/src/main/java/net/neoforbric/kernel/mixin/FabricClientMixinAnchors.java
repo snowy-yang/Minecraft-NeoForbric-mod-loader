@@ -12,8 +12,8 @@ public final class FabricClientMixinAnchors {
  private FabricClientMixinAnchors(){}
  public static int adapt(ClassNode mixin,Function<String,ClassNode> targets){
   if("off".equalsIgnoreCase(System.getProperty(PROPERTY,"on")))return 0;
-  if(mixin.name.equals("net/fabricmc/fabric/mixin/event/lifecycle/client/LevelChunkMixin")
-    ||mixin.name.equals("net/fabricmc/fabric/mixin/event/lifecycle/server/LevelChunkMixin"))return removal(mixin,targets);
+  if(mixin.name.equals("net/fabricmc/fabric/mixin/event/lifecycle/client/WorldChunkMixin")
+    ||mixin.name.equals("net/fabricmc/fabric/mixin/event/lifecycle/server/WorldChunkMixin"))return removal(mixin,targets);
   if(mixin.name.equals("net/fabricmc/fabric/mixin/client/renderer/block/render/LevelRendererMixin"))return render(mixin,targets);
   if(mixin.name.equals("net/fabricmc/fabric/mixin/screen/GuiMixin"))return screenExtract(mixin,targets);
   return screenDraw(mixin,targets);
@@ -104,13 +104,19 @@ public final class FabricClientMixinAnchors {
  private static int calls(MethodNode m,String owner,String name){int n=0;for(var i:m.instructions)if(i instanceof MethodInsnNode c&&c.owner.equals(owner)&&c.name.equals(name))n++;return n;}
  private static int removal(ClassNode mixin,Function<String,ClassNode> targets){
   String owner="net/minecraft/world/level/chunk/LevelChunk",desc="(Lnet/minecraft/core/BlockPos;L"+owner+"$EntityCreationType;)Lnet/minecraft/world/level/block/entity/BlockEntity;";
+  // The mixin ships intermediary-typed and the runtime remaps only its class references: the selector strings
+  // stay Yarn-authored (refmap keys), so the Yarn-typed selector is matched alongside the remapped one.
+  String yarn="getBlockEntity(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/world/chunk/WorldChunk$CreationType;)Lnet/minecraft/block/entity/BlockEntity;";
+  String yarnFrom="Lnet/minecraft/world/chunk/WorldChunk;createBlockEntity(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/entity/BlockEntity;";
   MethodNode handler=find(mixin,"onRemoveBlockEntity","(Ljava/util/Map;Ljava/lang/Object;)Ljava/lang/Object;");ClassNode target=targets.apply(owner);
   if(handler==null||target==null||group(handler))return 0;MethodNode host=find(target,"getBlockEntity",desc);if(host==null)return 0;
   AnnotationNode injector=MixinFit.injectorOf(handler);if(injector==null||!injector.desc.equals("Lorg/spongepowered/asm/mixin/injection/Redirect;"))return 0;
-  if(!MixinFit.stringList(MixinFit.value(injector,"method")).equals(List.of("getBlockEntity"+desc)))return 0;
+  if(!MixinFit.stringList(MixinFit.value(injector,"method")).equals(List.of("getBlockEntity"+desc))
+    &&!MixinFit.stringList(MixinFit.value(injector,"method")).equals(List.of(yarn)))return 0;
   Object slice=MixinFit.value(injector,"slice");
   if(!(slice instanceof AnnotationNode sliced)||!(MixinFit.value(sliced,"from") instanceof AnnotationNode from)
-    ||!("L"+owner+";createBlockEntity(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/entity/BlockEntity;").equals(MixinFit.value(from,"target")))return 0;
+    ||!("L"+owner+";createBlockEntity(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/entity/BlockEntity;").equals(MixinFit.value(from,"target"))
+    &&!yarnFrom.equals(MixinFit.value(from,"target")))return 0;
   List<AnnotationNode> ats=MixinFit.atNodes(injector).stream().filter(a->"Ljava/util/Map;remove(Ljava/lang/Object;)Ljava/lang/Object;".equals(MixinFit.value(a,"target"))).toList();if(ats.size()!=1)return 0;
   Object originalOrdinal=MixinFit.value(ats.getFirst(),"ordinal");if(originalOrdinal!=null&&!Integer.valueOf(0).equals(originalOrdinal))return 0;
   try{

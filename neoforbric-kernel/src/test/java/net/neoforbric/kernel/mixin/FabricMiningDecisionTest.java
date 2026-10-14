@@ -18,12 +18,12 @@ class FabricMiningDecisionTest {
    "net/minecraft/client/Minecraft.java","package net.minecraft.client; public class Minecraft { public net.minecraft.client.player.LocalPlayer player=new net.minecraft.client.player.LocalPlayer(); }",
    "net/minecraft/world/item/Item.java","package net.minecraft.world.item; public class Item { public boolean reset,allow; public int nativeCalls,fabricCalls; public Object player,old,next; public boolean allowContinuingBlockBreaking(net.minecraft.world.entity.player.Player p,ItemStack a,ItemStack b){fabricCalls++;player=p;old=a;next=b;return allow;} }",
    "net/minecraft/world/item/ItemStack.java","package net.minecraft.world.item; public class ItemStack {public final Item item;public ItemStack(Item item){this.item=item;}public Item getItem(){return item;}public boolean shouldCauseBlockBreakReset(ItemStack next){item.nativeCalls++;return item.reset;} }",
-   "net/fabricmc/fabric/mixin/item/client/MultiPlayerGameModeMixin.java","package net.fabricmc.fabric.mixin.item.client; public class MultiPlayerGameModeMixin {private net.minecraft.client.Minecraft minecraft; public MultiPlayerGameModeMixin(net.minecraft.client.Minecraft m){minecraft=m;} }");
+   "net/fabricmc/fabric/mixin/item/client/ClientPlayerInteractionManagerMixin.java","package net.fabricmc.fabric.mixin.item.client; public class ClientPlayerInteractionManagerMixin {private net.minecraft.client.Minecraft field_3712; public ClientPlayerInteractionManagerMixin(net.minecraft.client.Minecraft m){field_3712=m;} }");
   List<String> args=new ArrayList<>(List.of("--release","21","-d",root.toString()));
   for(var source:sources.entrySet()){Path file=root.resolve(source.getKey());Files.createDirectories(file.getParent());Files.writeString(file,source.getValue());args.add(file.toString());}
   assertEquals(0,ToolProvider.getSystemJavaCompiler().run(null,null,null,args.toArray(String[]::new)));
-  String name="net/fabricmc/fabric/mixin/item/client/MultiPlayerGameModeMixin";
-  ClassNode mixin=StagedFabricMixinFixture.mixin("fabric-item-api-v1",name),target=StagedFabricMixinFixture.game("net/minecraft/client/multiplayer/MultiPlayerGameMode",false);assertEquals(1,FabricMiningMixinAdapter.adapt(mixin,n->target));
+  String name="net/fabricmc/fabric/mixin/item/client/ClientPlayerInteractionManagerMixin";
+  ClassNode mixin=StagedFabricMixinFixture.remapped("fabric-item-api-v1",name),target=StagedFabricMixinFixture.game("net/minecraft/client/multiplayer/MultiPlayerGameMode",false);assertEquals(1,FabricMiningMixinAdapter.adapt(mixin,n->target));
   MethodNode handler=StagedFabricMixinFixture.method(mixin,"fabricItemContinueBlockBreakingInject");handler.access=Opcodes.ACC_PUBLIC;handler.visibleAnnotations=null;handler.invisibleAnnotations=null;
   Path shell=root.resolve(name+".class");ClassNode output=MixinFit.parse(Files.readAllBytes(shell));output.methods.add(handler);Files.write(shell,StagedFabricMixinFixture.bytes(output));
   try(URLClassLoader loader=new URLClassLoader(new URL[]{root.toUri().toURL()},ClassLoader.getPlatformClassLoader())){
