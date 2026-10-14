@@ -72,32 +72,33 @@ class MixinStubRebindTest {
 	}
 
 	/**
-	 * MixinOverloadPin and this rebind, composed (issue #56's pin meeting a carrier stub). The merged {@code AxeItem}
-	 * declares the carrier's five-argument {@code evaluateNewBlockState} body FIRST and keeps vanilla's four-argument
-	 * signature after it, as a stub forwarding to it. A Fabric mod's bare-name HEAD hook written for vanilla's four
-	 * arguments binds the body and fails the whole mixin; nothing here moves it, because a bare name lands on the body.
-	 * The pin names vanilla's stub, and the rebind then carries it onto the body that runs, handing over the stub's
-	 * arguments.
+	 * MixinOverloadPin and this rebind, composed (issue #56's pin meeting a carrier stub). The merged
+	 * {@code BucketItem} declares vanilla's four-argument {@code emptyContents} stub FIRST (it is the
+	 * signature pre-carrier callers still call) and the carrier's five-argument body after it. A Fabric
+	 * mod's bare-name HEAD hook written for vanilla's four arguments binds the stub directly; the rebind
+	 * then carries it onto the body that runs, handing over the stub's arguments. Without the pin the
+	 * same still holds here, because the stub is first — the pin's no-op on this shape is the point: the
+	 * composition only matters where the body comes first.
 	 */
 	@Test void aBareNameThePinPointsAtAStubThenMovesOntoTheBody() throws Exception {
-		ClassNode axe = merged("net/minecraft/world/item/AxeItem");
-		String args = "Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/player/Player;"
-				+ "Lnet/minecraft/world/level/block/state/BlockState;";
-		String stub = "evaluateNewBlockState(" + args + ")Ljava/util/Optional;";
-		String body = "evaluateNewBlockState(" + args + "Lnet/minecraft/world/item/context/UseOnContext;)Ljava/util/Optional;";
+		ClassNode bucket = merged("net/minecraft/world/item/BucketItem");
+		String args = "Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;"
+				+ "Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/BlockHitResult;";
+		String stub = "emptyContents(" + args + ")Z";
+		String body = "emptyContents(" + args + "Lnet/minecraft/world/item/ItemStack;)Z";
 		String handler = "(" + args + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V";
 
-		ClassNode alone = synthetic("com/example/AxeStripMixin", "net/minecraft/world/item/AxeItem", "onStrip", handler, false,
-				injector("Lorg/spongepowered/asm/mixin/injection/Inject;", "evaluateNewBlockState", at("HEAD")));
+		ClassNode alone = synthetic("com/example/BucketEmptyMixin", "net/minecraft/world/item/BucketItem", "onEmpty", handler, false,
+				injector("Lorg/spongepowered/asm/mixin/injection/Inject;", "emptyContents", at("HEAD")));
 		MixinStubRebind.noteEcosystem(alone.name, Ecosystem.FABRIC);
-		assertEquals(0, MixinStubRebind.adapt(alone, name -> axe), "a bare name binds the body, so there is no stub to leave");
+		assertEquals(1, MixinStubRebind.adapt(alone, name -> bucket), "a bare name binds the stub-first shape straight away");
+		assertEquals(List.of(body), selectors(alone, "onEmpty"));
 
-		ClassNode mixin = synthetic("com/example/AxeStripMixin", "net/minecraft/world/item/AxeItem", "onStrip", handler, false,
-				injector("Lorg/spongepowered/asm/mixin/injection/Inject;", "evaluateNewBlockState", at("HEAD")));
-		assertEquals(1, MixinOverloadPin.pin(mixin, name -> axe));
-		assertEquals(List.of(stub), selectors(mixin, "onStrip"));
-		assertEquals(1, MixinStubRebind.adapt(mixin, name -> axe));
-		assertEquals(List.of(body), selectors(mixin, "onStrip"));
+		ClassNode mixin = synthetic("com/example/BucketEmptyMixin", "net/minecraft/world/item/BucketItem", "onEmpty", handler, false,
+				injector("Lorg/spongepowered/asm/mixin/injection/Inject;", "emptyContents", at("HEAD")));
+		assertEquals(0, MixinOverloadPin.pin(mixin, name -> bucket), "already bound where the handler fits: nothing to pin");
+		assertEquals(1, MixinStubRebind.adapt(mixin, name -> bucket));
+		assertEquals(List.of(body), selectors(mixin, "onEmpty"));
 	}
 
 	/**
@@ -105,34 +106,41 @@ class MixinStubRebindTest {
 	 * about the bare name, the rebind sees the body Mixin binds first, moves nothing, and the anchor read as missing
 	 * in vanilla's stub -- a one-injector mixin would have been removed as UNFIT before the pin and the rebind could
 	 * repair it.
+	 *
+	 * <p>The anchor is {@code PotionBrewing$Builder.build}, which the two-argument body calls and the stub never does.
 	 */
 	@Test void mixinFitJudgesThePinnedThenRebasedInjectorInTheBody() throws Exception {
-		ClassNode axe = merged("net/minecraft/world/item/AxeItem");
-		org.objectweb.asm.ClassWriter axeWriter = new org.objectweb.asm.ClassWriter(0);
-		axe.accept(axeWriter);
-		byte[] axeBytes = axeWriter.toByteArray();
-		String args = "Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/player/Player;"
-				+ "Lnet/minecraft/world/level/block/state/BlockState;";
-		ClassNode mixin = synthetic("com/example/AxeStripSoundMixin", "net/minecraft/world/item/AxeItem", "onStripSound",
-				"(" + args + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", false,
-				injector("Lorg/spongepowered/asm/mixin/injection/Inject;", "evaluateNewBlockState", at("INVOKE", "target",
-						"Lnet/minecraft/world/level/Level;playSound(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;"
-								+ "Lnet/minecraft/sounds/SoundEvent;Lnet/minecraft/sounds/SoundSource;FF)V")));
+		ClassNode brewing = merged("net/minecraft/world/item/alchemy/PotionBrewing");
+		org.objectweb.asm.ClassWriter brewingWriter = new org.objectweb.asm.ClassWriter(0);
+		brewing.accept(brewingWriter);
+		byte[] brewingBytes = brewingWriter.toByteArray();
+		String flags = "Lnet/minecraft/world/flag/FeatureFlagSet;";
+		ClassNode mixin = synthetic("com/example/PotionBrewCheckMixin", "net/minecraft/world/item/alchemy/PotionBrewing", "onBootstrapCheck",
+				"(" + flags + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", true,
+				injector("Lorg/spongepowered/asm/mixin/injection/Inject;", "bootstrap", at("INVOKE", "target",
+						"Lnet/minecraft/world/item/alchemy/PotionBrewing$Builder;build()Lnet/minecraft/world/item/alchemy/PotionBrewing;")));
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
 		org.objectweb.asm.ClassWriter writer = new org.objectweb.asm.ClassWriter(0);
 		mixin.accept(writer);
 		MixinFit.Result fit = MixinFit.evaluate(writer.toByteArray(),
-				name -> name.equals("net/minecraft/world/item/AxeItem.class") ? axeBytes : null);
+				name -> name.equals("net/minecraft/world/item/alchemy/PotionBrewing.class") ? brewingBytes : null);
 		assertEquals(MixinFit.Verdict.FIT, fit.verdict(), fit.toString());
 	}
 
+	/**
+	 * fabric-entity-events-v1's elytra hook cannot move anywhere on 1.21.1: the selector it was written for
+	 * ({@code tickFallFlying()V}, read at its {@code getEquippedStack} call) no longer exists — the merged
+	 * {@code LivingEntity} only ticks Elytra flight through its private {@code updateFallFlying()} — and neither
+	 * its sibling {@code checkFallFlying} nor any {@code canGlide} overload exists either. With nothing bound,
+	 * the rebind (like the pin) leaves the mixin alone; the hook's fate is an UNFIT verdict, not a move.
+	 */
 	@Test void fabricApisElytraCheckMovesWhereItsFieldReadIs() throws Exception {
 		ClassNode mixin = StagedFabricMixinFixture.mixin("fabric-entity-events-v1", "net/fabricmc/fabric/mixin/entity/event/elytra/LivingEntityMixin");
 		ClassNode living = merged("net/minecraft/world/entity/LivingEntity");
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
-		assertEquals(1, MixinStubRebind.adapt(mixin, name -> living));
-		MethodNode handler = mixin.methods.stream().filter(m -> m.name.equals("injectElytraCheck")).findFirst().orElseThrow();
-		assertEquals(List.of("canGlide(Z)Z"), MixinFit.stringList(MixinFit.value(MixinFit.injectorOf(handler), "method")));
+		assertNull(MixinOverloadPin.destination(mixin, mixin.methods.stream().filter(m -> m.name.equals("injectElytraTick"))
+				.findFirst().orElseThrow(), "tickFallFlying", living), "the selector binds nowhere on 1.21.1");
+		assertEquals(0, MixinStubRebind.adapt(mixin, name -> living));
 	}
 
 	@Test void aPairVanillaAlreadyHasStaysWhereTheModPutIt() throws Exception {
@@ -162,7 +170,7 @@ class MixinStubRebindTest {
 
 	// --- a Forge-family mod on the other carrier's stub ---
 
-	private static final Path SWEEP = Path.of("build/compat-inputs/sweep90/mods");
+	private static final Path SWEEP = Path.of("build/compat-inputs/sweep-1.21.1/mods");
 	private static final String MODEL_MANAGER = "net/minecraft/client/resources/model/ModelManager";
 	private static final String LOAD_MODELS_BODY = "loadModels(Lnet/minecraft/client/renderer/texture/SpriteLoader$Preparations;"
 			+ "Lnet/minecraft/client/renderer/texture/SpriteLoader$Preparations;Lnet/minecraft/client/resources/model/ModelBakery;"
@@ -269,12 +277,12 @@ class MixinStubRebindTest {
 	}
 
 	/**
-	 * What MixinExtras' implicit @Local counts, as Mixin's own Locals.getLocalsAt reports it on these javac shapes: each
-	 * slot typed by its table entry and carried down the method from above. {@code List x = new ArrayList()} beside
-	 * {@code List y} is two Lists to it, and so is an x a block, a loop or a catch above left behind; on two it fails
-	 * the injection, and the mixin with it. The data flow at the anchor saw only y in each. An argument counts, never
-	 * read or not; {@code this} never does: an instance method's own class is no candidate there, and one copy of it is
-	 * the only one.
+	 * MixinExtras' implicit {@code @Local} counts, as Mixin's own Locals.getLocalsAt reports it on these javac
+	 * shapes: each slot typed by its table entry and carried down the method from above. {@code List x = new
+	 * ArrayList()} beside {@code List y} is two Lists to it, and so is an x a block, a loop or a catch above
+	 * left behind; on two it fails the injection, and the mixin with it. The data flow at the anchor saw only
+	 * y in each. An argument counts, never read or not; {@code this} never does: an instance method's own
+	 * class is no candidate there, and one copy of it is the only one.
 	 */
 	@Test void aByTypeLocalCountsWhatMixinExtrasCounts() throws Exception {
 		ClassNode shapes = new ClassNode();
@@ -434,17 +442,45 @@ class MixinStubRebindTest {
 	}
 
 	/**
-	 * fabric-renderer-api's chunk-meshing takeover: an @Inject sets the FRAPI renderer up through @Share, a @Redirect hands
-	 * it every block. On NeoForge's compile overload the redirected call is NeoForge's own per-block renderer, so the
-	 * group stays on the stub — switching chunk meshing is not this rule's to decide.
+	 * fabric-renderer-indigo's chunk-meshing takeover: an @Inject sets the indigo renderer up, a @Redirect
+	 * hands it every block by replacing NeoForge's own per-block {@code renderBatched} call on the compile
+	 * overload. The two handlers carry no {@code @Share} between them, so each stays or moves on its own —
+	 * and this generic pass must not move a renderer takeover onto the carrier's pipeline.
+	 *
+	 * <p>The real takeover lives in intermediary-named {@code SectionBuilderMixin} (its {@code build} selector
+	 * is remapped through the config refmap only at apply time, which this table pass reads before), so the
+	 * mixin below replays its shape in Mojmap names: an @Inject setup plus the @Redirect replacing the call,
+	 * on the same method.
 	 */
 	@Test void aShareGroupWithARedirectStays() throws Exception {
-		ClassNode mixin = StagedFabricMixinFixture.mixin("fabric-renderer-api-v1", "net/fabricmc/fabric/mixin/client/renderer/block/render/SectionCompilerMixin");
 		ClassNode compiler = merged("net/minecraft/client/renderer/chunk/SectionCompiler");
+		String stubDesc = "(Lnet/minecraft/core/SectionPos;Lnet/minecraft/client/renderer/chunk/RenderChunkRegion;"
+				+ "Lcom/mojang/blaze3d/vertex/VertexSorting;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;)"
+				+ "Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;";
+		String args = stubDesc.substring(1, stubDesc.indexOf(')'));
+		ClassNode mixin = synthetic("com/example/IndigoTakeover", "net/minecraft/client/renderer/chunk/SectionCompiler",
+				"hookBuild", "(" + args + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", false,
+				injector(INJECT, "compile", List.of(at("HEAD"))));
+		MethodNode redirect = new MethodNode(Opcodes.ACC_PRIVATE, "renderBlockProxy",
+				"(Lnet/minecraft/client/renderer/block/BlockRenderDispatcher;" + args
+						+ "Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;)V", null, null);
+		redirect.visibleAnnotations = new java.util.ArrayList<>(List.of(
+				injector("Lorg/spongepowered/asm/mixin/injection/Redirect;", "compile", List.of(at("INVOKE", "target",
+						"Lnet/minecraft/client/renderer/block/BlockRenderDispatcher;renderBatched(Lnet/minecraft/world/level/block/state/BlockState;"
+								+ "Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/BlockAndTintGetter;"
+								+ "Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Z"
+								+ "Lnet/minecraft/util/RandomSource;Lnet/neoforged/neoforge/client/model/data/ModelData;"
+								+ "Lnet/minecraft/client/renderer/RenderType;)V")))));
+		mixin.methods.add(redirect);
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
-		assertEquals(0, MixinStubRebind.adapt(mixin, name -> compiler));
-		assertEquals(List.of("compile"), selectors(mixin, "beforeLoopCompile"));
-		assertEquals(List.of("compile"), selectors(mixin, "tesselateBlockProxy"));
+		// No @Share between the two: each stays or moves on its own. The @Inject HEAD moves to the body;
+		// the @Redirect replacing NeoForge's own per-block renderBatched call stays on the stub — moving a
+		// renderer takeover onto the carrier's pipeline is not this generic pass's to decide.
+		assertEquals(1, MixinStubRebind.adapt(mixin, name -> compiler));
+		assertEquals(List.of("compile(Lnet/minecraft/core/SectionPos;Lnet/minecraft/client/renderer/chunk/RenderChunkRegion;"
+				+ "Lcom/mojang/blaze3d/vertex/VertexSorting;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;"
+				+ "Ljava/util/List;)Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;"), selectors(mixin, "hookBuild"));
+		assertEquals(List.of("compile"), selectors(mixin, "renderBlockProxy"));
 	}
 
 	/** MixinFit asks the same group rule: owo's lang mixin reads FIT where the three move, PARTIAL where they cannot. */
@@ -487,17 +523,17 @@ class MixinStubRebindTest {
 		return method == null ? null : method.name + method.desc;
 	}
 
-	/** The mirror: MinecraftForge forwards PackDetector's two-argument detectPackResources; NeoForge kept it as the body. */
+	/** The mirror: on 1.21.1 PackDetector keeps its single two-argument detectPackResources as the body. */
 	@Test void aNeoForgeModMovesOffAStubOnlyMinecraftForgeHas() throws Exception {
 		String owner = "net/minecraft/server/packs/repository/PackDetector";
 		ClassNode detector = merged(owner);
-		for (Ecosystem ecosystem : List.of(Ecosystem.NEOFORGE, Ecosystem.NEOFORGE)) {
+		for (Ecosystem ecosystem : List.of(Ecosystem.FABRIC, Ecosystem.NEOFORGE)) {
 			ClassNode mixin = synthetic("com/example/PackDetectorMixin", owner, "onDetect", "(" + CALLBACK_INFO_RETURNABLE + ")V", false,
 					injector(INJECT, "detectPackResources", List.of(at("HEAD"))));
 			MixinStubRebind.noteEcosystem(mixin.name, ecosystem);
-			assertEquals(ecosystem == Ecosystem.NEOFORGE ? 1 : 0, MixinStubRebind.adapt(mixin, name -> detector), ecosystem.name());
-			assertEquals(List.of(ecosystem == Ecosystem.NEOFORGE ? "detectPackResources(Ljava/nio/file/Path;Ljava/util/List;Z)Ljava/lang/Object;"
-					: "detectPackResources"), selectors(mixin, "onDetect"), ecosystem.name());
+			assertEquals(0, MixinStubRebind.adapt(mixin, name -> detector), ecosystem.name()
+					+ ": NeoForge 21.1 kept the two-argument method as the body and added no overload, so no row moves either family");
+			assertEquals(List.of("detectPackResources"), selectors(mixin, "onDetect"), ecosystem.name());
 		}
 	}
 
