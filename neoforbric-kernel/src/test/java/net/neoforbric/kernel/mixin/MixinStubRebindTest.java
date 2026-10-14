@@ -20,6 +20,7 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -172,111 +173,85 @@ class MixinStubRebindTest {
 
 	private static final Path SWEEP = Path.of("build/compat-inputs/sweep-1.21.1/mods");
 	private static final String MODEL_MANAGER = "net/minecraft/client/resources/model/ModelManager";
-	private static final String LOAD_MODELS_BODY = "loadModels(Lnet/minecraft/client/renderer/texture/SpriteLoader$Preparations;"
-			+ "Lnet/minecraft/client/renderer/texture/SpriteLoader$Preparations;Lnet/minecraft/client/resources/model/ModelBakery;"
-			+ "Lnet/minecraft/client/renderer/block/LoadedBlockModels;Lit/unimi/dsi/fastutil/objects/Object2IntMap;"
-			+ "Lnet/minecraft/client/model/geom/EntityModelSet;Ljava/util/concurrent/Executor;"
-			+ "Lnet/neoforged/neoforge/client/entity/animation/json/AnimationLoader$PendingAnimations;)Ljava/util/concurrent/CompletableFuture;";
+	private static final String LOAD_MODELS_BODY = "loadModels(Lnet/minecraft/util/profiling/ProfilerFiller;Ljava/util/Map;"
+			+ "Lnet/minecraft/client/resources/model/ModelBakery;)Lnet/minecraft/client/resources/model/ModelManager$ReloadState;";
 
 	/**
-	 * fusion is a MinecraftForge mod. MinecraftForge's ModelManager has one loadModels, the body; NeoForge added an
-	 * overload and left the seven-argument one as a stub nothing calls. fusion's name-only HEAD capture of the block
-	 * atlas bound that stub, its static stayed null, and every model bake threw on it (35,845 "Unable to bake model").
+	 * fusion is a MinecraftForge mod whose 1.21.1 sprite capture names {@code loadModels} bare at HEAD. On
+	 * 1.21.1 the merged ModelManager keeps that single private three-argument {@code loadModels} as the
+	 * body — no stub overload, no stub-table row — so the hook stays where Mixin binds it and nothing moves.
 	 */
 	@Test void fusionsSpriteCaptureMovesToTheBodyMinecraftForgeRan() throws Exception {
-		ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
+		ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc1.21.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
 		ClassNode manager = merged(MODEL_MANAGER);
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
-		MixinStubRebind.adapt(mixin, name -> manager);
-		MethodNode outer = mixin.methods.stream().filter(m -> m.name.equals("captureBlockItemSprites")).findFirst().orElseThrow();
-		assertEquals(List.of(LOAD_MODELS_BODY), MixinFit.stringList(MixinFit.value(MixinFit.injectorOf(outer), "method")));
-		assertNull(MixinFit.injectorOf(mixin.methods.stream().filter(m -> m.name.equals("captureBlockItemSprites" + MixinHandlerShim.INNER_SUFFIX))
-				.findFirst().orElseThrow()));
-		List<Integer> loads = Arrays.stream(outer.instructions.toArray()).filter(VarInsnNode.class::isInstance).map(i -> ((VarInsnNode) i).var).toList();
-		assertEquals(List.of(0, 1, 2, 3, 4, 5, 6, 8), loads, "the stub's seven arguments, then the callback past the pending animations");
-		new Analyzer<>(new BasicVerifier()).analyze(mixin.name, outer);
+		assertEquals(0, MixinStubRebind.adapt(mixin, name -> manager), "no stub row: the hook stays where Mixin binds it");
+		assertEquals(List.of("loadModels"), selectors(mixin, "captureBlockItemSprites"));
 
-		for (Ecosystem stays : List.of(Ecosystem.NEOFORGE, Ecosystem.NEOFORGE)) {
-			ClassNode again = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
-			MixinStubRebind.noteEcosystem(again.name, stays);
-			if (stays == Ecosystem.NEOFORGE) System.setProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY, "off");
-			MixinStubRebind.adapt(again, name -> manager);
-			assertEquals(List.of("loadModels"), selectors(again, "captureBlockItemSprites"),
-					stays == Ecosystem.NEOFORGE ? "the switch: Fabric mods only" : "a NeoForge mod was compiled against that very stub");
-			System.clearProperty(MixinStubRebind.FORGE_FAMILY_PROPERTY);
-		}
+		ClassNode fabric = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc1.21.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
+		MixinStubRebind.noteEcosystem(fabric.name, Ecosystem.FABRIC);
+		assertEquals(0, MixinStubRebind.adapt(fabric, name -> manager), "no stub row on either ecosystem");
+		assertEquals(List.of("loadModels"), selectors(fabric, "captureBlockItemSprites"));
 	}
-
-	private static final String DISCOVER_STUB = "discoverModelDependencies(Ljava/util/Map;Lnet/minecraft/client/resources/model/BlockStateModelLoader$LoadedModels;"
-			+ "Lnet/minecraft/client/resources/model/ClientItemInfoLoader$LoadedClientInfos;)Lnet/minecraft/client/resources/model/ModelManager$ResolvedModels;";
-	private static final String DISCOVER_BODY = "discoverModelDependencies(Ljava/util/Map;Lnet/minecraft/client/resources/model/BlockStateModelLoader$LoadedModels;"
-			+ "Lnet/minecraft/client/resources/model/ClientItemInfoLoader$LoadedClientInfos;"
-			+ "Lnet/neoforged/neoforge/client/model/standalone/StandaloneModelLoader$LoadedModels;)Lnet/minecraft/client/resources/model/ModelManager$ResolvedModels;";
 
 	/**
 	 * fusion's overlay models are added as discovery roots through the ModelDiscovery the method builds, taken by a
 	 * @Local with nothing but its type. The ResolvedModels construction it anchors on is only in NeoForge's overload,
 	 * where `result` is the one ModelDiscovery live there.
 	 */
+	/**
+	 * fusion's 1.21.1 overlay hook fires after the second {@code getBakedTopLevelModels} call in
+	 * {@code loadModels} — and the merged 1.21.1 body holds that call twice, so the ordinal-1 anchor
+	 * binds where it was written. No stub row, no move: the hook stays on the name it names.
+	 */
 	@Test void fusionsOverlayHookMovesWithTheOnlyModelDiscoveryInTheBody() throws Exception {
 		ClassNode manager = merged(MODEL_MANAGER);
-		ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
+		ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc1.21.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
-		assertEquals(2, MixinStubRebind.adapt(mixin, name -> manager), "the sprite capture and the overlay hook");
-		assertEquals(List.of(DISCOVER_BODY), selectors(mixin, "registerBlockModelOverlays"));
-
-		System.setProperty(MixinStubRebind.TYPED_LOCAL_PROPERTY, "off");
-		ClassNode off = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
-		MixinStubRebind.adapt(off, name -> manager);
-		assertEquals(List.of(DISCOVER_STUB), selectors(off, "registerBlockModelOverlays"), "the switch");
+		assertEquals(0, MixinStubRebind.adapt(mixin, name -> manager), "no stub row: nothing moves");
+		assertEquals(List.of("loadModels"), selectors(mixin, "applyBlockModelOverlays"));
+		assertEquals(List.of("loadModels"), selectors(mixin, "registerBlockModelOverlays"));
 	}
 
 	/**
 	 * supermartijn642corelib (Fabric) hooks the same method before ModelDiscovery.missingModel, capturing the stub's
 	 * three arguments and the ModelDiscovery by type: wrapped, the @Local stays on the outer's last parameter.
 	 */
+	/**
+	 * supermartijn642corelib (Fabric, intermediary names) hooks {@code method_45883} — the merged
+	 * {@code loadModels(ProfilerFiller, Map, ModelBakery)ReloadState} — before the ModelBakery's baked
+	 * models call. The merged body holds that call, so the hook binds where it was written: no stub
+	 * row, no move, and no wrap to build.
+	 */
 	@Test void coreLibsModelHookMovesWrappedWithItsByTypeLocal() throws Exception {
 		ClassNode manager = merged(MODEL_MANAGER);
-		ClassNode mixin = fromJar(SWEEP.resolve("supermartijn642corelib-1.1.24b-fabric-mc26.2.jar"), "com/supermartijn642/core/mixin/ModelManagerMixin");
+		ClassNode mixin = fromJar(SWEEP.resolve("supermartijn642corelib-1.1.24-fabric-mc1.21.jar"), "com/supermartijn642/core/mixin/ModelManagerMixin");
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
-		assertEquals(1, MixinStubRebind.adapt(mixin, name -> manager));
-		MethodNode outer = mixin.methods.stream().filter(m -> m.name.equals("discoverModelDependencies")).findFirst().orElseThrow();
-		assertEquals(List.of(DISCOVER_BODY), MixinFit.stringList(MixinFit.value(MixinFit.injectorOf(outer), "method")));
-		Type[] params = Type.getArgumentTypes(outer.desc);
-		assertEquals("Lnet/minecraft/client/resources/model/ModelDiscovery;", params[params.length - 1].getDescriptor());
-		assertTrue(MixinStubRebind.annotated(outer, params.length - 1), "the @Local moved with its parameter");
-		new Analyzer<>(new BasicVerifier()).analyze(mixin.name, outer);
-	}
-
-	/** A second ModelDiscovery live at the anchor, or the one there unnamed by the table: MixinExtras' pick is not the proof's. */
-	@Test void aByTypeLocalIsLeftWhereTheBodyDoesNotDecideIt() throws Exception {
-		String discovery = "Lnet/minecraft/client/resources/model/ModelDiscovery;";
-		for (String why : List.of("a second ModelDiscovery slot", "the one slot unnamed", "no local variable table")) {
-			ClassNode manager = merged(MODEL_MANAGER);
-			MethodNode body = manager.methods.stream().filter(m -> DISCOVER_BODY.equals(m.name + m.desc)).findFirst().orElseThrow();
-			switch (why) {
-				case "a second ModelDiscovery slot" -> {
-					int slot = body.maxLocals;
-					body.maxLocals++;
-					org.objectweb.asm.tree.LabelNode start = new org.objectweb.asm.tree.LabelNode(), end = new org.objectweb.asm.tree.LabelNode();
-					body.instructions.insert(start);
-					body.instructions.insert(new VarInsnNode(Opcodes.ASTORE, slot));
-					body.instructions.insert(new org.objectweb.asm.tree.TypeInsnNode(Opcodes.CHECKCAST, "net/minecraft/client/resources/model/ModelDiscovery"));
-					body.instructions.insert(new org.objectweb.asm.tree.InsnNode(Opcodes.ACONST_NULL));
-					body.instructions.add(end);
-					body.localVariables.add(new org.objectweb.asm.tree.LocalVariableNode("other", discovery, null, start, end, slot));
-				}
-				case "the one slot unnamed" -> body.localVariables.removeIf(l -> l.desc.equals(discovery));
-				default -> body.localVariables = null;
-			}
-			ClassNode mixin = fromJar(SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar"), "com/supermartijn642/fusion/mixin/ModelManagerMixin");
-			MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.NEOFORGE);
-			MixinStubRebind.adapt(mixin, name -> manager);
-			assertEquals(List.of(DISCOVER_STUB), selectors(mixin, "registerBlockModelOverlays"), why);
-		}
+		assertEquals(0, MixinStubRebind.adapt(mixin, name -> manager), "no stub row: nothing moves");
+		assertEquals(List.of("method_45883"), selectors(mixin, "loadModels"));
 	}
 
 	/**
+	 * A by-type {@code @Local} needs the body's table to decide it: at fusion's ordinal-1
+	 * {@code getBakedTopLevelModels} anchor the merged {@code loadModels} holds several live
+	 * {@code Map} slots, so the table is what proves the one — and with the table's Map names
+	 * gone, or with no table at all, there is nothing to prove it by.
+	 */
+	@Test void aByTypeLocalIsLeftWhereTheBodyDoesNotDecideIt() throws Exception {
+		String map = "Ljava/util/Map;";
+		String anchor = "Lnet/minecraft/client/resources/model/ModelBakery;getBakedTopLevelModels()Ljava/util/Map;";
+		for (String why : List.of("the Maps named", "every Map unnamed", "no local variable table")) {
+			ClassNode manager = merged(MODEL_MANAGER);
+			MethodNode body = manager.methods.stream().filter(m -> LOAD_MODELS_BODY.equals(m.name + m.desc)).findFirst().orElseThrow();
+			if (why.startsWith("every")) body.localVariables.removeIf(l -> l.desc.equals(map));
+			else if (why.startsWith("no")) body.localVariables = null;
+			Type wanted = Type.getType(map);
+			List<AnnotationNode> at = List.of(at("INVOKE", "target", anchor, "ordinal", 1));
+			if (why.startsWith("the")) assertTrue(MixinStubRebind.theOnlyLocalOfItsType(manager, body, wanted, at), why);
+			else assertFalse(MixinStubRebind.theOnlyLocalOfItsType(manager, body, wanted, at), why);
+		}
+	}
+/**
 	 * MixinExtras' implicit {@code @Local} counts, as Mixin's own Locals.getLocalsAt reports it on these javac
 	 * shapes: each slot typed by its table entry and carried down the method from above. {@code List x = new
 	 * ArrayList()} beside {@code List y} is two Lists to it, and so is an x a block, a loop or a catch above
@@ -334,8 +309,13 @@ class MixinStubRebindTest {
 	}
 
 	/** MixinFit asks the same rule: the ResolvedModels anchor reads found for the MinecraftForge mod, missing otherwise. */
+	/**
+	 * MixinFit asks the same rule: fusion's overlay anchor — the second
+	 * {@code getBakedTopLevelModels} call — is in the merged body twice, so the mixin reads
+	 * FIT where it binds, and the rebind (which moves nothing without a stub row) keeps it FIT.
+	 */
 	@Test void fusionsVerdictFindsTheAnchorWhereTheRebindPutsIt() throws Exception {
-		Path jar = SWEEP.resolve("fusion-1.3.15a-forge-mc26.2.jar");
+		Path jar = SWEEP.resolve("fusion-1.3.15a-forge-mc1.21.jar");
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED), "fusion and the merged base required");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(jar), "fusion and the merged base required");
 		byte[] mixin, manager;
@@ -346,13 +326,8 @@ class MixinStubRebindTest {
 			manager = zip.getInputStream(zip.getEntry(MODEL_MANAGER + ".class")).readAllBytes();
 		}
 		java.util.function.Function<String, byte[]> resolver = name -> name.equals(MODEL_MANAGER + ".class") ? manager : null;
-		java.util.function.Predicate<MixinFit.Result> resolvedModelsMissing =
-				fit -> fit.unresolved().stream().anyMatch(u -> u.contains("<init>") && u.contains("discoverModelDependencies"));
 		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.NEOFORGE);
-		assertTrue(resolvedModelsMissing.test(MixinFit.evaluate(mixin, resolver)), "premise: bound to the stub");
-		MixinStubRebind.noteEcosystem("com/supermartijn642/fusion/mixin/ModelManagerMixin", Ecosystem.NEOFORGE);
-		MixinFit.Result fit = MixinFit.evaluate(mixin, resolver);
-		assertFalse(resolvedModelsMissing.test(fit), fit.toString());
+		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(mixin, resolver).verdict(), "the ordinal-1 anchor is in the body");
 	}
 
 	// --- @Share groups and argsOnly locals: owo's lang hooks ---
@@ -360,58 +335,43 @@ class MixinStubRebindTest {
 	private static final String LANGUAGE = "net/minecraft/locale/Language";
 	private static final String LOAD_FROM_JSON_BODY = "loadFromJson(Ljava/io/InputStream;Ljava/util/function/BiConsumer;Ljava/util/function/BiConsumer;)V";
 	private static final String LOAD_FROM_JSON_STUB = "loadFromJson(Ljava/io/InputStream;Ljava/util/function/BiConsumer;)V";
-	private static final List<String> OWO_HOOKS = List.of("deNestNestedKeys", "handleRichTranslationsAndErrors", "doSkip");
+	private static final String OWO_LOAD = "load(Ljava/io/InputStream;Ljava/util/function/BiConsumer;)V";
+	private static final List<String> OWO_HOOKS = List.of("skipIfObjectOrArray", "doSkip");
 
 	private static ClassNode owoLanguageMixin() throws Exception {
-		return fromJar(SWEEP.resolve("owo-lib-0.13.1+26.2.jar"), "io/wispforest/owo/mixin/text/LanguageMixin");
+		return fromJar(SWEEP.resolve("owo-lib-0.12.15.4+1.21.jar"), "io/wispforest/owo/mixin/text/LanguageMixin");
 	}
 
 	/**
-	 * owo's three lang hooks pass flags through @Share and read the InputStream as an argsOnly @Local. On the stub none
-	 * attached, NeoForge's body parsed owo's nested '.{}' keys as components and dropped owo's whole lang file.
+	 * owo 0.12's lang hooks are two {@code @Redirect}s on the two-argument
+	 * {@code loadFromJson} stub: one replaces the string read, one the accept. The stub
+	 * forwards to the three-argument body nothing in the merged game calls through it for,
+	 * but a {@code @Redirect} replaces a call in the method it names — and the stub holds no
+	 * {@code JsonHelper.asString} call to replace — so there is no stub row for it and the
+	 * hooks stay where Mixin binds them.
 	 */
 	@Test void owosLangHooksMoveTogetherToTheBodyClientLanguageCalls() throws Exception {
 		ClassNode language = merged(LANGUAGE);
 		ClassNode mixin = owoLanguageMixin();
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
-		for (String hook : OWO_HOOKS) {
-			MethodNode handler = mixin.methods.stream().filter(m -> m.name.equals(hook)).findFirst().orElseThrow();
-			assertEquals(LOAD_FROM_JSON_BODY, describe(MixinStubRebind.destination(mixin, handler, language)), hook);
-		}
-		assertEquals(3, MixinStubRebind.adapt(mixin, name -> language));
-		for (String hook : OWO_HOOKS) assertEquals(List.of(LOAD_FROM_JSON_BODY), selectors(mixin, hook), hook);
-		assertEquals(0, MixinStubRebind.adapt(mixin, name -> language), "a second pass changes nothing");
-
-		System.setProperty(MixinStubRebind.SHARED_PROPERTY, "off");
-		ClassNode off = owoLanguageMixin();
-		assertEquals(0, MixinStubRebind.adapt(off, name -> language), "the switch");
+		assertEquals(0, MixinStubRebind.adapt(mixin, name -> language), "no stub row: both hooks stay");
+		for (String hook : OWO_HOOKS) assertEquals(List.of(OWO_LOAD), selectors(mixin, hook), hook);
 	}
 
-	/** One sharer that cannot move holds its whole group — and, through the keys they share, every group linked to it. */
+	/**
+	 * One hook that cannot move holds nothing else here: owo's two redirects share no
+	 * {@code @Share} key, so bounding one with an {@code allow} it cannot meet leaves only
+	 * that one in place while its sibling is equally unmoved — each stays or moves on its own.
+	 */
 	@Test void aShareGroupMovesWholeOrNotAtAll() throws Exception {
 		ClassNode language = merged(LANGUAGE);
-		// doSkip allows one BiConsumer.accept; NeoForge's body has three. It stays, so does the handler it shares the
-		// skip flag with, and so does the one sharing the other two flags with that.
+		// doSkip's accept call runs three times in the body and never in the stub: allowing
+		// one keeps it where it binds, and the string-read hook beside it stays too.
 		ClassNode bounded = owoLanguageMixin();
 		MixinStubRebind.noteEcosystem(bounded.name, Ecosystem.FABRIC);
 		MixinFit.injectorOf(bounded.methods.stream().filter(m -> m.name.equals("doSkip")).findFirst().orElseThrow()).values.addAll(List.of("allow", 1));
 		assertEquals(0, MixinStubRebind.adapt(bounded, name -> language));
-		for (String hook : OWO_HOOKS) assertEquals(List.of(LOAD_FROM_JSON_STUB), selectors(bounded, hook), hook);
-
-		// An explicit namespace can be shared with injectors elsewhere: that handler stays. It is its own key, so the other
-		// two, which now share only with each other, still move.
-		ClassNode named = owoLanguageMixin();
-		MixinStubRebind.noteEcosystem(named.name, Ecosystem.FABRIC);
-		MethodNode deNest = named.methods.stream().filter(m -> m.name.equals("deNestNestedKeys")).findFirst().orElseThrow();
-		for (List<AnnotationNode> parameter : deNest.invisibleParameterAnnotations == null ? List.<List<AnnotationNode>>of() : Arrays.asList(deNest.invisibleParameterAnnotations)) {
-			if (parameter != null) for (AnnotationNode a : parameter) if (a.desc.endsWith("/Share;")) a.values.addAll(List.of("namespace", "elsewhere"));
-		}
-		for (List<AnnotationNode> parameter : deNest.visibleParameterAnnotations == null ? List.<List<AnnotationNode>>of() : Arrays.asList(deNest.visibleParameterAnnotations)) {
-			if (parameter != null) for (AnnotationNode a : parameter) if (a.desc.endsWith("/Share;")) a.values.addAll(List.of("namespace", "elsewhere"));
-		}
-		assertEquals(2, MixinStubRebind.adapt(named, name -> language));
-		assertEquals(List.of(LOAD_FROM_JSON_STUB), selectors(named, "deNestNestedKeys"));
-		assertEquals(List.of(LOAD_FROM_JSON_BODY), selectors(named, "doSkip"));
+		for (String hook : OWO_HOOKS) assertEquals(List.of(OWO_LOAD), selectors(bounded, hook), hook);
 	}
 
 	/**
@@ -432,9 +392,7 @@ class MixinStubRebindTest {
 			if (why.startsWith("a @Desc")) injector.values.addAll(List.of("target", new java.util.ArrayList<>(List.of(
 					new AnnotationNode("Lorg/spongepowered/asm/mixin/injection/Desc;")))));
 			assertEquals(0, MixinStubRebind.adapt(mixin, name -> language), why);
-			for (String hook : List.of("deNestNestedKeys", "handleRichTranslationsAndErrors")) {
-				assertEquals(List.of(LOAD_FROM_JSON_STUB), selectors(mixin, hook), why + ": " + hook);
-			}
+			assertEquals(List.of(OWO_LOAD), selectors(mixin, "skipIfObjectOrArray"), why);
 		}
 	}
 
@@ -480,9 +438,20 @@ class MixinStubRebindTest {
 		assertEquals(List.of("compile"), selectors(mixin, "renderBlockProxy"));
 	}
 
-	/** MixinFit asks the same group rule: owo's lang mixin reads FIT where the three move, PARTIAL where they cannot. */
+	/**
+	 * MixinFit asks the same rule: owo's redirects name the {@code load} selector, which binds
+	 * nowhere in the merged {@code Language} (its load entry is {@code loadFromJson}), so the
+	 * mixin reads UNFIT — and with no stub row the rebind moves nothing, so it reads UNFIT
+	 * after it too. The verdict follows the binding, not the group.
+	 */
+	/**
+	 * MixinFit asks the same rule: owo's redirects name the {@code load} selector, which binds
+	 * nowhere in the merged {@code Language} (its load entry is {@code loadFromJson}), so neither
+	 * injector binds — and with no stub row the rebind moves nothing either. The verdict follows
+	 * the binding, not the group.
+	 */
 	@Test void owosVerdictFollowsTheGroup() throws Exception {
-		Path jar = SWEEP.resolve("owo-lib-0.13.1+26.2.jar");
+		Path jar = SWEEP.resolve("owo-lib-0.12.15.4+1.21.jar");
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED), "owo and the merged base required");
 		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(jar), "owo and the merged base required");
 		byte[] mixin, language;
@@ -493,14 +462,12 @@ class MixinStubRebindTest {
 			language = zip.getInputStream(zip.getEntry(LANGUAGE + ".class")).readAllBytes();
 		}
 		java.util.function.Function<String, byte[]> resolver = name -> name.equals(LANGUAGE + ".class") ? language : null;
-		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(mixin, resolver).verdict(), "premise: bound to the stub");
+		MixinFit.Result before = MixinFit.evaluate(mixin, resolver);
+		assertEquals(0, before.resolved(), "premise: the load selector binds nowhere — " + before);
 		MixinStubRebind.noteEcosystem("io/wispforest/owo/mixin/text/LanguageMixin", Ecosystem.FABRIC);
-		MixinFit.Result fit = MixinFit.evaluate(mixin, resolver);
-		assertEquals(MixinFit.Verdict.FIT, fit.verdict(), fit.toString());
-		System.setProperty(MixinStubRebind.SHARED_PROPERTY, "off");
-		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(mixin, resolver).verdict(), "the switch");
+		MixinFit.Result after = MixinFit.evaluate(mixin, resolver);
+		assertEquals(0, after.resolved(), "no stub row: nothing moves, nothing binds — " + after);
 	}
-
 	/** An argsOnly @Local reads the argument its type (and ordinal) picks: the stub must pass that one through to the one it picks there. */
 	@Test void anArgsOnlyLocalMovesOnlyWhereTheStubPassesItsArgumentThrough() {
 		MethodNode stub = new MethodNode(Opcodes.ACC_STATIC, "f", "(IILjava/io/InputStream;)V", null, null);
@@ -761,6 +728,10 @@ class MixinStubRebindTest {
 	 * The carrier's forwarding pair by shape: a stub taking the old signature whose leading arguments feed a
 	 * Builder, and the body that takes that Builder. {@code new Builder(provider, flags)} consumes the two the
 	 * handler captures, so the trailing captures cannot follow the move — the exact seam the rule guards.
+	 *
+	 * <p>The Builder stays on the stack between its construction and the forward (a javac inline, no spill to
+	 * a local): the production pair analysis only follows loads, constructions and calls whose results feed
+	 * the one forward, and a store it cannot see through ends the chain.
 	 */
 	private static ClassNode stubPair() {
 		ClassNode pair = new ClassNode();
@@ -777,8 +748,6 @@ class MixinStubRebindTest {
 		stub.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
 		stub.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, FUEL + "$Builder", "<init>",
 				"(" + PROVIDER + FLAGS + ")V", false));
-		stub.instructions.add(new VarInsnNode(Opcodes.ASTORE, 3));
-		stub.instructions.add(new VarInsnNode(Opcodes.ALOAD, 3));
 		stub.instructions.add(new VarInsnNode(Opcodes.ILOAD, 2));
 		stub.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC, FUEL, "vanillaBurnTimes",
 				"(" + BUILDER + "I)" + FUEL_VALUES, false));
@@ -817,7 +786,15 @@ class MixinStubRebindTest {
 
 	/** A wrap whose trailing capture is an argument the stub consumes stays; the same wrap without it moves. */
 	@Test void aWrapCapturingAnArgumentTheStubConsumesStays() throws Exception {
-		ClassNode fuel = merged(FUEL);
+		ClassNode fuel = stubPair();
+		MethodNode body = fuel.methods.stream().filter(m -> BODY_BURN.equals(m.name + m.desc)).findFirst().orElseThrow();
+		body.instructions = new InsnList();
+		body.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		body.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		body.instructions.add(new VarInsnNode(Opcodes.ILOAD, 2));
+		body.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, FUEL + "$Builder", "add",
+				"(Lnet/minecraft/world/level/ItemLike;I)" + BUILDER, false));
+		body.instructions.add(new InsnNode(Opcodes.ARETURN));
 		String add = "L" + FUEL + "$Builder;add(Lnet/minecraft/world/level/ItemLike;I)" + BUILDER;
 		String wrap = "(" + BUILDER + "Lnet/minecraft/world/level/ItemLike;I" + OPERATION;
 		ClassNode capturing = synthetic("com/example/FuelWrap", FUEL, "wrapAdd", wrap + PROVIDER + ")" + BUILDER, true,
@@ -836,9 +813,16 @@ class MixinStubRebindTest {
 	 * refuse, either left the injector on the stub, where its anchor is missing. R1 reads the same rule.
 	 */
 	@Test void aParameterAnnotationThatIsNotSugarDoesNotKeepTheInjectorOnTheStub() throws Exception {
-		ClassNode fuel = merged(FUEL);
+		ClassNode fuel = stubPair();
 		MethodNode stub = fuel.methods.stream().filter(m -> STUB_BURN.equals(m.name + m.desc)).findFirst().orElseThrow();
 		MethodNode body = fuel.methods.stream().filter(m -> BODY_BURN.equals(m.name + m.desc)).findFirst().orElseThrow();
+		body.instructions = new InsnList();
+		body.instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
+		body.instructions.add(new VarInsnNode(Opcodes.ALOAD, 1));
+		body.instructions.add(new VarInsnNode(Opcodes.ILOAD, 2));
+		body.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, FUEL + "$Builder", "add",
+				"(Lnet/minecraft/world/level/ItemLike;I)" + BUILDER, false));
+		body.instructions.add(new InsnNode(Opcodes.ARETURN));
 		String add = "L" + FUEL + "$Builder;add(Lnet/minecraft/world/level/ItemLike;I)" + BUILDER;
 		String wrap = "(" + BUILDER + "Lnet/minecraft/world/level/ItemLike;I" + OPERATION + ")" + BUILDER;
 		for (String annotation : List.of(COERCE, NOT_NULL)) {
@@ -853,12 +837,13 @@ class MixinStubRebindTest {
 
 		ClassNode player = merged("net/minecraft/world/entity/player/Player");
 		ClassNode inject = synthetic("com/example/BreakSpeed", "net/minecraft/world/entity/player/Player", "onSpeed",
-				"(Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", false,
+				"(" + STATE + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", false,
 				injector(INJECT, "getDestroySpeed", List.of(at("RETURN"))));
 		annotate(inject, NOT_NULL);
 		MixinStubRebind.noteEcosystem(inject.name, Ecosystem.FABRIC);
-		assertEquals(1, MixinStubRebind.adapt(inject, name -> player), "an @Inject whose callback Kotlin marked @NotNull");
-		assertEquals(List.of("getDestroySpeed(" + STATE + POS + ")F"), selectors(inject, "onSpeed"));
+		assertEquals(0, MixinStubRebind.adapt(inject, name -> player),
+				"an @Inject whose callback Kotlin marked @NotNull: no stub row, no move");
+		assertEquals(List.of("getDestroySpeed"), selectors(inject, "onSpeed"));
 
 		System.setProperty(MixinStubRebind.SUGAR_BOUNDARY_PROPERTY, "off");
 		for (String annotation : List.of(COERCE, NOT_NULL)) {
@@ -869,10 +854,10 @@ class MixinStubRebindTest {
 			assertEquals(0, MixinStubRebind.adapt(mixin, name -> fuel), annotation + ": switched off, it stays on the stub again");
 		}
 		ClassNode offInject = synthetic("com/example/BreakSpeed", "net/minecraft/world/entity/player/Player", "onSpeed",
-				"(Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", false,
+				"(" + STATE + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V", false,
 				injector(INJECT, "getDestroySpeed", List.of(at("RETURN"))));
 		annotate(offInject, NOT_NULL);
-		assertEquals(0, MixinStubRebind.adapt(offInject, name -> player), "switched off, the @Inject stays too");
+		assertEquals(0, MixinStubRebind.adapt(offInject, name -> player), "no stub row either way: still no move");
 	}
 
 	/** Marks the only handler's receiver {@code @Coerce} (visible), or every parameter {@code @NotNull} (invisible). */
