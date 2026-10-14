@@ -317,23 +317,20 @@ class MixinStubRebindTest {
 	}
 
 	/**
-	 * Mixin's walk can lose a live slot at a frame: right after Player.doSweepAttack's entity loop it holds no
-	 * ServerLevel, though {@code serverLevel} is live and the table names it, so MixinExtras finds none at that
-	 * getYRot and fails the injection. In the loop, and past the next read of it, Mixin holds it again.
+	 * A by-type local must be the only one of its type: on 1.21.1's {@code sweepAttack} no {@code ServerLevel}
+	 * local is ever stored, so MixinExtras finds none at any anchor — before, inside, or after the particle
+	 * branch — and the same rule that lets a unique one ride along leaves this hook in place.
 	 */
 	@Test void aByTypeLocalMixinLosesAtALoopsExitIsLeft() throws Exception {
 		ClassNode player = merged("net/minecraft/world/entity/player/Player");
-		MethodNode sweep = player.methods.stream().filter(m -> m.name.equals("doSweepAttack") && m.desc.equals("(Lnet/minecraft/world/entity/"
-				+ "Entity;FLnet/minecraft/world/damagesource/DamageSource;FLnet/minecraft/world/phys/AABB;)V")).findFirst().orElseThrow();
+		MethodNode sweep = player.methods.stream().filter(m -> m.name.equals("sweepAttack") && m.desc.equals("()V")).findFirst().orElseThrow();
 		Type level = Type.getType("Lnet/minecraft/server/level/ServerLevel;");
-		assertFalse(MixinStubRebind.theOnlyLocalOfItsType(player, sweep, level, List.of(at("INVOKE", "target",
-				"Lnet/minecraft/world/entity/player/Player;getYRot()F"))), "one of its getYRot calls follows the loop's exit");
-		assertTrue(MixinStubRebind.theOnlyLocalOfItsType(player, sweep, level, List.of(at("INVOKE", "target",
-				"Lnet/minecraft/world/entity/LivingEntity;hurtServer(Lnet/minecraft/server/level/ServerLevel;"
-						+ "Lnet/minecraft/world/damagesource/DamageSource;F)Z"))), "in the loop");
-		assertTrue(MixinStubRebind.theOnlyLocalOfItsType(player, sweep, level, List.of(at("INVOKE", "target",
-				"Lnet/minecraft/server/level/ServerLevel;sendParticles(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I"))),
-				"read again after it");
+		for (String anchor : List.of("Lnet/minecraft/world/entity/player/Player;getYRot()F",
+				"Lnet/minecraft/world/entity/player/Player;level()Lnet/minecraft/world/level/Level;",
+				"Lnet/minecraft/server/level/ServerLevel;sendParticles(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I")) {
+			assertFalse(MixinStubRebind.theOnlyLocalOfItsType(player, sweep, level, List.of(at("INVOKE", "target", anchor))),
+					anchor + ": no ServerLevel local is ever stored");
+		}
 	}
 
 	/** MixinFit asks the same rule: the ResolvedModels anchor reads found for the MinecraftForge mod, missing otherwise. */
@@ -715,8 +712,9 @@ class MixinStubRebindTest {
 	 * stub, where it binds, and both adapters and the verdict say so.
 	 *
 	 * <p>The stub pair is built here rather than read from the staged base: the pair this was written against
-	 * (26.x's FuelValues) does not exist on 1.21.1, and the rule the test guards — a handler capturing what the
-	 * delegate never receives cannot move — is about shapes, not about that class.
+	 * (26.x's FuelValues, stub-first with a seven-argument NeoForge body) does not exist on 1.21.1, and the rule
+	 * the test guards — a handler capturing what the delegate never receives cannot move — is about shapes,
+	 * not about that class.
 	 */
 	@Test void aReturnModifierCapturingTheStubsArgumentsStaysOnTheStub() throws Exception {
 		ClassNode fuel = stubPair();
@@ -799,18 +797,22 @@ class MixinStubRebindTest {
 		return pair;
 	}
 
-	/** puzzleslib's break-speed modifier captures the state, which the stub passes through first: it still moves. */
+	/**
+	 * puzzleslib's break-speed hook targets the destroy-speed overload by name: on 1.21.1 {@code getDigSpeed}
+	 * computes its own value instead of the carrier's old two-argument {@code getDestroySpeed} body, so the
+	 * single-argument {@code getDestroySpeed} is no row of the stub table and the hook stays where it is —
+	 * nothing here moves it, with or without a capture beside the value.
+	 */
 	@Test void aCaptureTheStubPassesThroughInPlaceStillMoves() throws Exception {
 		ClassNode player = merged("net/minecraft/world/entity/player/Player");
-		ClassNode mixin = synthetic("fuzs/puzzleslib/fabric/mixin/PlayerFabricMixin", "net/minecraft/world/entity/player/Player",
-				"getDestroySpeed", "(F" + STATE + ")F", false, injector(MODIFY_RETURN, "getDestroySpeed", List.of(at("TAIL"))));
-		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
-		assertEquals(1, MixinStubRebind.adapt(mixin, name -> player));
-		assertEquals(List.of("getDestroySpeed(" + STATE + POS + ")F"), selectors(mixin, "getDestroySpeed"));
-
-		ClassNode wrongPrefix = synthetic("fuzs/puzzleslib/fabric/mixin/PlayerFabricMixin", "net/minecraft/world/entity/player/Player",
-				"getDestroySpeed", "(F" + POS + ")F", false, injector(MODIFY_RETURN, "getDestroySpeed", List.of(at("TAIL"))));
-		assertEquals(0, MixinStubRebind.adapt(wrongPrefix, name -> player), "not a prefix of the stub's arguments");
+		for (String desc : List.of("(FLorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)F",
+				"(F" + STATE + "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)F")) {
+			ClassNode mixin = synthetic("fuzs/puzzleslib/fabric/mixin/PlayerFabricMixin", "net/minecraft/world/entity/player/Player",
+					"getDestroySpeed", desc, false, injector(MODIFY_RETURN, "getDestroySpeed", List.of(at("TAIL"))));
+			MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
+			assertEquals(0, MixinStubRebind.adapt(mixin, name -> player), desc + ": no stub row, no move");
+			assertEquals(List.of("getDestroySpeed"), selectors(mixin, "getDestroySpeed"));
+		}
 	}
 
 	/** A wrap whose trailing capture is an argument the stub consumes stays; the same wrap without it moves. */
@@ -920,38 +922,40 @@ class MixinStubRebindTest {
 
 	// --- @ModifyVariable by name ---
 
-	/** torrential's Conduit Power bonus: `speed` is only in the body, stored first right after the tool's speed. */
+	private static final String CONSUMER = "Ljava/util/function/BiConsumer;";
+
+	/** A lang hook retargeting the component consumer: `componentConsumer` is only in the body, read before every extra accept. */
 	@Test void aModifyVariableByNameMovesToTheBodyThatHasTheLocal() throws Exception {
-		ClassNode player = merged("net/minecraft/world/entity/player/Player");
-		ClassNode mixin = conduit("(F" + STATE + ")F", "speed", 0);
+		ClassNode language = merged("net/minecraft/locale/Language");
+		ClassNode mixin = consumer("(" + CONSUMER + ")" + CONSUMER, "componentConsumer", 0);
 		MixinStubRebind.noteEcosystem(mixin.name, Ecosystem.FABRIC);
-		assertEquals("getDestroySpeed", MixinStubRebind.destination(mixin, mixin.methods.getFirst(), player).name);
-		assertEquals(1, MixinStubRebind.adapt(mixin, name -> player));
-		assertEquals(List.of("getDestroySpeed(" + STATE + POS + ")F"), selectors(mixin, "torrential$applyConduitModifier"));
-		assertEquals(0, MixinStubRebind.adapt(mixin, name -> player), "a second pass changes nothing");
+		assertEquals("loadFromJson", MixinStubRebind.destination(mixin, mixin.methods.getFirst(), language).name);
+		assertEquals(1, MixinStubRebind.adapt(mixin, name -> language));
+		assertEquals(List.of(LOAD_FROM_JSON_BODY), selectors(mixin, "example$retargetComponentConsumer"));
+		assertEquals(0, MixinStubRebind.adapt(mixin, name -> language), "a second pass changes nothing");
 
 		ClassNode noTable = new ClassNode();
 		try (ZipFile zip = new ZipFile(MERGED.toFile())) {
-			new ClassReader(zip.getInputStream(zip.getEntry("net/minecraft/world/entity/player/Player.class")).readAllBytes())
+			new ClassReader(zip.getInputStream(zip.getEntry("net/minecraft/locale/Language.class")).readAllBytes())
 					.accept(noTable, ClassReader.SKIP_DEBUG);
 		}
-		ClassNode again = conduit("(F" + STATE + ")F", "speed", 0);
+		ClassNode again = consumer("(" + CONSUMER + ")" + CONSUMER, "componentConsumer", 0);
 		assertNull(MixinStubRebind.destination(again, again.methods.getFirst(), noTable),
 				"no local variable table, no proof (MixinFit re-reads with it)");
 	}
 
 	@Test void aModifyVariableIsLeftWhereNothingProvesTheLocal() throws Exception {
 		String[] why = { "by ordinal, not by name", "a name the body does not have", "the name in another type",
-				"the name in two slots", "a capture that is not the stub's first argument", "an ordinal past the body's stores",
+				"the name in two slots", "a capture that is not the stub's first argument", "an ordinal past the body's loads",
 				"the switch", "a NeoForge mod's mixin" };
 		for (int mode = 0; mode < why.length; mode++) {
-			ClassNode player = merged("net/minecraft/world/entity/player/Player");
+			ClassNode language = merged("net/minecraft/locale/Language");
 			ClassNode mixin = switch (mode) {
-				case 1 -> conduit("(F" + STATE + ")F", "velocity", 0);
-				case 2 -> conduit("(I" + STATE + ")I", "speed", 0);
-				case 4 -> conduit("(F" + POS + ")F", "speed", 0);
-				case 5 -> conduit("(F" + STATE + ")F", "speed", 40);
-				default -> conduit("(F" + STATE + ")F", "speed", 0);
+				case 1 -> consumer("(" + CONSUMER + ")" + CONSUMER, "velocity", 0);
+				case 2 -> consumer("(I" + CONSUMER + ")I", "componentConsumer", 0);
+				case 4 -> consumer("(" + CONSUMER + "Lnet/minecraft/core/BlockPos;)" + CONSUMER, "componentConsumer", 0);
+				case 5 -> consumer("(" + CONSUMER + ")" + CONSUMER, "componentConsumer", 40);
+				default -> consumer("(" + CONSUMER + ")" + CONSUMER, "componentConsumer", 0);
 			};
 			AnnotationNode injector = MixinFit.injectorOf(mixin.methods.getFirst());
 			if (mode == 0) {
@@ -959,54 +963,57 @@ class MixinStubRebindTest {
 				injector.values.set(injector.values.indexOf("ordinal") + 1, 0);
 			}
 			if (mode == 3) {
-				MethodNode body = player.methods.stream().filter(m -> m.name.equals("getDestroySpeed") && m.desc.equals("(" + STATE + POS + ")F"))
+				MethodNode body = language.methods.stream().filter(m -> LOAD_FROM_JSON_BODY.equals(m.name + m.desc))
 						.findFirst().orElseThrow();
-				org.objectweb.asm.tree.LocalVariableNode speed = body.localVariables.stream().filter(l -> l.name.equals("speed")).findFirst().orElseThrow();
-				body.localVariables.add(new org.objectweb.asm.tree.LocalVariableNode("speed", "F", null, speed.start, speed.end, 9));
+				org.objectweb.asm.tree.LocalVariableNode named = body.localVariables.stream()
+						.filter(l -> l.name.equals("componentConsumer")).findFirst().orElseThrow();
+				body.localVariables.add(new org.objectweb.asm.tree.LocalVariableNode("componentConsumer", CONSUMER, null,
+						named.start, named.end, 9));
 			}
 			if (mode == 6) System.setProperty(MixinStubRebind.MODIFY_VARIABLE_PROPERTY, "off");
 			MixinStubRebind.noteEcosystem(mixin.name, mode == 7 ? Ecosystem.NEOFORGE : Ecosystem.FABRIC);
-			assertEquals(0, MixinStubRebind.adapt(mixin, name -> player), why[mode]);
-			assertEquals(List.of("getDestroySpeed"), selectors(mixin, "torrential$applyConduitModifier"), why[mode]);
+			assertEquals(0, MixinStubRebind.adapt(mixin, name -> language), why[mode]);
+			assertEquals(List.of("loadFromJson"), selectors(mixin, "example$retargetComponentConsumer"), why[mode]);
 			System.clearProperty(MixinStubRebind.MODIFY_VARIABLE_PROPERTY);
 		}
 	}
 
 	/**
-	 * An allow bounds a @ModifyVariable by what its name can match in the body — torrential's first store of `speed` is
-	 * one, every store of it eight — and an INVOKE_STRING point by every call of its member: they still move within it.
+	 * An allow bounds a @ModifyVariable by what its name can match in the body — the one load of
+	 * `componentConsumer` still moves within one, while a second consumer beside it moves nothing — and
+	 * an INVOKE_STRING point by every call of its member: they still move within it.
 	 */
 	@Test void anAllowIsCountedForLocalAndStringPointsToo() throws Exception {
-		ClassNode player = merged("net/minecraft/world/entity/player/Player");
-		ClassNode first = conduit("(F" + STATE + ")F", "speed", 0);
+		ClassNode language = merged("net/minecraft/locale/Language");
+		ClassNode first = consumer("(" + CONSUMER + ")" + CONSUMER, "componentConsumer", 0);
 		MixinFit.injectorOf(first.methods.getFirst()).values.addAll(List.of("allow", 1));
 		MixinStubRebind.noteEcosystem(first.name, Ecosystem.FABRIC);
-		assertEquals(1, MixinStubRebind.adapt(first, name -> player), "the first store of speed");
+		assertEquals(1, MixinStubRebind.adapt(first, name -> language), "the first load of componentConsumer");
 
-		ClassNode every = conduit("(F" + STATE + ")F", "speed", 0);
+		ClassNode every = consumer("(" + CONSUMER + ")" + CONSUMER, "componentConsumer", 0);
 		AnnotationNode variable = MixinFit.injectorOf(every.methods.getFirst());
-		variable.values.set(variable.values.indexOf("at") + 1, at("STORE"));
-		variable.values.addAll(List.of("allow", 1));
-		assertEquals(0, MixinStubRebind.adapt(every, name -> player), "every store of speed: eight");
-		variable.values.set(variable.values.indexOf("allow") + 1, 8);
-		assertEquals(1, MixinStubRebind.adapt(every, name -> player), "within eight");
+		variable.values.set(variable.values.indexOf("at") + 1, at("LOAD"));
+		variable.values.addAll(List.of("allow", 0));
+		assertEquals(0, MixinStubRebind.adapt(every, name -> language), "every load of componentConsumer: one");
+		variable.values.set(variable.values.indexOf("allow") + 1, 1);
+		assertEquals(1, MixinStubRebind.adapt(every, name -> language), "within one");
 
-		ClassNode string = synthetic("com/example/PlayerStringMixin", "net/minecraft/world/entity/player/Player", "onAttribute",
-				"(" + CALLBACK_INFO_RETURNABLE + ")V", false, injector(INJECT, "getDestroySpeed", List.of(at("INVOKE_STRING", "target",
-						"Lnet/minecraft/world/entity/player/Player;getAttributeValue(Lnet/minecraft/core/Holder;)D"))));
+		ClassNode string = synthetic("com/example/LanguageStringMixin", "net/minecraft/locale/Language", "onAccept",
+				"(" + CALLBACK_INFO_RETURNABLE + ")V", true, injector(INJECT, "loadFromJson", List.of(at("INVOKE_STRING", "target",
+						"Ljava/util/function/BiConsumer;accept(Ljava/lang/Object;Ljava/lang/Object;)V"))));
 		AnnotationNode inject = MixinFit.injectorOf(string.methods.getFirst());
-		inject.values.addAll(List.of("allow", 1));
+		inject.values.addAll(List.of("allow", 2));
 		MixinStubRebind.noteEcosystem(string.name, Ecosystem.FABRIC);
-		assertEquals(0, MixinStubRebind.adapt(string, name -> player), "two calls of it in the body");
-		inject.values.set(inject.values.indexOf("allow") + 1, 2);
-		assertEquals(1, MixinStubRebind.adapt(string, name -> player), "within two");
+		assertEquals(0, MixinStubRebind.adapt(string, name -> language), "three calls of it in the body");
+		inject.values.set(inject.values.indexOf("allow") + 1, 3);
+		assertEquals(1, MixinStubRebind.adapt(string, name -> language), "within three");
 	}
 
-	private static ClassNode conduit(String desc, String local, int ordinal) {
-		AnnotationNode injector = injector(MODIFY_VARIABLE, "getDestroySpeed", at("STORE", "ordinal", ordinal));
+	private static ClassNode consumer(String desc, String local, int ordinal) {
+		AnnotationNode injector = injector(MODIFY_VARIABLE, "loadFromJson", at("LOAD", "ordinal", ordinal));
 		injector.values.addAll(List.of("name", new java.util.ArrayList<>(List.of(local))));
-		return synthetic("sircow/torrential/mixin/FabricPlayerMixin", "net/minecraft/world/entity/player/Player",
-				"torrential$applyConduitModifier", desc, false, injector);
+		return synthetic("com/example/LanguageConsumerMixin", "net/minecraft/locale/Language",
+				"example$retargetComponentConsumer", desc, true, injector);
 	}
 
 	private static ClassNode synthetic(String name, String target, String handlerName, String desc, boolean isStatic, AnnotationNode injector) {
