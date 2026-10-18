@@ -63,12 +63,12 @@ public final class NativeCoremodParity {
 	static final String RUNTIME = "net/neoforbric/kernel/runtime/KernelFinalizeSpawn";
 	static final String FINALIZE_NAME = "finalizeSpawn";
 	static final String FINALIZE_DESC = "(Lnet/minecraft/world/level/ServerLevelAccessor;Lnet/minecraft/world/DifficultyInstance;"
-			+ "Lnet/minecraft/world/entity/EntitySpawnReason;Lnet/minecraft/world/entity/SpawnGroupData;)Lnet/minecraft/world/entity/SpawnGroupData;";
+			+ "Lnet/minecraft/world/entity/MobSpawnType;Lnet/minecraft/world/entity/SpawnGroupData;)Lnet/minecraft/world/entity/SpawnGroupData;";
 	static final String TRIAL_SPAWNER = "net/minecraft/world/level/block/entity/trialspawner/TrialSpawner";
 	static final String NEO_HOOKS = "net/neoforged/neoforge/event/EventHooks";
 	static final String NEO_SPAWNER_HOOK = "finalizeMobSpawnSpawner";
 	static final String NEO_SPAWNER_DESC = "(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/level/ServerLevelAccessor;"
-			+ "Lnet/minecraft/world/DifficultyInstance;Lnet/minecraft/world/entity/EntitySpawnReason;"
+			+ "Lnet/minecraft/world/DifficultyInstance;Lnet/minecraft/world/entity/MobSpawnType;"
 			+ "Lnet/minecraft/world/entity/SpawnGroupData;Lnet/neoforged/neoforge/common/extensions/IOwnedSpawner;Z)"
 			+ "Lnet/neoforged/neoforge/event/entity/living/FinalizeSpawnEvent;";
 
@@ -88,25 +88,31 @@ public final class NativeCoremodParity {
 					new FieldGetter("settings", "Lnet/minecraft/world/level/levelgen/structure/Structure$StructureSettings;",
 							"getModifiedStructureSettings", STRUCTURE)));
 
-	/** NeoForge 26.2.0.88's {@code finalize_spawn_targets.json}; MinecraftForge's list is the same plus TrialSpawner. */
+	/**
+	 * NeoForge 21.1.256's {@code finalize_spawn_targets.json}, read out of the coremods jar nested in the universal
+	 * jar ({@code META-INF/jarjar/net.neoforged.neoforge-coremods-21.1.256.jar}). The 26.x list this replaced named
+	 * 26 classes in the 26.x packages — {@code .../monster/zombie/Zombie}, {@code .../animal/equine/SkeletonTrapGoal},
+	 * {@code .../monster/illager/Evoker$EvokerSummonSpellGoal}, {@code .../npc/villager/Villager},
+	 * {@code .../monster/spider/Spider} — which on 1.21.1 live at {@code .../monster/Zombie},
+	 * {@code .../animal/horse/SkeletonTrapGoal}, {@code .../monster/Evoker$EvokerSummonSpellGoal},
+	 * {@code .../npc/Villager} and {@code .../monster/Spider}; GameTestEntityBuilder, ZombieHorse, Drowned and Husk
+	 * are not in NeoForge's list at all. TrialSpawner stays out: the merged base already routes its call through
+	 * NeoForge's spawner hook, and {@link #routeTrialSpawner} handles it separately.
+	 */
 	static final Set<String> FINALIZE_TARGETS = Set.of(
-			"net/minecraft/gametest/framework/GameTestEntityBuilder",
 			"net/minecraft/server/commands/RaidCommand",
 			"net/minecraft/server/commands/SummonCommand",
 			"net/minecraft/world/entity/EntityType",
 			"net/minecraft/world/entity/ai/village/VillageSiege",
-			"net/minecraft/world/entity/animal/equine/SkeletonTrapGoal",
-			"net/minecraft/world/entity/animal/equine/ZombieHorse",
 			"net/minecraft/world/entity/animal/frog/Tadpole",
+			"net/minecraft/world/entity/animal/horse/SkeletonTrapGoal",
+			"net/minecraft/world/entity/monster/Evoker$EvokerSummonSpellGoal",
+			"net/minecraft/world/entity/monster/Spider",
 			"net/minecraft/world/entity/monster/Strider",
-			"net/minecraft/world/entity/monster/illager/Evoker$EvokerSummonSpellGoal",
-			"net/minecraft/world/entity/monster/spider/Spider",
-			"net/minecraft/world/entity/monster/zombie/Drowned",
-			"net/minecraft/world/entity/monster/zombie/Husk",
-			"net/minecraft/world/entity/monster/zombie/Zombie",
-			"net/minecraft/world/entity/monster/zombie/ZombieVillager",
+			"net/minecraft/world/entity/monster/Zombie",
+			"net/minecraft/world/entity/monster/ZombieVillager",
 			"net/minecraft/world/entity/npc/CatSpawner",
-			"net/minecraft/world/entity/npc/villager/Villager",
+			"net/minecraft/world/entity/npc/Villager",
 			"net/minecraft/world/entity/raid/Raid",
 			"net/minecraft/world/level/NaturalSpawner",
 			"net/minecraft/world/level/levelgen/PatrolSpawner",

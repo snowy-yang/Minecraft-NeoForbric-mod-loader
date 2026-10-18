@@ -21,8 +21,9 @@ import net.neoforbric.kernel.util.NeoForbricLog;
 /**
  * Points an injector at the one-call relay the kernel gave a call the surviving carrier moved out of its method.
  *
- * <p>MinecraftForge's {@code ItemStack.useOn} makes its {@code Item.useOn} call in {@code ForgeHooks} (server) and in a
- * lambda (client), not in {@code useOn}; {@link ItemUseOnInjector} routes both through
+ * <p>{@code ItemStack.useOn} does not make its {@code Item.useOn} call itself. On this anchor it delegates: a server
+ * goes to {@code CommonHooks.onPlaceItemIntoWorld} and a client to a lambda (MinecraftForge's went to
+ * {@code ForgeHooks} and a lambda — the same shape). {@link ItemUseOnInjector} routes both through
  * {@code ItemStack.neoforbric$useOnItem(Item, UseOnContext)}, whose whole body is that call. An injector written for the
  * call inside {@code useOn} — fabric-api's {@code ItemEvents.USE_ON} is one — then selects the relay instead.
  *

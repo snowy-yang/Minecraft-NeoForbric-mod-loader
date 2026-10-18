@@ -235,9 +235,12 @@ public final class PassiveSeeder {
 			if (field.get(loaderInstance) != null) return; // already built
 
 			Class<?> lmlCls = Class.forName(ForeignType.LOADING_MOD_LIST.binary(Ecosystem.NEOFORGE), false, gameLoader);
-			// of(modFiles, gameLibraries, plugins, modInfos, issues, dependencies) — all empty for zero mods.
-			Method of = lmlCls.getMethod("of", List.class, List.class, List.class, List.class, List.class, Map.class);
-			Object empty = of.invoke(null, List.of(), List.of(), List.of(), List.of(), List.of(), Map.of());
+			// of(plugins, modFiles, sortedList, modLoadingIssues, modDependencies) — all empty for zero mods.
+			// This anchor's LoadingModList.of has FIVE parameters; the six-parameter shape this used to name
+			// (a third List for the game libraries) belongs to a later NeoForge, and against 1.21.1's real
+			// LoadingModList it is a NoSuchMethodException that leaves the FMLLoader's field null.
+			Method of = lmlCls.getMethod("of", List.class, List.class, List.class, List.class, Map.class);
+			Object empty = of.invoke(null, List.of(), List.of(), List.of(), List.of(), Map.of());
 			field.set(loaderInstance, empty);
 			NeoForbricLog.debug("[NeoForbric/Seed] seeded empty NeoForge LoadingModList (zero mods)");
 		} catch (Throwable t) {
@@ -540,8 +543,8 @@ public final class PassiveSeeder {
 		Class<?> fileInfoCls = Class.forName(ForeignType.MOD_FILE_INFO.binary(Ecosystem.NEOFORGE), false, gameLoader);
 		Class<?> modInfoCls = Class.forName(ForeignType.MOD_INFO.binary(Ecosystem.NEOFORGE), false, gameLoader);
 
-		Method of = lmlCls.getMethod("of", List.class, List.class, List.class, List.class, List.class, Map.class);
-		Object list = of.invoke(null, List.of(), List.of(), List.of(), List.of(), List.of(), Map.of());
+		Method of = lmlCls.getMethod("of", List.class, List.class, List.class, List.class, Map.class);
+		Object list = of.invoke(null, List.of(), List.of(), List.of(), List.of(), Map.of());
 
 		// One ModFileInfo per JAR, N ModInfos inside it — a mods.toml may declare several [[mods]], and
 		// ModFileInfo.versionString() is defined as its FIRST mod's version, so the grouping has to be per file.

@@ -56,7 +56,7 @@ public final class KernelTransferInterop {
 		// those hooks runs Fabric's mixin as written.
 		boolean hopperWanted = !"off".equalsIgnoreCase(System.getProperty("neoforbric.hopperFabricStorage", "on"))
 				&& present(loader, "net/fabricmc/fabric/api/transfer/v1/item/ItemStorage.class")
-				&& present(loader, "net/neoforbric/neoforge/items/VanillaInventoryCodeHooks.class");
+				&& present(loader, "net/neoforged/neoforge/items/VanillaInventoryCodeHooks.class");
 		hopper = hopperWanted && present(loader, HOPPER.replace('.', '/') + ".class");
 		if (hopperWanted && !hopper) {
 			CompatibilityFindings.record(new CompatibilityFinding("transfer-hopper-component", "neoforbric",

@@ -35,24 +35,35 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * Fabric mods' HUD elements draw again. Why they stopped — and why re-anchoring Fabric's mixin is impossible on
  * this base — is in that class.
  *
- * <p>The wrap goes on the ARGUMENT of {@code add}, not on the layer list or on {@code NamedLayer}. The three-arg
+ * <p>The wrap goes on the ARGUMENT of {@code add}, not on the layer list or on the layer itself. The three-arg
  * overload wraps the incoming layer in a {@code BooleanSupplier} gate, and wrapping the argument puts the bridge
  * INSIDE that gate. That is the faithful placement: on stock Fabric the {@code @At(INVOKE)} anchors sit inside
  * vanilla's own conditionals, so a suppressed layer suppresses the elements attached to it. Wrapping further out
  * would draw Fabric elements over a HUD vanilla had decided to hide.
  *
- * <p>Only the two {@code GuiLayer}-taking overloads are touched. The {@code Consumer} overload delegates to the
- * three-arg one, so it is covered for free; {@code add(GuiLayerManager, BooleanSupplier)} re-adds a sub-manager's
- * already-wrapped layers through the same overload, which is why {@code wrap} checks for its own generated type
- * before wrapping again. NeoForge mods registering through {@code RegisterGuiLayersEvent} manipulate the layer
- * list directly and never reach {@code add}, so their layers are correctly left alone — a NeoForge layer has no
- * business dispatching Fabric roots.
+ * <p>Only the layer-taking {@code add} overload is touched. {@code add(GuiLayerManager, BooleanSupplier)} re-adds a
+ * sub-manager's already-wrapped layers through the same overload, which is why {@code wrap} checks for its own
+ * generated type before wrapping again. NeoForge mods registering through {@code RegisterGuiLayersEvent}
+ * manipulate the layer list directly and never reach {@code add}, so their layers are correctly left alone — a
+ * NeoForge layer has no business dispatching Fabric roots.
+ *
+ * <p><b>Re-anchored to 1.21.1.</b> The seam used to be {@code add(Identifier, GuiLayer[, BooleanSupplier])}. On this
+ * anchor there is no {@code net.neoforged.neoforge.client.gui.GuiLayer} and no {@code Identifier}: the overload is
+ * {@code add(ResourceLocation, LayeredDraw$Layer)} (javap on {@code neoforge-runtime.jar}), so the old descriptors
+ * matched nothing and this transformer never fired — it warned "the seam has drifted" on every launch instead.
+ *
+ * <p>Note that fabric-api 0.116.17 ships no HUD element registry at all — its whole HUD API is
+ * {@code HudRenderCallback}, dispatched by {@code fabric-rendering-v1}'s {@code InGameHudMixin} with
+ * {@code @Inject(method = "render", at = @At("TAIL"))} into {@code Gui.render(GuiGraphics, DeltaTracker)}, which is
+ * a TAIL injection the merge cannot break. So on this anchor {@link KernelHudBridge#wrap} finds no registry and
+ * returns every layer by identity. Routing the seam anyway is still the right shape: the transformer's job is to
+ * hand each layer to the bridge, and the bridge is what decides whether there is anything to bridge.
  */
 public final class HudElementBridgeInjector implements ClassTransformer {
 	private static final String TARGET = "net.neoforged.neoforge.client.gui.GuiLayerManager";
 	private static final String METHOD = "add";
-	private static final String LAYER = "Lnet/neoforged/neoforge/client/gui/GuiLayer;";
-	private static final String IDENTIFIER = "Lnet/minecraft/resources/Identifier;";
+	private static final String LAYER = "Lnet/minecraft/client/gui/LayeredDraw$Layer;";
+	private static final String IDENTIFIER = "Lnet/minecraft/resources/ResourceLocation;";
 
 	private static final String HOOK_OWNER = "net/neoforbric/kernel/boot/KernelHudBridge";
 	private static final String HOOK_NAME = "wrap";
@@ -101,21 +112,22 @@ public final class HudElementBridgeInjector implements ClassTransformer {
 		}
 
 		if (edited == 0) {
-			NeoForbricLog.warn("[NeoForbric/HudBridge] %s has no add(Identifier, GuiLayer[, BooleanSupplier]) to route — the "
-					+ "seam has drifted, so Fabric HUD elements will render nothing", className);
+			NeoForbricLog.warn("[NeoForbric/HudBridge] %s has no add(ResourceLocation, LayeredDraw$Layer) to route — "
+					+ "the seam has drifted, so Fabric HUD elements will render nothing", className);
 			return classBytes;
 		}
 
 		routed += edited;
-		NeoForbricLog.info("[NeoForbric/HudBridge] routed %d GuiLayerManager.add overload(s) through the kernel — Fabric's "
-				+ "HudElementRegistry dispatches off NeoForge's layer manager from here", edited);
+		NeoForbricLog.info("[NeoForbric/HudBridge] routed %d GuiLayerManager.add overload(s) through the kernel — "
+				+ "KernelHudBridge stands down by identity unless fabric-rendering-v1 ships a HudElementRegistry "
+				+ "(0.116.17 does not: its HUD API is HudRenderCallback, dispatched natively)", edited);
 
 		ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 		node.accept(writer);
 		return writer.toByteArray();
 	}
 
-	/** {@code add(Identifier, GuiLayer)} and {@code add(Identifier, GuiLayer, BooleanSupplier)}, and nothing else. */
+	/** {@code add(ResourceLocation, LayeredDraw$Layer)}, and nothing else — the sub-manager overload's first arg is not an id. */
 	private static boolean takesLayerAtSlotTwo(String desc) {
 		Type[] args = Type.getArgumentTypes(desc);
 		return args.length >= 2 && IDENTIFIER.equals(args[0].getDescriptor()) && LAYER.equals(args[1].getDescriptor());

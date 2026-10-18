@@ -81,8 +81,10 @@ public final class ReplacedCallRedirects {
 
 	private static final String ITEM_STACK = "Lnet/minecraft/world/item/ItemStack;";
 	public static final List<Site> SITES = List.of(
+			// 1.21.1's host takes the two ints InputConstants.getKey(i, j) is built from; the KeyEvent parameter is
+			// the 26.x shape. Both bodies ask each mapping isActiveAndMatches(getKey(i, j)) at the same two places.
 			new Site("net/minecraft/client/gui/screens/inventory/AbstractContainerScreen",
-					"checkHotbarKeyPressed(Lnet/minecraft/client/input/KeyEvent;)Z",
+					"checkHotbarKeyPressed(II)Z",
 					"Lnet/minecraft/client/KeyMapping;matches(Lnet/minecraft/client/input/KeyEvent;)Z", Opcodes.INVOKEVIRTUAL,
 					"Lnet/minecraft/client/KeyMapping;isActiveAndMatches(Lcom/mojang/blaze3d/platform/InputConstants$Key;)Z",
 					Opcodes.INVOKEVIRTUAL, 2, new int[] { 0, 1 },

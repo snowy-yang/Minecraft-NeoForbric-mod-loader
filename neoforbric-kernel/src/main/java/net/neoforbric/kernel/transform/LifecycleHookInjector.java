@@ -111,10 +111,15 @@ public final class LifecycleHookInjector implements ClassTransformer {
 	 */
 	private record Trigger(String owner, String name, String desc, String hookName, int popSlots) {}
 
-	// Server triggers: NeoForge won the entry (load(Z)V); the Forge no-arg form is kept in case a base flips it.
-	// Same descriptor as the hook — keep the boolean on the stack, plain owner+name swap.
+	// Server triggers: NeoForge won the entry, and on this base it is the NO-ARG form — 21.1.256's
+	// net/neoforged/neoforge/server/loading/ServerModLoader declares only `load()V`, and the call in
+	// net.minecraft.server.Main.main is `invokestatic ServerModLoader.load:()V`. The 26.x base took a boolean
+	// (`load(Z)V`), which is why the hook it redirects to is KernelLifecycle.onServerModLoadingNoArg() — the
+	// no-argument counterpart that already exists for exactly this form. No-arg swap (popSlots 0), so the whole
+	// rewrite is the owner+name swap below and the descriptor stays as it is.
 	private static final Trigger[] SERVER_TRIGGERS = {
-			new Trigger(ForeignType.SERVER_MOD_LOADER.internal(Ecosystem.NEOFORGE), "load", "(Z)V", "onServerModLoading", 0),
+			new Trigger(ForeignType.SERVER_MOD_LOADER.internal(Ecosystem.NEOFORGE), "load", "()V",
+					"onServerModLoadingNoArg", 0),
 	};
 
 	// Client trigger: ClientModLoader.begin()V in net.minecraft.client.main.Main.main — the EXACT client analogue of

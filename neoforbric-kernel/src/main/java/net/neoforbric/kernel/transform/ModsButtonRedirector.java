@@ -129,9 +129,14 @@ public final class ModsButtonRedirector implements ClassTransformer {
 	private static final String NEOFORGE_PRE_88_MOD_LIST_SCREEN =
 			"net/neoforged/neoforge/client/gui/ModListScreen";
 
-	private static final Set<String> REPLACED = Set.of(
-			ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE),
-			NEOFORGE_PRE_88_MOD_LIST_SCREEN);
+	// Deduplicated, not Set.of: on 1.21.1 the name this family CURRENTLY ships (client.gui.ModListScreen) is the
+	// one 26.x's pre-88 alias also names — the class moved to client.gui.modlist only for 26.2.0.38..88 and moved
+	// back — so the two constants hold the same string here and a two-element Set.of throws
+	// IllegalArgumentException in this class's <clinit>, taking every transform that touches the pause menu with
+	// it. A Set built from both keeps the intent and survives the two names coinciding.
+	private static final Set<String> REPLACED = java.util.Collections.unmodifiableSet(new java.util.LinkedHashSet<>(
+			java.util.List.of(ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE),
+					NEOFORGE_PRE_88_MOD_LIST_SCREEN)));
 
 	/**
 	 * Points the button at the kernel's own icon.

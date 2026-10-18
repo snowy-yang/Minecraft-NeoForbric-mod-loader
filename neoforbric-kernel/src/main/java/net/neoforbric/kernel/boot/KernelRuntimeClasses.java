@@ -137,6 +137,10 @@ public final class KernelRuntimeClasses {
 				new Call("loadEarly", void.class, List.class),
 				new Call("openLate", List.class, List.class))));
 		CLASSES.put("net.neoforbric.kernel.runtime.KernelCompatibilityPrompts", new Entry(Origin.COMPILED, List.of()));
+		// Spliced into every plain RETURN of MinecraftServer.tickServer by ServerCompatibilityTickInjector, so
+		// there is no boot-side call to declare — only the class that has to be delivered for the splice to link.
+		CLASSES.put("net.neoforbric.kernel.runtime.KernelServerCompatibilityTicks", new Entry(Origin.COMPILED,
+				List.of()));
 		// Optional game-side soak driver, named reflectively by KernelSoakHooks; ordinary sessions never load it.
 		CLASSES.put("net.neoforbric.kernel.runtime.soak.ClientSoakController", new Entry(Origin.COMPILED,
 				List.of(new Call("onTick", void.class, Object.class))));

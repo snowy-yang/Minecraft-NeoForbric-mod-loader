@@ -48,7 +48,12 @@ public final class NeoForbricBrandingInjector implements ClassTransformer {
 	static final String BRANDING_CONTROL = "net.neoforged.neoforge.internal.BrandingControl";
 	static final String DEBUG_VERSION = "net.minecraft.client.gui.components.debug.DebugEntryVersion";
 	static final String BRANDING = "net/neoforbric/kernel/util/NeoForbricBranding";
-	private static final String NEO_VERSION = "net/neoforged/neoforge/common/NeoForgeVersion";
+	/**
+	 * Where NeoForge keeps its own version on this anchor. 26.x moved it to
+	 * {@code net.neoforged.neoforge.common.NeoForgeVersion}; 1.21.1 has it under {@code internal.versions.neoforge},
+	 * which is the only {@code NeoForgeVersion} class in either staged jar.
+	 */
+	private static final String NEO_VERSION = "net/neoforged/neoforge/internal/versions/neoforge/NeoForgeVersion";
 
 	public static boolean enabled() {
 		return !"off".equalsIgnoreCase(System.getProperty(PROPERTY, "on"));

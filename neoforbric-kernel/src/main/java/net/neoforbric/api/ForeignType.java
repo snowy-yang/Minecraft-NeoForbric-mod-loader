@@ -70,7 +70,7 @@ public enum ForeignType {
 	MOD_INFO_SPI("net.neoforged.neoforgespi.language.IModInfo"),
 	MOD_LIST("net.neoforged.fml.ModList"),
 	MOD_LOADING_CONTEXT("net.neoforged.fml.ModLoadingContext"),
-	MOD_LIST_SCREEN("net.neoforged.neoforge.client.gui.modlist.ModListScreen"),
+	MOD_LIST_SCREEN("net.neoforged.neoforge.client.gui.ModListScreen"),
 	NEW_REGISTRY_EVENT("net.neoforged.neoforge.registries.NewRegistryEvent"),
 	/**
 	 * NeoForge's resource-condition type: a separate registry with its own dialect, running over every element

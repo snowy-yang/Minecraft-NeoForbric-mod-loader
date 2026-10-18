@@ -54,9 +54,15 @@ import net.neoforbric.kernel.util.NeoForbricLog;
  * it. Nothing else changes: with java.lang.invoke open the new handler never runs.
  *
  * <p>Switched with the view: {@code -Dneoforbric.fmlTransformerView=off} leaves this class as shipped.
+ *
+ * <p><b>Re-anchored to 1.21.1.</b> This used to name {@code net.neoforged.fml.classloading.ModuleClassLoader},
+ * which does not exist on this anchor — no jar carries it, so the transformer never matched a class and the guard
+ * was dead (and the view could not be built at all). On 1.21.1 the carrier ships {@code cpw.mods.cl.ModuleClassLoader},
+ * whose {@code <clinit>} is exactly the {@code IMPL_LOOKUP} block described above, and whose subclass
+ * {@code cpw.mods.modlauncher.TransformingClassLoader} is the one the view extends.
  */
 public final class ModuleClassLoaderInitInjector implements ClassTransformer {
-	static final String TARGET = "net.neoforged.fml.classloading.ModuleClassLoader";
+	static final String TARGET = "cpw.mods.cl.ModuleClassLoader";
 	private static final String INACCESSIBLE = "java/lang/reflect/InaccessibleObjectException";
 	/** The first of the three exceptions the carrier already catches around the IMPL_LOOKUP lookup. */
 	private static final String GUARDED = "java/lang/NoSuchFieldException";

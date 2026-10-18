@@ -26,31 +26,31 @@ import org.objectweb.asm.tree.VarInsnNode;
 /**
  * {@code ItemStack.useOn} again does what both NeoForge's and Fabric's code expect it to do.
  *
- * <p>The merge kept MinecraftForge's body: on a server it returns {@code onPlaceItemIntoWorld(context)} (NeoForge's
- * {@code CommonHooks} one since the kernel's {@code routePlaceItemHookToNeoForge}, whose block snapshots it drains), on
- * a client {@code onItemUse(context, c -> getItem().useOn(context))}. Vanilla's body calls {@code Item.useOn}
- * itself, and NeoForge's first posts {@code UseItemOnBlockEvent} in its {@code ITEM_AFTER_BLOCK} phase and returns its
- * result when a listener cancels. Two things were lost with that:
+ * <p>Vanilla's body calls {@code Item.useOn} itself, inside {@code useOn}. Both Forge families instead delegate: on a
+ * server to {@code CommonHooks.onPlaceItemIntoWorld(context)}, on a client to
+ * {@code onItemUse(context, c -> getItem().useOn(context))}. That is the shape 1.21.1's merged base has too, and it
+ * costs two things:
  *
  * <ul>
- *   <li>NeoForge's {@code ITEM_AFTER_BLOCK} phase was never posted (its {@code ITEM_BEFORE_BLOCK} phase, in
- *       {@code onItemUseFirst}, and the {@code BLOCK} phase survived). NeoForge's exact post sequence is put back at
- *       the head of the body, where NeoForge has it.</li>
+ *   <li>NeoForge's {@code ITEM_AFTER_BLOCK} phase is posted by its own body at the head of {@code useOn}; a body that
+ *       does not post it (MinecraftForge's) gets NeoForge's exact post sequence put back there. The merged base
+ *       already has it, so on this anchor nothing is added.</li>
  *   <li>fabric-api fires {@code ItemEvents.USE_ON} from a {@code @WrapOperation} on the {@code Item.useOn} call in
- *       {@code useOn}, and MinecraftForge's body makes that call elsewhere: in {@code onPlaceItemIntoWorld} and in the
- *       client lambda. Both calls now go through one ItemStack method,
+ *       {@code useOn}, and a delegating body makes that call elsewhere: in {@code onPlaceItemIntoWorld} and in the
+ *       client lambda. Both calls go through one ItemStack method,
  *       {@code neoforbric$useOnItem(Item, UseOnContext)}, whose whole body is that call, and
  *       {@code MixinRelocatedCall} points an injector written for {@code useOn}'s {@code Item.useOn} there. The
  *       server's call reaches it through a static bridge on the stack the context holds, which is the stack
  *       {@code onPlaceItemIntoWorld} itself read the item from.</li>
  * </ul>
  *
- * <p>Each edit checks the reviewed shape and declines on anything else: {@code useOn} must be MinecraftForge's (no
- * {@code Item.useOn}, no {@code UseItemOnBlockEvent}, one {@code onPlaceItemIntoWorld}, one lambda whose body is
- * exactly {@code getItem().useOn(context)}); {@code onPlaceItemIntoWorld} must make exactly one {@code Item.useOn}
- * call. Both families' {@code onPlaceItemIntoWorld} are relayed, NeoForge's because useOn calls it and MinecraftForge's
- * because a mod may call it itself. On NeoForge's or vanilla's body nothing is changed. {@code -Dneoforbric.itemUseOn=off}
- * leaves all three classes alone.
+ * <p>Each edit checks the reviewed shape and declines on anything else: {@code useOn} must make its
+ * {@code Item.useOn} call somewhere other than itself (no direct call in {@code useOn}), exactly one
+ * {@code onPlaceItemIntoWorld}, and one lambda whose body is exactly {@code getItem().useOn(context)};
+ * {@code onPlaceItemIntoWorld} must make exactly one {@code Item.useOn} call. Both families'
+ * {@code onPlaceItemIntoWorld} are relayed, NeoForge's because useOn calls it and MinecraftForge's because a mod may
+ * call it itself. On vanilla's body nothing is changed. {@code -Dneoforbric.itemUseOn=off} leaves all three classes
+ * alone.
  */
 public final class ItemUseOnInjector implements ClassTransformer {
 	public static final String PROPERTY = "neoforbric.itemUseOn";
@@ -101,27 +101,41 @@ public final class ItemUseOnInjector implements ClassTransformer {
 		return writer.toByteArray();
 	}
 
-	/** ItemStack: the NeoForge post at the head of useOn, the relay, its static bridge, and the lambda through the relay. */
+	/**
+	 * ItemStack: the relay, its static bridge, and the lambda through the relay — plus NeoForge's post at the head of
+	 * {@code useOn} when the body does not already make it.
+	 *
+	 * <p>Two bodies reach here and both are repaired. MinecraftForge's made the call in {@code ForgeHooks} and in a
+	 * lambda and posted nothing; 1.21.1's merged body is NeoForge's, so it already posts {@code ITEM_AFTER_BLOCK} and
+	 * returns a cancelling listener's result, but it still reaches {@code Item.useOn} from
+	 * {@code CommonHooks.onPlaceItemIntoWorld} on a server and from a lambda on a client. The old code read any
+	 * {@code UseItemOnBlockEvent} in {@code useOn} as "this is NeoForge's whole body, leave it alone" and declined —
+	 * which left {@link #relayServerCall} rewriting the hook to a bridge nothing had added, a
+	 * {@code NoSuchMethodError} on the first server-side item use. What decides is the CALL, not the event: a body
+	 * that makes {@code Item.useOn} inside {@code useOn} itself needs nothing (Fabric's {@code @WrapOperation} already
+	 * resolves there), and one that makes it elsewhere needs the relay.
+	 */
 	static int adaptStack(ClassNode stack) {
 		MethodNode useOn = method(stack, "useOn", USE_ON_DESC);
 		if (useOn == null) return declined("ItemStack.useOn(UseOnContext) is missing");
 		if (method(stack, RELAY, RELAY_DESC) != null) return 0;   // already done
 		MethodNode lambda = null;
 		int placeCalls = 0;
+		boolean posts = false;
 		for (AbstractInsnNode insn : useOn.instructions) {
 			if (insn instanceof MethodInsnNode call) {
-				if (call.owner.equals(ITEM) && call.name.equals("useOn")) return 0;   // vanilla's or a vanilla-shaped body
+				if (call.owner.equals(ITEM) && call.name.equals("useOn")) return 0;   // vanilla's body: the call is where the wrap looks
 				if (call.name.equals("onPlaceItemIntoWorld")) placeCalls++;
-				if (call.owner.equals(EVENT)) return 0;                            // NeoForge's body
+				if (call.owner.equals(EVENT)) posts = true;                        // NeoForge's post, already here
 			}
-			if (insn instanceof TypeInsnNode type && type.desc.equals(EVENT)) return 0;
+			if (insn instanceof TypeInsnNode type && type.desc.equals(EVENT)) posts = true;
 			if (insn instanceof InvokeDynamicInsnNode indy) {
 				if (lambda != null) return declined("ItemStack.useOn makes more than one lambda");
 				lambda = implementation(stack, indy);
 				if (lambda == null) return declined("ItemStack.useOn's lambda is not one of its own methods");
 			}
 		}
-		if (placeCalls != 1 || lambda == null) return declined("ItemStack.useOn is not MinecraftForge's reviewed body");
+		if (placeCalls != 1 || lambda == null) return declined("ItemStack.useOn makes its Item.useOn call nowhere else");
 		for (AbstractInsnNode insn : useOn.instructions) {
 			if (insn.getOpcode() >= 0) break;
 			if (insn instanceof FrameNode) return declined("ItemStack.useOn's first instruction is a branch target");
@@ -133,7 +147,7 @@ public final class ItemUseOnInjector implements ClassTransformer {
 		stack.methods.add(bridge());
 		lambda.instructions.insert(new VarInsnNode(Opcodes.ALOAD, 0));
 		lambda.instructions.set(relayed, new MethodInsnNode(Opcodes.INVOKEVIRTUAL, STACK_INTERNAL, RELAY, RELAY_DESC, false));
-		useOn.instructions.insert(neoForgePost());
+		if (!posts) useOn.instructions.insert(neoForgePost());
 		return 1;
 	}
 
