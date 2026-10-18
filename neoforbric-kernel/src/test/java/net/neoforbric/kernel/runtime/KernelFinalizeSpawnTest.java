@@ -18,7 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
  *
  * <p>Re-anchored from a two-family model (NeoForge + a MinecraftForge {@code MobSpawnEvent.FinalizeSpawn}). This
  * build carries no {@code net/minecraftforge} class at all and {@code EventHooks} posts no such event;
- * introduction.md §8 records the deletion. The tests below pin the single-family behaviour the real bytecode has,
+ * introduction.en.md §8 records the deletion. The tests below pin the single-family behaviour the real bytecode has,
  * which is also why the trace never contains a second event name.
  */
 class KernelFinalizeSpawnTest {

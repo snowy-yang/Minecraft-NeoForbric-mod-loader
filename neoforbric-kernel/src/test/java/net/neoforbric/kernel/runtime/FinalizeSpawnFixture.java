@@ -36,7 +36,7 @@ import org.objectweb.asm.tree.ClassNode;
  *   <li>this build carries no {@code net/minecraftforge} class at all (the carrier has zero such entries) and
  *       {@code EventHooks} posts exactly one event, NeoForge's own, on {@code NeoForge.EVENT_BUS}.</li>
  * </ul>
- * introduction.md §8 records the deletion: "there is one Forge family, its events are NeoForge's own, and the
+ * introduction.en.md §8 records the deletion: "there is one Forge family, its events are NeoForge's own, and the
  * patched base posts them itself". The stubs below therefore model that one family, and the tests assert the
  * single-post, single-finalization behaviour the real bytecode has.
  */

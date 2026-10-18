@@ -25,7 +25,7 @@ def ci_bullet(document):
 class CiContractTest(unittest.TestCase):
     def test_docs_name_the_command_the_kernel_job_runs(self):
         command = kernel_command((ROOT / '.github/workflows/build.yml').read_text(encoding='utf-8'))
-        for name in ('introduction.md', 'introduction.zh-CN.md'):
+        for name in ('introduction.md', 'introduction.en.md'):
             with self.subTest(document=name):
                 bullet = ci_bullet((ROOT / name).read_text(encoding='utf-8'))
                 self.assertIn(f'`{command}`', bullet, f'{name} describes CI with a command build.yml does not run')
