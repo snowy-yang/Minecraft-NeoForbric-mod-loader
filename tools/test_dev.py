@@ -288,9 +288,17 @@ class DevelopmentWorkflowTest(unittest.TestCase):
             self.assertEqual(dev.main(['doctor']), 2)
         self.assertEqual(list(self.root.iterdir()), [])
 
-    def test_invalid_gate_cannot_launch_arbitrary_script(self):
-        with patch.object(dev, 'java_environment', return_value={}), patch.object(dev.subprocess, 'run') as run:
-            self.assertEqual(dev.main(['gate', '--gate', '../../anything']), 1)
+    def test_no_command_takes_a_script_name_to_run(self):
+        # This replaced test_invalid_gate_cannot_launch_arbitrary_script, which proved that `dev.py gate`
+        # refused `--gate ../../anything` by its name pattern. That command and the 48 legacy Bash gates it
+        # drove are gone, so the refusal no longer happens in the tool -- the subcommand does not exist. The
+        # property worth keeping is the one the old test was a special case of: nothing the caller types can
+        # name a script for this tool to execute. Asking for the old command now exits inside the parser,
+        # before any subprocess is started, which is what the old test also asserted.
+        with patch.object(dev, 'java_environment', return_value={}), patch.object(dev.subprocess, 'run') as run, \
+                patch('sys.stderr', io.StringIO()):
+            with self.assertRaises(SystemExit):
+                dev.main(['gate', '--gate', '../../anything'])
         run.assert_not_called()
 
 

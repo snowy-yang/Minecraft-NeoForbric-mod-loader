@@ -37,8 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -381,22 +379,15 @@ class FabricLoadOrderTest {
 	}
 
 	/**
-	 * Whether the Fabric-order check of gate-m9 AND of compat/assert.sh accepts {@code log}, by running each one's
-	 * own pattern through {@code grep -acE} as they do, so the wording and the gates cannot drift apart.
+	 * Whether the boot log carries the Fabric-order line.
+	 *
+	 * <p>gate-m9 and compat/assert.sh each grepped for this same pattern, and this method used to read both
+	 * scripts and assert they agreed. Both are gone, so the pattern is the contract now, written out here instead
+	 * of being read back from a file that no longer exists.
 	 */
-	private boolean matchesGates(String log) throws Exception {
-		boolean m9 = grep(gatePattern("run/gate-m9-client.sh", "Fabric mods initialise in Fabric Loader's order (by mod id)"),
+	private boolean matchesGates(String log) {
+		return grep("NeoForbric/Order\\] [1-9][0-9]* Fabric mod\\(s\\) initialise in Fabric Loader.s order, by mod id",
 				log);
-		boolean compat = grep(gatePattern("run/compat/assert.sh", "Fabric init is Fabric Loader order"), log);
-		assertEquals(m9, compat, "gate-m9 and compat/assert.sh disagree about the same line");
-		return m9;
-	}
-
-	private static String gatePattern(String gate, String name) throws IOException {
-		Matcher m = Pattern.compile("(?:check|ck)\\s+\"" + Pattern.quote(name) + "\"\\s*\\\\?\\s*\"([^\"]+)\"")
-				.matcher(Files.readString(Path.of(gate)));
-		if (!m.find()) throw new AssertionError(gate + " has no \"" + name + "\" check");
-		return m.group(1);
 	}
 
 	/**

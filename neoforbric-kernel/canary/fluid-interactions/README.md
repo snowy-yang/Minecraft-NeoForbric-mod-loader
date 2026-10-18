@@ -1,5 +1,8 @@
 # Fluid-interaction canaries
 
+> `run/compat/fluid-parity-gate.py`, named below, was removed together with the compatibility harness. The
+> canary sources are kept; the end-to-end run is not.
+
 Two mods for `run/compat/fluid-parity-gate.py --mods`, each using only its own loader's API and registering at common
 setup, as mods do:
 

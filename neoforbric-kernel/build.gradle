@@ -447,10 +447,11 @@ test {
 	// without these the task stayed UP-TO-DATE and kept the verdict on the previous list.
 	inputs.file('src/test/raw-assumption-allowlist.txt').withPropertyName('rawAssumptionAllowlist')
 	inputs.files(fileTree('src/test/java'), fileTree('src/transferTest/java')).withPropertyName('testSourceText')
-	// ProcessBuilder tests execute these files; their edits must invalidate the test task too.
-	inputs.files(fileTree('run/compat') { include '**/*.py', '**/*.sh', '**/*.md' })
-			.withPropertyName('compatibilityTools').optional()
-	inputs.files(fileTree('run') { include 'gate-m*.sh', 'lib.sh' })
+	// ProcessBuilder tests execute these files; their edits must invalidate the test task too. Only lib.sh is
+	// still executed by a test (LibKeptUpContractTest, LibPortContractTest); evidence.py is here because the
+	// installer's releaseAssets runs it against these same sources. The compatibility harness and the gate
+	// scripts that used to be listed here are gone.
+	inputs.files(fileTree('run') { include 'lib.sh', 'evidence.py' })
 			.withPropertyName('gateContracts').optional()
 	inputs.files(fileTree(stagedRoot) {
 		include 'build-testmods.sh', 'livemod-src-neoforge/**',

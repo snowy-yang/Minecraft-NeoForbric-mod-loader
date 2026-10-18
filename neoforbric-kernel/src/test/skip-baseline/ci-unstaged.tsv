@@ -31,7 +31,6 @@ test	net.neoforbric.kernel.boot.FmlTomlShapeOracleTest	libjfTranslatesProperties
 test	net.neoforbric.kernel.boot.FmlTomlShapeOracleTest	theReadersOwnManifestsAnswerAsTheirOwnFmlDoes()	[fixture:staged] staged neoforge-runtime.jar absent
 test	net.neoforbric.kernel.boot.FmlTomlShapeOracleTest	unlitCampfiresLithiumOptionsAreTheMapNeoForgeGivesLithium()	[fixture:staged] staged neoforge-runtime.jar absent
 test	net.neoforbric.kernel.boot.FrapiRendererEvidenceTest	theRealSodiumBuildsAreToldApart()	[fixture:third-party] sodium fixtures absent: $ROOT/neoforbric-kernel/run/client-merged-pack/mods
-test	net.neoforbric.kernel.boot.GateWorldgenContractTest	theGateProbesExactlyTheBlocksThePackagedCanariesPlace()	[fixture:staged] build canaries with neoforbric-loader/run/build-testmods.sh
 test	net.neoforbric.kernel.boot.KernelBootNeutersTest	onTheRealRegistryTheRepairOnLeavesCanInteractWholeAndOffEmptiesIt()	[fixture:staged] $ROOT/neoforbric-loader/run/forge-runtime/forge-runtime.jar absent
 test	net.neoforbric.kernel.boot.KernelBundledMixinExtrasStagedTest	[1] true	[fixture:third-party] stage the popular compatibility pack and the boot jar (or set fixture overrides): $ROOT/neoforbric-kernel/build/compat-inputs/popular/mods/badpackets-forge-0.12.2.jar, $ROOT/neoforbric
 test	net.neoforbric.kernel.boot.KernelBundledMixinExtrasStagedTest	[2] false	[fixture:third-party] stage the popular compatibility pack and the boot jar (or set fixture overrides): $ROOT/neoforbric-kernel/build/compat-inputs/popular/mods/badpackets-forge-0.12.2.jar, $ROOT/neoforbric
@@ -83,7 +82,6 @@ test	net.neoforbric.kernel.boot.RegistrationEventStepsTest	theRealMethodIsAStrai
 test	net.neoforbric.kernel.boot.RuntimeMixinConfigsTest	minecraftForgesRuntimeDeclaresNone()	[fixture:staged] staged MinecraftForge runtime absent
 test	net.neoforbric.kernel.boot.RuntimeMixinConfigsTest	neoForgesRuntimeJarContributesItsOwnAccessorConfig()	[fixture:staged] staged NeoForge runtime absent
 test	net.neoforbric.kernel.boot.WorldgenCanaryDataTest	theCarrierPlacesANonOverworldBlock()	[fixture:staged] build canaries with neoforbric-loader/run/build-testmods.sh
-test	net.neoforbric.kernel.compat.PrepareWorldTest	theCarrierReadsThisFlagAndUsesItToSuppressOnlyTheExperimentalBackupPrompt()	[fixture:staged] requires current staged merged base
 test	net.neoforbric.kernel.interop.PayloadInteropPlayChannelsTest	everyNameTheRecordingSpellsExistsWhereItIsSpelled()	[fixture:third-party] fabric-api's networking module absent
 test	net.neoforbric.kernel.interop.PayloadInteropPlayChannelsTest	theConnectionProtocolConstantAndAccessorAreWhatTheMergedBaseDeclares()	[fixture:staged] staged merged base absent
 test	net.neoforbric.kernel.metadata.forge.ModsTomlParserTest	theFixtureIsTheManifestLibjfShips()	[fixture:third-party] the sweep's LibJF jar is not staged here

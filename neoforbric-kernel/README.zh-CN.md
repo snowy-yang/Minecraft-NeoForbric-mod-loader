@@ -49,40 +49,16 @@ RuntimeInteropPatcher}` + `run/{build-merged-base,assemble-*-runtime}.sh` 产出
 
 ## 里程碑
 
-`run/` 下的闸门脚本针对真实实例的真实日志和产物做断言。这里原来有一张里程碑表，列出了从未存在过的 `gate-m5.sh` 和 `gate-m6.sh`，而且 M2 以及 M4 往后的各项，闸门早已通过很久，表里却还记为未完成。所以现在脚本本身就是清单：
+`run/` 下原来的闸门脚本、以及 `run/compat/`，已经移除。它们针对真实实例的真实日志和产物做断言，是一份
+真正的第二意见，但代价是必须有开发者自己的机器、仓库里没有的第三方 mod 整合包，以及一层在 Windows 上
+跑不起来的 Bash。
 
-| 闸门 | 证明了什么 |
-|---|---|
-| `gate-m0` | 构建 + 整个单元测试套件（依据 JUnit XML 断言，不看 gradle 的退出码）+ 发现结果与一个独立解析器的比对 |
-| `gate-m1` / `gate-m3` | 合并基底在零 mod 下启动到 Done；两个 Forge 系的基线 + 一个真实的 `@Mod`，以原生方式加载 |
-| `gate-m2` / `gate-m2b` | 先是一个真实的 Fabric mod，再是完整的 fabric-api，全程没有任何 Fabric Loader |
-| `gate-m4` / `gate-m4-canary` / `gate-m7-neo` | 三个生态的真实第三方 mod 同在一个服务端；纯 NeoForge |
-| `gate-m9-client` | 客户端这一半：97 个 jar 的整合包进入世界、统一的 Mods 界面、干净退出 |
-| `gate-m12` … `gate-m16` | 走真实 socket 的多人游戏、一款反作弊的判定、纯 Fabric 服务端、两个 Forge 系的网络 |
-| `gate-m17` | 安装器，按启动器的方式解析并启动 |
-| `gate-m24` | 一个故意失败的 mod：其余 mod 照常加载，失败也能归因 |
-| `gate-m24c` | 写进 `neoforbric-disabled.txt` 的 jar 谁都不加载，并在 `load-report.txt` 里点名；对照组照常加载它 |
-| `gate-m25-worldgen` | 两个 Forge 系的生物群系修改器金丝雀 mod 在保存下来的区域文件里留下各自不同的方块 |
-| `gate-m26-forgeclient` | Forge 客户端收到按键、渲染器、着色（tint）、提示框、几何加载器和创造模式物品栏的注册事件，并且 CLIENT_INIT/REGISTRATION 的桥清单报告完整 |
-| `gate-m27-frame` | 97 个 jar 的客户端产出一张新生成的、不是黑屏的 Minecraft 截图 |
-| `gate-m28-forgeconfig` | Forge 的 COMMON 配置只加载一次，随后它原生的文件监视器读到对文件的实时修改；专用服务器从不打开 CLIENT 配置 |
-| `gate-m29-forgecaps` | 合并基底上的 MinecraftForge capability：僵尸和熔炉的 item-handler capability，并补跑了丢失的字段初始化器 |
-| `gate-m30-attribution` | 只丢了自身**一部分**的 mod（某个 mixin 被排除或在创建世界时失败、某个订阅者无法注册、某个监听器挂在死事件上、某个延迟任务抛出异常、某个 jar 针对另一版 NeoForge 编译），日志、Mods 界面和 `load-report.txt` 都会点名该 mod 并给出原因；`load-report.txt` 会在世界启动后重写一次 |
-| `gate-m31-vanilla-parity` | 在零 mod、同一种子下，NeoForbric 的主世界和旁边同时生成的纯原版 26.2 服务端有相同的生物群系和相同的结构起点 |
+它们覆盖的东西现在归单元测试：把 staged 游戏文件放好后跑 `./gradlew test` 和 `transferTest`，依据 JUnit
+XML 断言而不是 Gradle 的退出码；再加上 `tools/junit_report.py` 的 skip 棘轮——某个测试悄悄开始跳过时它会让
+构建失败。
 
-`run/compat/gates-all.sh` 用 glob 找出所有闸门，按编号顺序运行，网络/GUI 闸门也包括在内；有意加上的 `--skip <script.sh>` 会打印在结果里。它默认同时跑多个（`-j auto`；`-j 1` 就是旧的严格串行运行），在这台机器上把跑完一整轮的时间从 26 分钟缩短到 7 分钟。`auto` 是每两个核心一个槽位：内存从来不是限制因素（峰值时游戏 JVM 合计 5.5 GB，机器有 16 GB），让闸门陷入饥饿才是。在 `-j 7` 时，一次正常情况下远在 `await_server` 宽限窗口之内就能完成的关闭不再能按时完成，而这个窗口本身就是对非守护线程泄漏的一项真实检查。
-
-让它们并行不是没有代价的，每个闸门都在靠近开头的一行里写明自己需要什么：
-
-```sh
-# GATE-PARALLEL: rundirs=server-kernel,canary mem=1500
-```
-
-`rundirs` 写明它运行期间独占哪些目录（写了同一个名字的两个闸门从不一起运行），`mem` 是它占用的内存。`clone=<dir>:<VAR>` 则是申请共享夹具的一份私有副本：需要 `run/client-merged-pack` 的四个闸门各拿一份，在 APFS 上克隆那个 434 MB 的安装目录只要 0.17s，而且不占磁盘。之所以要有这一行，而不是直接用 `xargs -P`，是因为有三种冲突。第一，每个启动服务端的闸门都会把端口写进 `server.properties`，端口争抢的落败方会打印 `FAILED TO BIND TO PORT`，写一份崩溃报告，然后照样打印 `Stopping server`，于是干净关闭的断言通过，闸门改在 “Done” 那一条上变红，看起来像内核没能启动，而不是端口被占（`lib.sh` 的 `port_was_free` 现在会直接说出是哪个端口）。第二，`gate-m1`/`m2`/`m3` 共用 `run/server-kernel`，`gate-m9`/`m17`/`m22`/`m23`/`m27` 共用 `run/client-merged-pack`。第三，每个内核 JVM 启动时都不带 `-Xmx`，所以各自继承 JVM ergonomics 给出的“物理内存四分之一”上限。调度器给每个并发槽位分配独立的端口段，从不把写了同一个 rundir 的闸门排在一起，并把正在运行的集合控制在内存预算之内。**没有 `# GATE-PARALLEL:` 行的闸门会单独运行**，运行时也会在 stderr 上说明这一点。新闸门只会变慢，不会悄无声息地坏掉。
-
-可移植的 Windows 基线采集和负控制见[兼容性协议](run/compat/PROTOCOL.md)。
-
-其余闸门（`m8`、`m10`、`m11`、`m18`–`m23`）各自锁定一个曾经发布出去的缺陷。上次统计时，二十五个闸门里有十六个已有一天没跑过，其中一个一直是红的。所以 `gate-m0` 现在拒绝为没有实际执行的测试任务出报告。
+这一层里有两样不是夹具，仍然保留：`run/evidence.py`（安装器 `releaseAssets` 任务调用的发布门禁）和
+`run/reports/`（分析文档按路径引用的实测兼容性证据）。
 
 旧的 `neoforbric-loader` 仍保持可运行，用作**差分对照基准**，并且仍负责构建内核所用的共享游戏产物。
 
@@ -90,9 +66,8 @@ RuntimeInteropPatcher}` + `run/{build-merged-base,assemble-*-runtime}.sh` 产出
 
 ```sh
 ./gradlew --offline test          # the unit suite; ~a third of it reads the staged game jars and
-                                  # SKIPS without them, which is why gate-m0 asserts on the results
+                                  # SKIPS without them, so read the results, not Gradle's exit code
 ./gradlew --offline jar           # boot jar
-./run/gate-m0.sh                  # build + the suite (tests>0, no failures, skip ceiling) + the oracle
 # unified discovery over a mods/ dir → deterministic JSON (the oracle anchor):
 java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report out.json
 ```

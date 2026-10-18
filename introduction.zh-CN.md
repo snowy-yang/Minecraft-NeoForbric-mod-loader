@@ -257,7 +257,7 @@ Mixin (via MixinWeaverSlot) → NativeCoremodParity → PostMixinFixups → Inte
 - **插桩** —— `ClientSmokeTickInjector`（除非 `-Dneoforbric.clientSmoke=true`，否则不起作用）、`EventChainAuditInjector`（除非 `-Dneoforbric.eventChainAudit=<report>`，否则不起作用）、`ServerTickSamplerInjector`、`CompatibilityPromptTickInjector`、`ServerCompatibilityTickInjector` —— 专用服的完成节拍接缝：在 `MinecraftServer.tickServer` 的每个正常返回前织入 `KernelServerCompatibilityTicks.onCompatibilityTick`，让启动之后才出现的必需损失通过游戏自己的保存路径停下一个严格模式的服务器。
 - **加固** —— `ChunkExecutorGuardInjector`（服务器停止后，拒收提交给其区块执行器的任务；`-Dneoforbric.chunkExecutorGuard=off`）。
 
-承诺会落到某个类上的转换器要声明这个类（`AnchorSet`）；`AnchorLedger` 会报告经过转换器却没有被改动的类（记为一次 **Miss**，立即以 ERROR 级别记日志），并在普查标志点报告从未加载过的类。`RepairDriftCensus`（`run/compat/repair-drift.sh`）把这些声明拿到一个*候选*游戏构建上重放——升级载体时要问的正是这个问题。
+承诺会落到某个类上的转换器要声明这个类（`AnchorSet`）；`AnchorLedger` 会报告经过转换器却没有被改动的类（记为一次 **Miss**，立即以 ERROR 级别记日志），并在普查标志点报告从未加载过的类。`RepairDriftCensus` 把这些声明拿到一个*候选*游戏构建上重放——升级载体时要问的正是这个问题。
 
 ## 7. 合并基底上的 Mixin
 
@@ -346,7 +346,7 @@ NeoForge 的 `mod_resources` 来源在合并基底上是孤立的。`ClientPackH
 - **注册表目录** —— `RegistryDirectoryOwnerInjector` / `KernelRegistryDirectories`：`registryDirPath` 的返回值与所属生态的做法一致。**别名** —— `KernelRegistryAliases` 在 fabric 的 mixin 覆盖不到的查找上解析 fabric 侧的别名（两个平台现在都往同一个 `MappedRegistry` 上加 `addAlias`；26.x 的 `RegistryAliasParityInjector`——把读取那一半织进八个原版查找，因为合并基底丢掉了 NeoForge 自己的——随它绕开的 wrapper 一起删掉了）；`PostMixinFixups.askTheRegistryWhetherAnAliasTargetExists` 让 fabric 的别名目标警告读注册表真正的键集（`-Dneoforbric.aliasPresenceParity=off` 保持 Mixin 织出的样子）。
 - **数据包注册表** —— `KernelLifecycle.registerDataPackRegistries` 发布 `DataPackRegistryEvent.NewRegistry`，让 mod 能声明自己的注册表；把它发到基线总线上同时让 NeoForge 自己的 `neoforge:biome_modifier`/`neoforge:structure_modifier` 数据包注册表变得可解析，并且双向镜像 Fabric 的动态注册表。
 - **数据映射** —— 会加载 NeoForge 数据映射（`KernelNeoDataMapWatch`、`KernelNeoWorldgen`）。所有经由 holder 的数据映射查询最后都落在 `Holder.Reference.getData`，它会调 `key()`，而还没注册的值没有 key，于是抛 `Trying to access unbound value`；原版的氧化、打蜡、去皮表对任何方块都能回答。`UnboundHolderDataInjector` 让未绑定的 holder 回答“没有数据”（没有 key 的值不可能出现在任何数据映射里），NeoForge 的钩子因此回落到原版的表——Fabric mod 在初始化里调用它们时期望的就是这样（`-Dneoforbric.unboundHolderData=off` 可关闭）。这一点和原生 NeoForge 不同：原生在任何时候都会在这里抛错。值所属的注册表还开着时，这个回答是静默的；一旦该注册表的任一 `frozen` 标志被置上（它的 `freeze()` 已经跑过，而 `freeze()` 遇到这样的值会抛 "Some intrusive holders were not registered"），`util.KernelUnboundHolderData` 就对每个这样的值 WARN 一次（最多 64 条，之后再打一行汇总），写明值、注册表和发起查询的调用栈——原生 NeoForge 会抛的那个错仍然被报告出来，只是查询照样回答“没有数据”。这条 WARN 说的是“注册表关闭时它还没注册”，不是“它永远注册不进去”：注册表可以被 unfreeze，NeoForbric 也会为 Fabric 客户端 entrypoint 重新打开注册表。
-- **世界生成** —— 数据包驱动的生物群系/结构修改器走 NeoForge 自己那一轮修改器处理（`KernelNeoWorldgen`）；内核声明它们读取的数据包注册表（上一行），让修改器可解析，不存在第二个生态的驱动程序要复制。数据映射由同一个类看管，对映射加载完成前到达的查找有一个兜底（`-Dneoforbric.neoDataMapFallback=off` 关闭）。`NativeCoremodParity`、`BiomeInfoRebaseInjector`、`BiomeLateWriteInjector` 让修改后的视图能被读到。gate-m31 要求零 mod 时的世界生成在相同种子下，生物群系和结构起点与原版一致。
+- **世界生成** —— 数据包驱动的生物群系/结构修改器走 NeoForge 自己那一轮修改器处理（`KernelNeoWorldgen`）；内核声明它们读取的数据包注册表（上一行），让修改器可解析，不存在第二个生态的驱动程序要复制。数据映射由同一个类看管，对映射加载完成前到达的查找有一个兜底（`-Dneoforbric.neoDataMapFallback=off` 关闭）。`NativeCoremodParity`、`BiomeInfoRebaseInjector`、`BiomeLateWriteInjector` 让修改后的视图能被读到。
 
 ## 10. 统一 API —— `net.neoforbric.api`
 
@@ -447,7 +447,7 @@ neoforge userdev ─┬→ neoforge-runtime.jar ──────────�
 
 ### 13.3 NeoForbric 自己的 jar 从哪里来
 
-默认构建会自带这些 jar（`bundleNeoForbric` 写出带 SHA-1 的 `neoforbric-kernel-libraries.json`）。`-Pslim` 构建一个都不带，安装时再通过 `RemoteSource` 获取：NeoForbric 的 jar 取自 GitHub 发布版，其他库优先从 Maven 获取。`-PreleasePin` 把 `neoforbric-release.properties`（tag、仓库、`manifestSha256`）编译进 jar。清单的摘要就是信任锚，所以发布要分两步（先 `releaseAssets`，再做锁定后的 slim 构建）。只有 `run/compat/evidence.py release-check` 确认内核 jar 和 merge-tools jar 与已验收的候选版本逐字节一致，`releaseAssets` 才肯写出发布资产。
+默认构建会自带这些 jar（`bundleNeoForbric` 写出带 SHA-1 的 `neoforbric-kernel-libraries.json`）。`-Pslim` 构建一个都不带，安装时再通过 `RemoteSource` 获取：NeoForbric 的 jar 取自 GitHub 发布版，其他库优先从 Maven 获取。`-PreleasePin` 把 `neoforbric-release.properties`（tag、仓库、`manifestSha256`）编译进 jar。清单的摘要就是信任锚，所以发布要分两步（先 `releaseAssets`，再做锁定后的 slim 构建）。只有 `run/evidence.py release-check` 确认内核 jar 和 merge-tools jar 与已验收的候选版本逐字节一致，`releaseAssets` 才肯写出发布资产。
 
 ### 13.4 `--doctor`
 
@@ -457,7 +457,7 @@ neoforge userdev ─┬→ neoforge-runtime.jar ──────────�
 
 - **合并工具。** `neoforbric-loader/src/tools/java/net/neoforbric/tools/` 下的 `MergedLinkChecker`，由 `:mergeToolsJar` 构建成 `neoforbric-merge-tools-0.1.0.jar`，安装器自带并运行这个 jar（26.x 的合并工具——`MergedBaseBuilder`、`RuntimeInteropPatcher` 及其辅助类——已随合并基底一起删除，没有基底要合并了）。已审核的链接基线是 `neoforbric-loader/src/test/resources/merge/link-check-baseline.txt`。
 - **开发者流水线。** `run/assemble-neoforge-runtime.sh` 在 `neoforbric-loader/run/neoforge-runtime/` 下生成内核游戏侧编译所对的暂存 `neoforge-runtime`，每个闸门也在它上面运行；`run/launch-1.21.11.sh` 启动它（26.2 世代的启动脚本留在树里作为历史）。`NEOFORBRIC_OLD`（或 `-Pneoforbric.stagedRoot`）可以让另一个工作树指向这些产物。
-- **测试输入。** `run/livemod-src*`/`testmod-src` 里的金丝雀 mod 源码（`build-testmods.sh`），以及它各个运行目录里的 mod 集合，供 gate-m0 的发现对照基准读取。
+- **测试输入。** `run/livemod-src*`/`testmod-src` 里的金丝雀 mod 源码（`build-testmods.sh`），以及它各个运行目录里的 mod 集合，供发现对照基准读取。
 - **安装器载荷。** 安装器的打包清单里仍有 `net.neoforbric:neoforbric-loader` 和 `net.neoforbric:neoforbricruntime`，所以安装好的版本配置会把它们列为库。内核代码没有提到任何 `net.neoforbric.loader` 类，唯一的引用是 §6 里的重定向。
 
 `neoforbric-loader/` 自己的引导路径（Knot 宿主，加上 `bootstrap.sh` 打上的八个 fabric-loader 底座补丁）内核并不使用。焊接方案的设计记录在 `neoforbric-loader/README.md` 和 `neoforbric-loader/run/README.md` 里。焊接方案的安装器已随之删除；发布的那一个是 `neoforbric-kernel-installer/`（§13）。
@@ -485,9 +485,9 @@ NeoForbric/
 │   ├── src/runtime/                            GAME side, net.neoforbric.kernel.runtime (+ soak/, transfer/)
 │   ├── src/test/, src/transferTest/            unit tests; transfer-engine tests
 │   ├── canary/                                 canary mods the gates build and load
-│   └── run/                                    gate-m*.sh, launch-kernel-{client,server}.sh, lib.sh,
-│                                               diff-oracle.sh, mixin-inventory.sh, merge-packs.sh,
-│                                               build-*-canary.sh, compat/ (sweep and evidence tooling)
+│   └── run/                                    launch-kernel-{client,server}.sh, lib.sh, diff-oracle.sh,
+│                                               mixin-inventory.sh, merge-packs.sh, build-*-canary.sh,
+│                                               evidence.py, reports/ (recorded compatibility evidence)
 │
 ├── neoforbric-kernel-installer/      THE INSTALLER — src/main/java/net/neoforbric/installer/kernel/, packaging/
 │
@@ -507,38 +507,14 @@ cd neoforbric-kernel
 ./gradlew --offline jar        # boot jar; nests neoforbric-kernel-runtime.jar only when the staged artifacts exist
 ./gradlew --offline test       # unit suite (depends on compileRuntimeJava)
 ./gradlew --offline check      # + transferTest (real Fabric/NeoForge transaction engines)
-./run/gate-m0.sh               # build + suite from the JUnit XML + scan + link check + discovery oracle
 java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report out.json
 ```
 
 - **暂存产物。** 游戏侧编译时依赖暂存的 `patched-mc-neoforge-1.21.1.jar` 和 `neoforge-runtime.jar`，外加取自本地 Minecraft 安装的 brigadier、datafixerupper 和 gson，传输模块要用的一个 fabric-api jar（`-Pneoforbric.fabricApi`），以及按 SHA-256 锁定的 Team Reborn Energy 4.2.0（`run/energy-api/energy-4.2.0.jar` 或 `-Pneoforbric.rebornEnergy`）。没有暂存的 jar 时，`compileRuntimeJava` 会被跳过，`jar` 产出一个没有游戏侧的引导 jar——CI 构建的就是这种 jar。启动时负责发现这种 jar 的是 `KernelRuntimeClasses.verify`。
-- **单元测试。** 这些数字是数源码得到的，不是跑出来的：`src/test` 的 438 个 `*Test.java` 文件里有 2 624 个 `@Test` 方法和 2 个 `@ParameterizedTest` 方法（各有两个用例）；`src/transferTest` 的 4 个文件里有 61 个 `@Test` 方法（只数位于行首的注解，用 `grep` 扫已跟踪的文件）。很多测试会读取暂存的 jar；gate-m0 只要遇到*任何*一个被跳过的测试就失败，因为在那里跳过意味着测试没有看过真正的基底。
-- **闸门。** 共 58 个脚本（`neoforbric-kernel/run/gate-m*.sh`），每个都对真实实例的真实日志和文件做断言，大多带有指名的负控制（一个 `-D…=off`，或移除某项输入，必须恰好让指名的那几项检查变红）。`run/compat/gates-all.sh` 按 glob 发现它们；`gates-parallel.py` 依据每个闸门里的 `# GATE-PARALLEL: rundirs=… mem=…` 行让它们重叠运行（58 个里有 55 个带这一行；没有的闸门单独运行），并给每个槽位分配独立的端口段。
+- **单元测试。** 这些数字是数源码得到的，不是跑出来的：`src/test` 的 438 个 `*Test.java` 文件里有 2 624 个 `@Test` 方法和 2 个 `@ParameterizedTest` 方法（各有两个用例）；`src/transferTest` 的 4 个文件里有 61 个 `@Test` 方法（只数位于行首的注解，用 `grep` 扫已跟踪的文件）。很多测试会读取暂存的 jar，没有它们就会跳过，所以 `./gradlew check` 依据 JUnit XML 断言，而不看 Gradle 的退出码。
+- **闸门 —— 已移除。** `run/gate-m*.sh`（58 个脚本）和兼容性夹具 `run/compat/` 已经删除。它们对真实实例的真实日志和文件做断言，大多带有指名的负控制（一个 `-D…=off`，或移除某项输入，必须恰好让指名的那几项检查变红），这本身是有价值的——但它们需要开发者自己的机器、不在本仓库里的第三方 mod 整合包，以及一层在 Windows 上跑不起来的 Bash。现在剩下的是 `./gradlew check`：单元测试套件、`transferTest`、工具自测、安装器打包后的链接闸门，再加上 `tools/junit_report.py` 的 skip 棘轮——某个测试悄悄开始跳过时它会让构建失败。这一层里有两样不是夹具，仍然保留：`run/evidence.py`（`releaseAssets` 调用的发布门禁）和 `run/reports/`（记录下来的兼容性实测证据）。
 
-| 闸门 | 断言内容 |
-| --- | --- |
-| m0 | 构建、整个测试套件、`--scan`、合并基底链接检查、发现对照基准、工具自测、传输测试套件 |
-| m1, m3 | 零 mod、不跑真正的生命周期时，基底能到达 `Done`；Forge 系的基线 + 一个真实的 `@Mod` |
-| m2, m2b | 一个真实的 Fabric mod，然后是完整的 fabric-api，全程没有 Fabric Loader |
-| m4, m4-canary, m7-neo | 两个生态的真实 mod 同在一个服务端；纯 NeoForge jar |
-| m8, m10 | 多加载器的 `pack.mcmeta` 分段不会删掉或弄坏一个包 |
-| m9, m27 | 客户端带着 97 个 jar 的整合包进入世界并干净退出；新渲染出的一帧非黑画面 |
-| m11 | 专用服务器上一组由配置驱动的 mod |
-| m12–m14 | 客户端↔服务端走真实 socket；Paper 反作弊；纯 Fabric 服务端 |
-| m17 | 安装器写出的版本配置，按启动器的方式启动 |
-| m18, m19, m20 | 跨生态在场；内嵌库只初始化一次；玩家能得知未满足的依赖 |
-| m22, m23 | 内核 jar 被替换后仍能正常退出；鞘翅飞行 |
-| m24, m24b, m30 | 一个失败的 mod、一个元数据读不出来的 mod、一个部分失败的 mod，在每个呈现面上都有归因 |
-| m24c | 写进 `neoforbric-disabled.txt` 的 jar 谁都不加载，并在加载报告里点名；服务器对崩溃嫌疑提示只写日志 |
-| m25, m31, m32 | 两条生物群系修改器流水线；零 mod 时世界生成与原版一致；移除一个 mod 后存档仍能打开 |
-| m33, m39, m40, m52 | 跨生态的物品/流体/能量传输；漏斗向 Fabric 存储输送 |
-| m34 | ≥ 7200 s 有玩家在线的模拟 soak 测试，带留存检查 |
-| m35–m38, m41–m51, m53 | 逐个功能面的行为：mixin 结果、实体回调、附魔、事件链、coremod 一致性、方块破坏与战利品、交互、日常操作、存根重新绑定、伤害/服务端/世界事件、加载谓词、提示框、加宽的 `NEW` 锚点 |
-| m54 | NeoForge mod 在游玩阶段发给服务端的包能送到：装着 fabric-api 的 Carry On 用真实的键盘和鼠标输入搬起并放下箱子和猪；同样的运行关掉修复后必须什么都搬不起来（第三方 jar：`M54_CARRYON`、`M54_FABRIC_API`） |
-| m55 | 一个 Fabric mod 用原版方法刷新搜索树之后，创造模式物品栏的搜索仍能搜到物品；以界面自己的物品网格为准，并带一个关掉修复的反向对照 |
-
-- **兼容性批量测试。** `run/compat/PROTOCOL.md` 是一套流程：在一台 Windows 机器上通过安装好的版本配置运行随机/热门的 Modrinth mod 组合（`push-and-run.sh`、`win/*.py`、`pick_mods.py`、`evidence.py`），另有静态工具（`abi-audit.py`、`field-drift.py`、`fapi-usage.py`、`hook-worklist.sh`、`repair-drift.sh`、`control-diff.sh`——同一批 Fabric mod 分别跑在原生 Fabric 和 NeoForbric 上做对比）。
-- **CI**（`.github/workflows/build.yml`）：`build` 作业先自举，再构建 `neoforbric-loader/`。`kernel` 作业（JDK 21，没有游戏文件）在 `neoforbric-kernel/` 中运行 `./gradlew build -Pneoforbric.skipBaseline=ci-unstaged`：编译启动侧，运行不需要游戏文件的单元测试。没有游戏文件时约三分之一的测试会跳过，跳过的集合必须与 `src/test/skip-baseline/ci-unstaged.tsv` 逐行一致（`skipRatchet`、`tools/junit_report.py`）：新开始跳过的测试会让作业失败，不再跳过的行必须删掉。运行页面会显示测试数 / 实际执行 / 跳过数和最常见的跳过原因，JUnit 报告作为 `kernel-test-results` 上传；基线可以用该产物里的 `skips-actual-ci-unstaged.tsv` 或 `-Pneoforbric.writeSkipBaseline` 重新生成。`kernel-prepared` 作业（JDK 21）先在 runner 上用 `tools/dev.py prepare --no-assets` 构建游戏文件（Minecraft 从 Mojang 下载，NeoForge 从它自己的 maven 下载，补丁基底和载体在 runner 上构建，单元测试要读的两个 canary mod 和报告也一并准备好；只缓存上游下载的文件，派生出的东西一律不上传），再用 `-Pneoforbric.requireFixtures=staged,game-side,mc-libraries,java-21` 运行同一套测试外加 `transferTest`：除第三方 mod 整合包以外的各类测试夹具在这里都齐全，所以任何其他类别的跳过、或者没有标注类别的跳过，都会在跳过的那个测试上让作业失败。仍然跳过的 136 个测试全都需要不在本仓库里的第三方 mod 整合包，同样由 `ci-prepared.tsv` 卡住。`development-tools` 作业在 Windows、Linux 和 macOS 上运行 `tools/dev.py tool-test` 和打包后的链接闸门。之后 kernel-prepared 还在同一批文件上运行四个真实专用服门禁：m1、m36、m46、m53，它们用的 mod 都是从本仓库源码构建的 canary。其余门禁（客户端、第三方整合包、长时间 soak）需要开发者的 Mac：`tools/nightly/` 每晚由 launchd 在那台 Mac 上运行它们（02:30 启动，soak 只在周日跑），把当晚的摘要提交到 `ci-results` 分支，并在被测提交上设置提交状态 `nightly/dev-mac`。
+- **CI**（`.github/workflows/build.yml`）：`build` 作业先自举，再构建 `neoforbric-loader/`。`kernel` 作业（JDK 21，没有游戏文件）在 `neoforbric-kernel/` 中运行 `./gradlew build -Pneoforbric.skipBaseline=ci-unstaged`：编译启动侧，运行不需要游戏文件的单元测试。没有游戏文件时约三分之一的测试会跳过，跳过的集合必须与 `src/test/skip-baseline/ci-unstaged.tsv` 逐行一致（`skipRatchet`、`tools/junit_report.py`）：新开始跳过的测试会让作业失败，不再跳过的行必须删掉。运行页面会显示测试数 / 实际执行 / 跳过数和最常见的跳过原因，JUnit 报告作为 `kernel-test-results` 上传；基线可以用该产物里的 `skips-actual-ci-unstaged.tsv` 或 `-Pneoforbric.writeSkipBaseline` 重新生成。`kernel-prepared` 作业（JDK 21）先在 runner 上用 `tools/dev.py prepare --no-assets` 构建游戏文件（Minecraft 从 Mojang 下载，NeoForge 从它自己的 maven 下载，补丁基底和载体在 runner 上构建，单元测试要读的两个 canary mod 和报告也一并准备好；只缓存上游下载的文件，派生出的东西一律不上传），再用 `-Pneoforbric.requireFixtures=staged,game-side,mc-libraries,java-21` 运行同一套测试外加 `transferTest`：除第三方 mod 整合包以外的各类测试夹具在这里都齐全，所以任何其他类别的跳过、或者没有标注类别的跳过，都会在跳过的那个测试上让作业失败。仍然跳过的 136 个测试全都需要不在本仓库里的第三方 mod 整合包，同样由 `ci-prepared.tsv` 卡住。`development-tools` 作业在 Windows、Linux 和 macOS 上运行 `tools/dev.py tool-test` 和打包后的链接闸门。其余门禁（客户端、第三方整合包、长时间 soak）需要开发者自己的机器，手工运行。
 
 ## 17. 系统属性
 
@@ -626,7 +602,6 @@ java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report 
 ## 20. 延伸阅读
 
 - [`neoforbric-kernel/README.md`](neoforbric-kernel/README.zh-CN.md) —— 内核自己的概述和闸门说明
-- [`neoforbric-kernel/run/compat/PROTOCOL.md`](neoforbric-kernel/run/compat/PROTOCOL.md) —— 兼容性批量测试的流程
 - [`neoforbric-loader/README.md`](neoforbric-loader/README.zh-CN.md)、[`neoforbric-loader/run/README.md`](neoforbric-loader/run/README.md) —— 第一代，以及产物流水线
 - [`neoforbric-loader/CREDITS.md`](neoforbric-loader/CREDITS.md)、[`neoforbric-loader/MAPPINGS.md`](neoforbric-loader/MAPPINGS.md) —— 净室边界与在映射上的立场
 - 类的 javadoc。`net.neoforbric.kernel` 下几乎每个类的开头都写着它是为了哪个故障而存在的。

@@ -80,10 +80,8 @@ Gradle also accepts `-Pneoforbric.python=<executable>`, `-Pneoforbric.instance=<
 | --- | --- |
 | `cd neoforbric-kernel && ./gradlew build` (JDK 21+ on a fresh clone) | Boot compilation and available unit tests; with prepared inputs, also builds the game side |
 | `python3 tools/dev.py test` / `./gradlew check` | Unit suite, available transfer tests, Python tooling self-tests and packaged installer link-gate positive/negative controls |
-| `python3 tools/dev.py tool-test` / `./gradlew toolTest` | Development, evidence, soak and world-parity tools' self-tests; no game jars required |
+| `python3 tools/dev.py tool-test` / `./gradlew toolTest` | The portable tooling's self-tests; no game jars required |
 | `python3 tools/dev.py integration` / `./gradlew integrationTest` | Unit, transfer and tool suites with strict enforcement: missing game inputs, zero tests or **any skipped assertion fail** |
-| `python3 tools/dev.py gate --gate m0` | Existing full staged-build/discovery/link/oracle gate, using its documented mod sets |
-| `python3 tools/dev.py gate --gate m33-transfer` | A particular real-instance gate; [the gate table](../../introduction.md#16-build-and-test) lists coverage |
 
 Gradle prints test and skip counts, and HTML reports live in `neoforbric-kernel/build/reports/tests/`.
 A boot-only build cannot prove the game or mods work. `integration` prepares the base game automatically,
@@ -93,10 +91,11 @@ On a freshly prepared clone every test that needs only the base game runs: the t
 and libraries from the directory Gradle compiled against (passed as `MC_DIR`) and the pinned Fabric API
 from `.dev/api/`, so what remains skipped, and listed in the report, is the third-party packs alone.
 
-Legacy `gate-m*.sh` checks are Bash integration tools with gate-specific packs, worlds and platform
-assumptions; they are not a fresh-clone smoke test. They remain runnable at their original paths, and
-`gate-m0.sh` retains its no-skips contract. CI runs the boot build plus tool checks without game files,
-and separately checks the portable tools and packaged link gate on Windows, Linux and macOS. Without game files
+The legacy `gate-m*.sh` integration gates and the `run/compat/` harness were removed. They were Bash tools with
+gate-specific packs, worlds and platform assumptions; they needed a developer's own machine and mod packs that
+are not in this repository, and the Bash layer could not run on Windows. CI runs the boot build plus tool checks
+without game files, and separately checks the portable tools and packaged link gate on Windows, Linux and macOS.
+Without game files
 about a third of the unit tests skip; CI holds that set to `src/test/skip-baseline/ci-unstaged.tsv`
 (`./gradlew check -Pneoforbric.skipBaseline=ci-unstaged`), so a test that starts skipping fails the job. If your
 change makes a test skip there, or stop skipping, update that file in the same commit: the failing job prints the
@@ -109,14 +108,13 @@ change makes a test skip there, or stop skipping, update that file in the same c
 | `tools/dev.py`, `tools/test_dev.py` | Current portable development entry point and its tests |
 | `neoforbric-kernel/src/test/`, `src/transferTest/` | Gradle-managed unit and transfer-engine tests |
 | `neoforbric-kernel/canary/` | Tracked probe-mod source; generated jars go to `run/canary/` |
-| `neoforbric-kernel/run/gate-m*.sh`, `build-*-canary.sh` | Legacy integration gates and their fixture builders |
-| `neoforbric-kernel/run/compat/` | Compatibility sweep, evidence and platform tools; see [PROTOCOL.md](compat/PROTOCOL.md) |
+| `neoforbric-kernel/run/build-*-canary.sh` | Fixture builders for the probe mods under `canary/` |
+| `neoforbric-kernel/run/evidence.py`, `run/reports/` | Release acceptance gate (called by the installer's `releaseAssets`) and the recorded compatibility evidence |
 | `neoforbric-kernel/.dev/`, `run/client-*/`, `run/server-*/` | Ignored local runtime state |
 | `neoforbric-kernel/build/` | Build outputs, test reports and gate logs |
 | `neoforbric-loader/src/tools/` | Shared standalone merge/link tools; no bootstrap required for `mergeToolsJar` |
 | `neoforbric-kernel-installer/` | Current player installer and the artifact pipeline reused by `devToolsJar` |
 | `neoforbric-loader/run/launch-*.sh`, `neoforbric-installer/` | First-generation boot and installer paths |
 
-Keep new probes under `neoforbric-kernel/canary/` and verification tools under `run/compat/`, rather than
-inside an instance directory. The old scripts retain their paths because existing gates and external
-automation call them directly; use the entry points above instead of choosing among them by filename.
+Keep new probes under `neoforbric-kernel/canary/` and verification tools under `run/`, rather than
+inside an instance directory. Use the entry points above instead of choosing among them by filename.

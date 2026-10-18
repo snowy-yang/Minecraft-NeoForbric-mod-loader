@@ -4,9 +4,12 @@
 加载器：NeoForbric main `11ca1ffa`，用 `neoforbric-kernel-installer` 装进 Mac 官方目录 `~/Library/Application Support/minecraft`（版本 `26.2-neoforbric`）
 下面的历史测试保留当时结果；后续修复及验证单独记录，不回写原始统计。
 
+> 说明：本文记录的是当时用 `run/compat/` 那套工具跑出的结果。那套工具（连同 `run/gate-*.sh`）已经从仓库移除，
+> 证据文件本身保留并移到了 `neoforbric-kernel/run/reports/`；正文里提到的工具名只作为历史记录存在。
+
 ## 130 个纯 Fabric mod：原生 Fabric 与 NeoForbric 同字节对照（服务端，2026-10-03）
 
-用 `PICK_LOADER=fabric PICK_COUNT=130 PICK_SIDE=server`、种子 `20261003` 抽了 49 个热门 + 81 个随机的纯 Fabric 服务端主体，连同依赖共 165 个 jar（sha1 已固定）。同一组 jar 分别跑原生 Fabric Loader 0.19.5 和 NeoForbric（内核 SHA-256 `80ad82d1…`，strict 策略）专用服，判据是到 `Done` 后实测跑满 tick 数。证据在 `neoforbric-kernel/run/compat/reports/2026-10-03-pure-fabric-server/`，工具是 `run/compat/fabric-ab.py` 和 `native-controls.py run-set`。**只测了服务端，客户端、联机和渲染没测。**
+用 `PICK_LOADER=fabric PICK_COUNT=130 PICK_SIDE=server`、种子 `20261003` 抽了 49 个热门 + 81 个随机的纯 Fabric 服务端主体，连同依赖共 165 个 jar（sha1 已固定）。同一组 jar 分别跑原生 Fabric Loader 0.19.5 和 NeoForbric（内核 SHA-256 `80ad82d1…`，strict 策略）专用服，判据是到 `Done` 后实测跑满 tick 数。证据在 `neoforbric-kernel/run/reports/2026-10-03-pure-fabric-server/`，工具是 `run/compat/fabric-ab.py` 和 `native-controls.py run-set`。**只测了服务端，客户端、联机和渲染没测。**
 
 | | 结果 |
 |---|---|
@@ -27,7 +30,7 @@
 
 ## 同一批 100 个 mod 用当前内核复测（2026-10-03）
 
-输入与 2026-10-01 完全相同（同一份 manifest、依赖闭包和 jar，SHA-256 已复核），只换了内核：main `ddceddb6` 的内核代码（构建自 `9d6bdc2e`，两者内核源码一致），装进与上次相同布局的**隔离**安装目录，不碰日常使用的版本配置。证据在 `neoforbric-kernel/run/compat/reports/2026-10-03-sweep100-rerun/`。
+输入与 2026-10-01 完全相同（同一份 manifest、依赖闭包和 jar，SHA-256 已复核），只换了内核：main `ddceddb6` 的内核代码（构建自 `9d6bdc2e`，两者内核源码一致），装进与上次相同布局的**隔离**安装目录，不碰日常使用的版本配置。证据在 `neoforbric-kernel/run/reports/2026-10-03-sweep100-rerun/`。
 
 | | 2026-10-01 | 2026-10-03 |
 |---|---:|---:|
@@ -37,7 +40,7 @@
 | 只拿掉互相冲突的那一对中的一个后一起装（6000 tick + 存档重载） | 需同时拿掉 cwb 和 EnchantCraft，86 个通过 | **只拿掉 cwb，89 个 mod / 110 个 jar 通过** |
 
 - 单独加载没有任何一项变差。变好的两项：c2me（之前依赖模块降级）、lplm（之前崩溃）。其余 10 个仍不严格成功，原因与上次相同；tuanzis_server_mod 从"没进世界"变成"卡住"，仍算失败。
-- 全混装崩溃的原因仍是 Sodium 自己的检查：`Multiple overrides for option 'sodium:general.fullscreen_mode'! Sources: chloride and cwb`——两个 mod 都要改 Sodium 同一个选项。同样三个 jar 放进官方 NeoForge 26.2.0.88 客户端（不经过 NeoForbric）也崩，第一行异常一字不差；Sodium 只配其中任何一个都能进标题界面（`neoforbric-kernel/run/compat/reports/2026-10-03-native-sodium-pair/`）。cwb 上游 2026-08-03 已把 chloride 标为不兼容（Kira-NT/cubes-without-borders#139），但还没进 26.2 的发布版。这次 NeoForbric 的崩溃分析直接点名这两个 mod，并给出写进 `neoforbric-disabled.txt` 就能不加载 cwb 启动的那一行。
+- 全混装崩溃的原因仍是 Sodium 自己的检查：`Multiple overrides for option 'sodium:general.fullscreen_mode'! Sources: chloride and cwb`——两个 mod 都要改 Sodium 同一个选项。同样三个 jar 放进官方 NeoForge 26.2.0.88 客户端（不经过 NeoForbric）也崩，第一行异常一字不差；Sodium 只配其中任何一个都能进标题界面（`neoforbric-kernel/run/reports/2026-10-03-native-sodium-pair/`）。cwb 上游 2026-08-03 已把 chloride 标为不兼容（Kira-NT/cubes-without-borders#139），但还没进 26.2 的发布版。这次 NeoForbric 的崩溃分析直接点名这两个 mod，并给出写进 `neoforbric-disabled.txt` 就能不加载 cwb 启动的那一行。
 - 自动二分（`run/compat/mac/ddmin.py`）在真实游戏里 **4 次启动**（含 1 次全包参照，种子是报错里点名的两个 mod）就把 111 个 jar 的失败包缩到 {chloride, cwb}（加上它们依赖的 Sodium），不用再按报错手工排查。拿掉这一对后其余 88 个也一起通过。
 - EnchantCraft 上次也挡住全混装（原生 NeoForge 同样复现）；当前内核已让它不再把加入的玩家踢出，这次全混装里不再是阻断项。
 - "只拿掉 cwb 后通过"仍然**不算**完整混装成功：完整混装的定义是所有严格成功的主体一起，不做任何排除。
@@ -105,7 +108,7 @@
 | Sound Visualizer | 进世界，主体 OK | 依赖 Architectury 的 rightClickAir 注入未附着 |
 | Tuanzi’s Server Mod | 未进入世界，报告 OK | 它自己的白名单拒绝测试账号 CompatPlayer；属于配置阻挡，不能据此认定加载器损坏 |
 
-清单、闭包、每个主体的最新结果、冻结指纹及混装结果见 [本轮机器可读记录](neoforbric-kernel/run/compat/reports/2026-10-01-sweep100/summary.json) 和 [抽样清单](neoforbric-kernel/run/compat/reports/2026-10-01-sweep100/manifest.json)。完整控制台、截图、崩溃报告和保存世界保存在本机 `neoforbric-kernel/build/sweep100-mac-network/`；原生对照在 `build/sweep100-native-recipe/`，回归及未放行 soak 证据在 `build/sweep100-validation/`。
+清单、闭包、每个主体的最新结果、冻结指纹及混装结果见 [本轮机器可读记录](neoforbric-kernel/run/reports/2026-10-01-sweep100/summary.json) 和 [抽样清单](neoforbric-kernel/run/reports/2026-10-01-sweep100/manifest.json)。完整控制台、截图、崩溃报告和保存世界保存在本机 `neoforbric-kernel/build/sweep100-mac-network/`；原生对照在 `build/sweep100-native-recipe/`，回归及未放行 soak 证据在 `build/sweep100-validation/`。
 
 
 ## 后续修复：Carpet（2026-09-30）

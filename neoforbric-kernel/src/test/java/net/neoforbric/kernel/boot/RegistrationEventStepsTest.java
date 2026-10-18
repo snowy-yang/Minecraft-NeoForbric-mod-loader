@@ -202,8 +202,8 @@ class RegistrationEventStepsTest {
 
 	/**
 	 * Every step returned and no data map type exists: the finding says so, and the log line must not be the clean
-	 * one, which gates m7/m9 and compat/assert.sh take as "capabilities and data maps are registered". Each of those
-	 * three patterns is run through grep against both lines, so the gates and the wording cannot drift apart.
+	 * one. Gates m7/m9 and compat/assert.sh each grepped {@link #REGISTRATION_RAN} against both lines to keep the
+	 * wording from drifting; those scripts are gone, so the pattern is the contract and is asserted here directly.
 	 */
 	@Test
 	void aCleanRunWithNoDataMapTypeIsNotTheCleanLine(@TempDir Path dir) throws Exception {
@@ -217,14 +217,14 @@ class RegistrationEventStepsTest {
 		assertTrue(registered.contains("ran NeoForge's registration events"), registered);
 		assertNull(finding("neoforge-data-maps"));
 
-		for (String gate : List.of("run/gate-m7-neo.sh", "run/gate-m9-client.sh", "run/compat/assert.sh")) {
-			String pattern = registrationPattern(gate);
-			assertTrue(grep(dir, pattern, registered), gate + " must accept a run that registered data maps");
-			assertFalse(grep(dir, pattern, empty), gate + " must not accept a run that registered none");
-			assertFalse(grep(dir, pattern, registered.replace(", 11 data map type(s)", "")),
-					gate + " must not accept a run whose count could not be read");
-		}
+		assertTrue(grep(dir, REGISTRATION_RAN, registered), "must accept a run that registered data maps");
+		assertFalse(grep(dir, REGISTRATION_RAN, empty), "must not accept a run that registered none");
+		assertFalse(grep(dir, REGISTRATION_RAN, registered.replace(", 11 data map type(s)", "")),
+				"must not accept a run whose count could not be read");
 	}
+
+	/** The pattern the gates' "registration events ran" check grepped for, kept as the wording's contract. */
+	private static final String REGISTRATION_RAN = "ran NeoForge.s registration events.* [1-9][0-9]* data map type";
 
 	/** Out of the shared try: the kernel installs the bridge after the call, gated on the capability step. */
 	@Test
@@ -327,16 +327,6 @@ class RegistrationEventStepsTest {
 			System.setOut(out);
 		}
 		return log.toString(java.nio.charset.StandardCharsets.UTF_8);
-	}
-
-	/** The pattern a gate's "registration events ran" check greps for. */
-	private static String registrationPattern(String gate) throws Exception {
-		for (String line : Files.readAllLines(Path.of(gate))) {
-			java.util.regex.Matcher m = java.util.regex.Pattern
-					.compile("^(?:check|ck)\\s+\"registration events ran\"\\s+\"([^\"]+)\"").matcher(line);
-			if (m.find()) return m.group(1);
-		}
-		throw new AssertionError(gate + " has no \"registration events ran\" check");
 	}
 
 	/**

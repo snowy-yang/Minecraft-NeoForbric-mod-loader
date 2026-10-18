@@ -299,7 +299,9 @@ tasks.register('releaseAssets') {
 		}
 		def kernelLib = manifest.libraries.find { (it.coordinate as String).startsWith('net.neoforbric:neoforbric-kernel:') }
 		if (kernelLib == null) throw new GradleException("${staged} lists no neoforbric-kernel jar")
-		def check = ['python3', new File(kernelDir, 'run/compat/evidence.py').path, 'release-check']
+		// evidence.py moved out of run/compat when the compatibility harness was removed; it is the release
+		// gate, not a fixture, so it stayed and lives directly under run/.
+		def check = ['python3', new File(kernelDir, 'run/evidence.py').path, 'release-check']
 		(evidence as String).split(',').each { check += ['--manifest', file(it.trim()).path] }
 		check += ['--publish', "kernel=${new File(genResources.get().asFile, (kernelLib.resource as String).substring(1))}",
 				  '--publish', "merge-tools=${mergeToolsJar}"]

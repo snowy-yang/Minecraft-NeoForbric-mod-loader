@@ -1,5 +1,8 @@
 # Native server controls, Minecraft 26.2
 
+> `run/compat/native-controls.py`, named below, was removed together with the compatibility harness. The mod
+> sources are kept; the end-to-end runs are not.
+
 These are three separate mods, each using only Minecraft and its own loader's public API. They have no
 NeoForbric runtime dependency and no cross-ecology claims. The same compiled jar and dependency set is used
 unchanged on the native and NeoForbric arms. Each arm has a fresh runner-owned world with seed `8035262`.

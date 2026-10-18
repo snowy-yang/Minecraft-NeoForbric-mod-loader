@@ -1,5 +1,9 @@
 # Carpet behavior gate
 
+> The driver this page describes (`run/compat/carpet-gate.py`) was removed together with the
+> compatibility harness. The probe source and its bytecode suite (`CarpetMixinAdapterTest`) are still here;
+> the end-to-end run is not.
+
 This probe tests the released `fabric-carpet-26.2+v260616.jar` against the staged Minecraft 26.2 merged game and both loader carriers. It uses disposable dedicated-server worlds, Carpet's real fake-player class, real Scarpet event functions, and NeoForge event listeners.
 
 From the repository root, with the shared game artifacts already staged:

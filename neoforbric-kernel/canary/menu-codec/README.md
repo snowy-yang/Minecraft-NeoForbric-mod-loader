@@ -1,5 +1,9 @@
 # Menu codec gate
 
+> The driver this page describes (`run/compat/menu-codec-gate.py`) was removed together with the compatibility
+> harness. The probe source and its bytecode suite (`WrapperEntryAddedInjectorTest`) are still here; the
+> end-to-end run is not.
+
 This probe opens Farmer's Delight's cooking pot on a dedicated server running the staged Minecraft 26.2 merged game with both loader carriers, using the released Fabric build `FarmersDelight-26.2-3.6.26+refabricated.jar` and Fabric API `0.155.2+26.2`. A player without a client sends the cooking pot the same `ServerboundUseItemOnPacket` a right click does, and the server handles it as it handles a real one.
 
 From the repository root, after `python3 tools/dev.py prepare` and with the kernel built (`./gradlew jar` in `neoforbric-kernel`):

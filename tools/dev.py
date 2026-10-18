@@ -559,7 +559,7 @@ def doctor(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['doctor', 'prepare', 'client', 'server', 'test', 'integration', 'gate', 'tool-test'])
+    parser.add_argument('command', choices=['doctor', 'prepare', 'client', 'server', 'test', 'integration', 'tool-test'])
     parser.add_argument('--mc-dir', help='MC_DIR; default: isolated neoforbric-kernel/.dev/minecraft')
     parser.add_argument('--staged', help='NEOFORBRIC_OLD; directory containing run/; default: .dev/staged')
     parser.add_argument('--instance', help='RUNDIR; default: .dev/client or .dev/server')
@@ -571,7 +571,6 @@ def main(argv=None):
                         help='prepare: skip the ~1 GB of Minecraft assets; enough for tests and dedicated servers')
     parser.add_argument('--dry-run', action='store_true', help='build and print launch command without starting Minecraft')
     parser.add_argument('--no-build', action='store_true', help=argparse.SUPPRESS)
-    parser.add_argument('--gate', default='m0', help='gate name, e.g. m0 or m33-transfer')
     arguments = list(sys.argv[1:] if argv is None else argv)
     game = []
     if '--' in arguments:
@@ -585,11 +584,11 @@ def main(argv=None):
         if args.command == 'doctor':
             return doctor(args)
         if args.command == 'tool-test':
+            # Only tools/. The compatibility harness that used to live in neoforbric-kernel/run/compat is gone,
+            # and with it the two discoveries that pointed into it -- one for the directory itself and one for
+            # mac/, which is not a package and so was never reached by the first. Both ran with check=True, so a
+            # missing directory failed the whole toolTest task and with it `check`.
             subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', str(ROOT / 'tools'), '-p', 'test_*.py'], check=True, cwd=ROOT)
-            subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', str(KERNEL / 'run/compat'), '-p', 'test_*.py'], check=True, cwd=KERNEL)
-            # mac/ is not a package, so the call above never descends into it; its tools import each other flat.
-            mac = KERNEL / 'run/compat/mac'
-            subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', str(mac), '-t', str(mac), '-p', 'test_*.py'], check=True, cwd=KERNEL)
             return 0
         java = java_bin(args.java)
         # 1.21.1 runs on Java 21 and the kernel's build pins release 21, so 21 is the floor for every
@@ -606,20 +605,6 @@ def main(argv=None):
             if not ready(mc, stage, natives, env['NEOFORBRIC_DEV_ARCH'], assets=not (args.no_assets or assets_skipped(mc))):
                 prepare(args, java, env)
             gradle('neoforbric-kernel', ['cleanTest', 'cleanTransferTest', 'integrationTest'] + build_properties(mc, stage), env)
-        elif args.command == 'gate':
-            if not re.fullmatch(r'm[0-9]+[a-z]?(?:-[a-z0-9-]+)?', args.gate):
-                raise RuntimeError('invalid gate name')
-            gate = KERNEL / 'run' / ('gate-' + args.gate + '.sh')
-            if not gate.is_file():
-                raise RuntimeError('unknown gate: ' + args.gate)
-            if not shutil.which('bash'):
-                raise RuntimeError('legacy gates require Bash and their documented local fixtures')
-            # Legacy gates keep their own staging defaults; do not silently point them at an empty dev fixture set.
-            if args.staged:
-                env['NEOFORBRIC_OLD'] = str(Path(args.staged).resolve())
-            if args.mc_dir:
-                env['MC_DIR'] = str(Path(args.mc_dir).resolve())
-            subprocess.run(['bash', str(gate)], cwd=ROOT, env=env, check=True)
         return 0
     except KeyboardInterrupt:
         return 130

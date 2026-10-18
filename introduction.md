@@ -511,7 +511,7 @@ Notable repairs by family (read each class's javadoc for the case that motivated
 
 Transformers that promise to land on a class declare it (`AnchorSet`); `AnchorLedger` reports a class that
 passed through without being changed (a **Miss**, logged at ERROR immediately) and, at the census landmark,
-classes never loaded. `RepairDriftCensus` (`run/compat/repair-drift.sh`) replays the claims against a *candidate*
+classes never loaded. `RepairDriftCensus` replays the claims against a *candidate*
 game build — the question a carrier bump asks.
 
 ## 7. Mixin on the patched base
@@ -850,7 +850,7 @@ merge mutating a list fabric-api has frozen (`KernelPackRepair` documents both).
 - **Worldgen** — datapack-driven biome/structure modifiers ride NeoForge's single modifier pass, the one its own patches run (`KernelNeoWorldgen`); the kernel declares the datapack registries they read (previous row) so the modifiers resolve, and no second ecosystem's driver exists to duplicate. Data maps are watched by the same class, with a fallback for lookups that arrive before the map (`-Dneoforbric.neoDataMapFallback=off`).
   (`runtime.KernelForgeWorldgen`; `-Dneoforbric.forgeWorldgen=off`, with `ForgeWorldgenShippers` naming the mods
   that then lose it). `NativeCoremodParity`, `BiomeInfoRebaseInjector`, `BiomeLateWriteInjector` make the modified
-  views read. gate-m31 holds zero-mod worldgen to vanilla's biomes and structure starts at the same seed.
+  views read.
 
 ## 10. The unified API — `net.neoforbric.api`
 
@@ -1013,7 +1013,7 @@ The default build bundles them (`bundleNeoForbric` writes `neoforbric-kernel-lib
 builds carry none and fetch at install time through `RemoteSource`: NeoForbric's jars from the GitHub release, other
 libraries from Maven first. `-PreleasePin` compiles `neoforbric-release.properties` (tag, repo, `manifestSha256`) into
 the jar — the digest of the manifest is the trust anchor, which is why release is two steps (`releaseAssets`,
-then the pinned slim build). `releaseAssets` refuses to write assets unless `run/compat/evidence.py release-check`
+then the pinned slim build). `releaseAssets` refuses to write assets unless `run/evidence.py release-check`
 confirms the kernel and merge-tools jars are byte-identical to the accepted candidate.
 
 ### 13.4 `--doctor`
@@ -1032,7 +1032,7 @@ version is installed, pins, which artifacts are present or will be built, expect
   `-Pneoforbric.stagedRoot`) points another worktree at a staged root. The game base itself is downloaded and
   built by the installer (`Pins.NEOFORGE` userdev + NeoFormRuntime), never committed.
 - **Test inputs.** The canary mod sources in `run/livemod-src*`/`testmod-src` (`build-testmods.sh`), and the
-  mod sets in its run directories that gate-m0's discovery oracle reads.
+  mod sets in its run directories that the discovery oracle reads.
 - **Installer payload.** The installer's bundle manifest still includes `net.neoforbric:neoforbric-loader` and
   `net.neoforbric:neoforbricruntime`, so an installed profile lists them as libraries. No kernel code names a
   `net.neoforbric.loader` class; the only reference is the retargeting in §6.
@@ -1064,9 +1064,9 @@ NeoForbric/
 │   ├── src/runtime/                            GAME side, net.neoforbric.kernel.runtime (+ soak/, transfer/)
 │   ├── src/test/, src/transferTest/            unit tests; transfer-engine tests
 │   ├── canary/                                 canary mods the gates build and load
-│   └── run/                                    gate-m*.sh, launch-kernel-{client,server}.sh, lib.sh,
-│                                               diff-oracle.sh, mixin-inventory.sh, merge-packs.sh,
-│                                               build-*-canary.sh, compat/ (sweep and evidence tooling)
+│   └── run/                                    launch-kernel-{client,server}.sh, lib.sh, diff-oracle.sh,
+│                                               mixin-inventory.sh, merge-packs.sh, build-*-canary.sh,
+│                                               evidence.py, reports/ (recorded compatibility evidence)
 │
 ├── neoforbric-kernel-installer/      THE INSTALLER — src/main/java/net/neoforbric/installer/kernel/, packaging/
 │
@@ -1095,7 +1095,6 @@ cd neoforbric-kernel
 ./gradlew --offline jar        # boot jar; nests neoforbric-kernel-runtime.jar only when the staged artifacts exist
 ./gradlew --offline test       # unit suite (depends on compileRuntimeJava)
 ./gradlew --offline check      # + transferTest (real Fabric/NeoForge transaction engines)
-./run/gate-m0.sh               # build + suite from the JUnit XML + scan + link check + discovery oracle
 java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report out.json
 ```
 
@@ -1107,40 +1106,18 @@ java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report 
   is what CI builds. `KernelRuntimeClasses.verify` is what catches such a jar at launch.
 - **Unit tests.** Counted from source, not run: `src/test` has 2 624 `@Test` methods and 2 `@ParameterizedTest`
   methods (two cases each) in 438 `*Test.java` files; `src/transferTest` has 61 `@Test` methods in 4 files
-  (annotations at line start, `grep` over tracked files). Many tests read the staged jars; gate-m0 fails on
-  *any* skipped test, because a skip there means the tests did not look at the real base.
-- **Gates.** 58 scripts, `neoforbric-kernel/run/gate-m*.sh`, each asserting on the real logs and files of a real
-  instance, most with named negative controls (a `-D…=off` or input removal that must turn exactly the named
-  checks red). `run/compat/gates-all.sh` discovers them by glob; `gates-parallel.py` overlaps them using each
-  gate's `# GATE-PARALLEL: rundirs=… mem=…` line (55 of 58 carry one; a gate without it runs alone), giving each
-  slot its own port block.
+  (annotations at line start, `grep` over tracked files). Many tests read the staged jars and skip without them,
+  which is why `./gradlew check` asserts on the JUnit XML rather than Gradle's exit code.
+- **Gates — removed.** The Bash gates (`run/gate-m*.sh`, 58 scripts) and the compatibility harness (`run/compat/`)
+  are gone. They asserted on the real logs and files of a real instance, most with named negative controls (a
+  `-D…=off` or an input removal that had to turn exactly the named checks red), and that was worth having — but
+  they needed a developer's own machine, third-party mod packs that are not in this repository, and a Bash layer
+  that cannot run on Windows. What is left is `./gradlew check`: the unit suite, `transferTest`, the tooling
+  self-tests and the installer's packaged link gate, plus the skip ratchet in `tools/junit_report.py`, which
+  fails the build when a test quietly starts skipping. Two things from that layer were not fixtures and are
+  still here: `run/evidence.py`, the release gate `releaseAssets` calls, and `run/reports/`, the recorded
+  compatibility evidence.
 
-| Gate | Asserts |
-| --- | --- |
-| m0 | build, the whole suite, `--scan`, merged-base link check, discovery oracle, tool self-tests, transfer suite |
-| m1, m3 | the base to `Done` with zero mods and no genuine lifecycle; the Forge-family baseline + a real `@Mod` |
-| m2, m2b | a real Fabric mod, then full fabric-api, with no Fabric Loader |
-| m4, m4-canary, m7-neo | real mods of all three ecosystems in one server; pure NeoForge jars |
-| m8, m10 | multiloader `pack.mcmeta` sections do not delete or break a pack |
-| m9, m27 | client into a world and out cleanly with the 97-jar pack; a fresh non-black frame |
-| m11 | a config-driven mod stack on a dedicated server |
-| m12–m14 | client↔server over a real socket; a Paper anti-cheat; a pure Fabric server |
-| m17 | the installer's profile, launched the way a launcher does |
-| m18, m19, m20 | cross-ecosystem presence; a nested library initialised once; unmet dependency reaches the player |
-| m22, m23 | quitting survives a replaced kernel jar; elytra flight |
-| m24, m24b, m30 | a failing mod, a mod whose metadata cannot be read, and a partly failing mod, attributed on every surface |
-| m24c | a jar listed in `neoforbric-disabled.txt` is loaded by nobody and named in the load report; a server only logs the crash-suspects offer |
-| m25, m31, m32 | both biome-modifier pipelines; zero-mod worldgen parity with vanilla; a save opens with a mod removed |
-| m33, m39, m40, m52 | item/fluid/energy transfer across ecosystems; hoppers into Fabric storages |
-| m34 | ≥ 7200 s occupied simulation soak with retention checks |
-| m35–m38, m41–m51, m53 | per-surface behaviour: mixin outcome, entity callbacks, enchantments, event chain, coremod parity, block break and loot, interaction, everyday actions, stub rebind, damage/server/world events, load predicates, tooltips, widened `NEW` anchors |
-| m54 | a NeoForge mod's play-phase packet reaches the server: Carry On, with fabric-api installed, carries a chest and a pig through real key and mouse input; the same run with the repair off must pick nothing up (third-party jars: `M54_CARRYON`, `M54_FABRIC_API`) |
-| m55 | the creative inventory's search finds items after a Fabric mod refreshed the search trees the vanilla way, judged from the screen's own grid, with a switched-off negative control |
-
-- **Compatibility sweeps.** `run/compat/PROTOCOL.md` is the procedure for running random/popular Modrinth sets on
-  a Windows machine through the installed profile (`push-and-run.sh`, `win/*.py`, `pick_mods.py`, `evidence.py`),
-  plus static tools (`abi-audit.py`, `field-drift.py`, `fapi-usage.py`, `hook-worklist.sh`, `repair-drift.sh`,
-  `control-diff.sh` — same Fabric mods on native Fabric vs NeoForbric).
 - **CI** (`.github/workflows/build.yml`): job `build` bootstraps and builds `neoforbric-loader/`. Job `kernel` (JDK 21,
   no game files) runs `./gradlew build -Pneoforbric.skipBaseline=ci-unstaged` in `neoforbric-kernel/`: the boot side
   compiles and the unit tests that need no game files run. About a third of the suite skips without game files,
@@ -1158,9 +1135,7 @@ java -cp <boot-cp> net.neoforbric.kernel.boot.Main --scan --mods <dir> --report 
   `ci-prepared.tsv` the same way. Job `development-tools` runs
   `tools/dev.py tool-test` and the packaged link gate on Windows, Linux and macOS. kernel-prepared then runs four
   real dedicated-server gates on the same files: m1, m36, m46 and m53, whose mods are canaries built from this
-  repository. The other gates (client, third-party packs, soak) need the developer's Mac: `tools/nightly/` runs
-  them there every night from launchd (02:30, the soak on Sundays), commits each night's summary to the branch
-  `ci-results` and sets the commit status `nightly/dev-mac` on the tested commit.
+  repository. The other gates (client, third-party packs, soak) need a developer's own machine and are run by hand.
 
 ## 17. System properties
 
@@ -1279,8 +1254,7 @@ Break one and the failure usually surfaces far from the cause.
 
 ## 20. Further reading
 
-- [`neoforbric-kernel/README.md`](neoforbric-kernel/README.md) — the kernel's own summary and gate notes
-- [`neoforbric-kernel/run/compat/PROTOCOL.md`](neoforbric-kernel/run/compat/PROTOCOL.md) — the compatibility sweep procedure
+- [`neoforbric-kernel/README.md`](neoforbric-kernel/README.md) — the kernel's own summary and build notes
 - [`neoforbric-loader/README.md`](neoforbric-loader/README.md), [`neoforbric-loader/run/README.md`](neoforbric-loader/run/README.md) — the first generation and the artifact pipeline
 - [`neoforbric-loader/CREDITS.md`](neoforbric-loader/CREDITS.md), [`neoforbric-loader/MAPPINGS.md`](neoforbric-loader/MAPPINGS.md) — the clean-room boundary and mapping position
 - The class javadoc. Almost every class under `net.neoforbric.kernel` opens with the failure it exists for.
