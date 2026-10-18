@@ -70,6 +70,17 @@ Two rules it is built on, both learned the hard way:
 - **Not every grouping is a missing split.** `LoaderProbePolicy.Family` stays two-valued on purpose: a
   NeoForge mod probing for the Forge family's `FMLLoader` must still be told yes.
 
+## The hook bus (`kernel.hook`)
+
+The kernel's internal dispatch layer. **Not public**: no mod ever sees it. Of the seventy classes in `transform/`,
+twenty-three splice a call to the game side so an ecosystem's hook fires, and those go through this bus; the other
+forty-seven rewrite the base's own bytecode and dispatch to nobody, and belong to `SeamRewriter`.
+
+The contract — ordering, cancellation, error isolation, threading, key validation — and the measurement behind the
+split are in [`HOOKBUS.md`](HOOKBUS.md) (Chinese). The numbers are measured, not estimated: fabric-api's 49 modules
+carry 311 mixin entries naming 233 classes; NeoForge's 8 hook classes appear at 488 call sites across 208 classes;
+377 classes in union, 64 in both.
+
 ## Shared assets (kept, not rewritten)
 
 The staging pipeline stays in `../neoforbric-loader`: its `run/` scripts produce the NeoForge-patched game jar

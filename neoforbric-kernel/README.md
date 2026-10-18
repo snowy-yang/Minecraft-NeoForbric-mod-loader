@@ -42,6 +42,12 @@
 - **中枢把各 Forge 系之间的分歧当作数据保留，不取平均把它抹掉**。早先一版统一的订阅者注册一下子弄坏了三样东西（见 `KernelEventSubscribers` 自己的 javadoc）。所以 `ForeignType` 只映射*名字*，两个 `ServerModLoader.load` 触发点保留各自不同的描述符和不同的钩子。
 - **不是每次归并都意味着漏了拆分。**`LoaderProbePolicy.Family` 故意只有两个取值：一个 NeoForge mod 探测 MinecraftForge 的 `FMLLoader` 时，仍然必须得到肯定的回答。
 
+## 钩子总线（`kernel.hook`）
+
+内核内部的派发层，**不对外**：mod 看不到它。`transform/` 下 70 个类里，23 个往基底字节码里插一个对 runtime 侧的调用让某个生态的钩子响，它们走这条总线；另外 47 个纯改写基底自己的字节码、不派发，归 `SeamRewriter`。
+
+契约（顺序、取消、错误隔离、并发、标识校验）和清点数据在 [`HOOKBUS.md`](HOOKBUS.md)。清点是实测的：fabric-api 49 个模块、311 条 mixin 条目指向 233 个类；NeoForge 的 8 个钩子类在基底里有 488 处调用点、覆盖 208 个类；两边并集 377 个类，交集 64 个。
+
 ## 共用部分（沿用，未重写）
 
 合并基底的流水线留在 `../neoforbric-loader` 里：`src/tools/{MergedBaseBuilder,MergedLinkChecker,
