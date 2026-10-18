@@ -57,37 +57,46 @@ class FinalMixinApplicationsTest {
   assertTrue(injector.evidence().contains("final handler references=0"),injector.evidence().toString());
   assertEquals(CompatibilityFinding.Confidence.SUSPECTED,whole().confidence(),"a miss never discharges the whole-mixin suspicion");
  }
- /** The stock fabric-api jar every Fabric pack carries: ItemStackMixin's plain @WrapOperation on Item.useOn, in a
-  * required config with defaultRequire 1, finds nothing in the merged ItemStack.useOn (the call moved into a
-  * NeoForge lambda). Confirming it stopped every dedicated server at boot and asked every client to quit. */
- @Test void theStockFabricApiUseOnWrapThatMissesTheMergedBaseDoesNotStopTheLaunch() throws Exception {
-  String config="fabric-events-interaction-v0.mixins.json",mixinName="net.fabricmc.fabric.mixin.event.interaction.ItemStackMixin";
-  MixinConfigOwners.publish(List.of(new MixinConfigOwners.Owned(config,"fabric-events-interaction-v0",Ecosystem.FABRIC)));
-  MixinCompatibility.rememberOriginalConfig(config,fabricApiResource("fabric-events-interaction-v0",config));
-  ClassNode mixin=StagedFabricMixinFixture.mixin("fabric-events-interaction-v0",mixinName.replace('.','/'));FinalMixinApplications.remember(mixin);
-  ClassNode stack=StagedFabricMixinFixture.game("net/minecraft/world/item/ItemStack",false);
-  assertFalse(calls(StagedFabricMixinFixture.method(stack,"useOn"),"net/minecraft/world/item/Item","useOn"),"premise: the merged useOn no longer calls Item.useOn itself");
-  assertTrue(calls(StagedFabricMixinFixture.method(stack,"use"),"net/minecraft/world/item/Item","use"),"premise: use still does");
-  // What Mixin leaves behind: both handlers merged under their renamed names, only the use wrap called.
-  MethodNode caller=new MethodNode(Opcodes.ACC_PRIVATE,"neoforbric$attachedUse","()V",null,null);
-  for(String handler:List.of("handleUseEvent","handleUseOnEvent")) {
-   MethodNode original=StagedFabricMixinFixture.method(mixin,handler),merged=new MethodNode(original.access,"wrapOperation$fbr000$"+handler,original.desc,null,null);
-   merged.instructions.add(new InsnNode(Opcodes.ACONST_NULL));merged.instructions.add(new InsnNode(Opcodes.ARETURN));
-   merged.visibleAnnotations=new ArrayList<>(List.of(annotation("Lorg/spongepowered/asm/mixin/transformer/meta/MixinMerged;","mixin",mixinName)));stack.methods.add(merged);
-   if(handler.equals("handleUseEvent"))caller.instructions.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,stack.name,merged.name,merged.desc,false));
-  }
-  caller.instructions.add(new InsnNode(Opcodes.RETURN));stack.methods.add(caller);
-  MixinCompatibility.record(config,mixinName,"3/4 anchors resolve, missing: @At(INVOKE) ItemStack.useOn in useOn",CompatibilityFinding.Confidence.SUSPECTED,true,List.of("preflight"));
-  FinalMixinApplications.observe("net.minecraft.world.item.ItemStack",StagedFabricMixinFixture.bytes(stack),
-    (m,name,desc)->List.of(new FinalMixinApplications.Renamed("wrapOperation$fbr000$"+name,desc)));
-  assertTrue(CompatibilityFindings.confirmedRequired().isEmpty(),CompatibilityFindings.all().toString());
-  CompatibilityFinding useOn=CompatibilityFindings.all().stream().filter(f->f.id().startsWith("mixin-injector:")&&f.id().contains("#handleUseOnEvent")).findFirst().orElseThrow();
-  assertEquals(CompatibilityFinding.Confidence.SUSPECTED,useOn.confidence());assertTrue(useOn.required());
-  assertTrue(useOn.evidence().contains("final handler references=0"),useOn.evidence().toString());
-  assertTrue(CompatibilityFindings.all().stream().noneMatch(f->f.id().contains("#handleUseEvent")),"the attached wrap owes nothing");
-  assertEquals(CompatibilityFinding.Confidence.SUSPECTED,CompatibilityFindings.all().stream().filter(f->f.id().equals(MixinCompatibility.id(config,mixinName))).findFirst().orElseThrow().confidence());
+ /**
+ * The stock fabric-api jar every Fabric pack carries: CustomPayloadS2CPacketMixin's two plain @WrapOperations on
+ * {@code CustomPayload.createCodec} inside ClientboundCustomPayloadPacket's {@code <clinit>}, in a required config
+ * with defaultRequire 1, find nothing in the merged {@code <clinit>} — the kernel serves those codecs itself and the
+ * base declares no {@code createCodec} at all. Confirming them stopped every dedicated server at boot and asked
+ * every client to quit.
+ *
+ * <p>What this used to assert, and why it is not asserted any more: the 26.x module's {@code ItemStackMixin} — a
+ * plain @WrapOperation on {@code Item.useOn} that missed the merged {@code ItemStack.useOn} — is not shipped by
+ * 0.116.17 (fabric-events-interaction-v0 has no such class), so there is no such mixin to read. The row below is the
+ * same shape on a class this module does ship, and every assertion is the one the old row made.
+ */
+@Test void theStockFabricApiUseOnWrapThatMissesTheMergedBaseDoesNotStopTheLaunch() throws Exception {
+ String config="fabric-networking-api-v1.mixins.json",mixinName="net.fabricmc.fabric.mixin.networking.CustomPayloadS2CPacketMixin";
+ MixinConfigOwners.publish(List.of(new MixinConfigOwners.Owned(config,"fabric-networking-api-v1",Ecosystem.FABRIC)));
+ MixinCompatibility.rememberOriginalConfig(config,fabricApiResource("fabric-networking-api-v1",config));
+ ClassNode mixin=StagedFabricMixinFixture.remapped("fabric-networking-api-v1",mixinName.replace('.','/'));FinalMixinApplications.remember(mixin);
+ ClassNode packet=StagedFabricMixinFixture.game("net/minecraft/network/protocol/common/ClientboundCustomPayloadPacket",false);
+ assertFalse(calls(StagedFabricMixinFixture.method(packet,"<clinit>"),"net/minecraft/network/protocol/common/custom/CustomPacketPayload","createCodec"),"premise: the merged <clinit> no longer calls createCodec");
+ assertTrue(StagedFabricMixinFixture.game("net/minecraft/network/protocol/common/custom/CustomPacketPayload",false).methods.stream().noneMatch(m->m.name.equals("createCodec")),"premise: and the base declares no such factory to bind to");
+ // What Mixin leaves behind: both handlers merged under their renamed names, only the play wrap called.
+ MethodNode caller=new MethodNode(Opcodes.ACC_PRIVATE,"neoforbric$attachedCodec","()V",null,null);
+ for(String handler:List.of("wrapPlayCodec","wrapConfigCodec")) {
+  MethodNode original=StagedFabricMixinFixture.method(mixin,handler),merged=new MethodNode(original.access,"wrapOperation$fbr000$"+handler,original.desc,null,null);
+  merged.instructions.add(new InsnNode(Opcodes.ACONST_NULL));merged.instructions.add(new InsnNode(Opcodes.ARETURN));
+  merged.visibleAnnotations=new ArrayList<>(List.of(annotation("Lorg/spongepowered/asm/mixin/transformer/meta/MixinMerged;","mixin",mixinName)));packet.methods.add(merged);
+  if(handler.equals("wrapPlayCodec"))caller.instructions.add(new MethodInsnNode(Opcodes.INVOKESTATIC,packet.name,merged.name,merged.desc,false));
  }
- @Test void anAttachedMixinExtrasInjectorDischargesTheWholeMixinSuspicion() {
+ caller.instructions.add(new InsnNode(Opcodes.RETURN));packet.methods.add(caller);
+ MixinCompatibility.record(config,mixinName,"both @At targets miss: CustomPayload.createCodec is not in the merged <clinit>",CompatibilityFinding.Confidence.SUSPECTED,true,List.of("preflight"));
+ FinalMixinApplications.observe("net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket",StagedFabricMixinFixture.bytes(packet),
+   (m,name,desc)->List.of(new FinalMixinApplications.Renamed("wrapOperation$fbr000$"+name,desc)));
+ assertTrue(CompatibilityFindings.confirmedRequired().isEmpty(),CompatibilityFindings.all().toString());
+ CompatibilityFinding configCodec=CompatibilityFindings.all().stream().filter(f->f.id().startsWith("mixin-injector:")&&f.id().contains("#wrapConfigCodec")).findFirst().orElseThrow();
+ assertEquals(CompatibilityFinding.Confidence.SUSPECTED,configCodec.confidence());assertTrue(configCodec.required());
+ assertTrue(configCodec.evidence().contains("final handler references=0"),configCodec.evidence().toString());
+ assertTrue(CompatibilityFindings.all().stream().noneMatch(f->f.id().contains("#wrapPlayCodec")),"the attached wrap owes nothing");
+ assertEquals(CompatibilityFinding.Confidence.SUSPECTED,CompatibilityFindings.all().stream().filter(f->f.id().equals(MixinCompatibility.id(config,mixinName))).findFirst().orElseThrow().confidence());
+}
+@Test void anAttachedMixinExtrasInjectorDischargesTheWholeMixinSuspicion() {
   config(1);remember(extras(MODIFY_EXPRESSION_VALUE));suspect();observe(target(true,true,"handler$000$probe","()V"));
   assertEquals(CompatibilityFinding.Confidence.RESOLVED,whole().confidence());assertTrue(CompatibilityFindings.confirmedRequired().isEmpty());
  }

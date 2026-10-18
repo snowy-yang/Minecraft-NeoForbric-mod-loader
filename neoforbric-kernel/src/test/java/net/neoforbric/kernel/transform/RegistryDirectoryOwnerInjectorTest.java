@@ -19,24 +19,17 @@ package net.neoforbric.kernel.transform;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -47,17 +40,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
-import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.analysis.Analyzer;
-import org.objectweb.asm.tree.analysis.BasicVerifier;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import net.neoforbric.api.DiscoveredMod;
 import net.neoforbric.api.Ecosystem;
@@ -69,38 +55,35 @@ import net.neoforbric.kernel.mixin.MergedBaseMixinCompat;
  * WorldWeaver's world presets and biome data are read from the directory WorldWeaver ships them in, as on native
  * Fabric.
  *
- * <p>Real bytes throughout, wherever they exist on this machine: {@code Registries}' directory methods from vanilla
- * 1.21.1 and from the merged base; NeoForge's own {@code prefixNamespace}; and the
- * two mixin handlers that decide the outcome on native Fabric — fabric-registry-sync's {@code RegistriesMixin} and
- * WorldWeaver's {@code RegistryDataLoaderMixinEarly} — out of the sweep pack's jars. Only {@code Identifier},
- * {@code ResourceKey} and wover's "is this one of my registries" lookup are stand-ins, because the real ones drag in
- * DataFixerUpper and wover's whole registry. The directory each arm answers is then checked against the files
- * WorldWeaver's jar actually ships, which is exactly what the content census counted: 5+3 presets and 10 biome
- * entries on native Fabric, none on NeoForbric.
+ * <p>Real bytes throughout, wherever they exist on this machine: {@code Registries}' directory methods from the
+ * merged base, NeoForge's own {@code prefixNamespace}, and the two mixin handlers that decide the outcome on native
+ * Fabric — fabric-registry-sync's {@code RegistriesMixin} and WorldWeaver's {@code RegistryDataLoaderMixinEarly} —
+ * out of the sweep pack's jars.
+ *
+ * <p><b>Re-anchored, and most of this class went with the 26.x base.</b> It used to load {@code Registries} from
+ * three jars into a throwaway loader and call the two loaders' handlers by hand, so it could show that wover's
+ * presets come out as on native Fabric and that the injector hands every answer to the owner. Two things are gone on
+ * 1.21.1: {@code Registries} has no {@code registryDirPath} at all (it has {@code elementsDirPath} and
+ * {@code tagsDirPath}, and no {@code componentsDirPath}), and fabric-registry-sync's {@code RegistriesMixin} ships
+ * no directory handler — only {@code init} and {@code hasInitialised} — so the race this injector arbitrated cannot
+ * happen here. The arms therefore drove a seam that does not exist, off jars that are not in the sweep pack, and were
+ * skipped rather than run. What is left asserts the real bytes: the seam the injector needs is absent, it stands
+ * down, and neither loader ships a handler that would put it back.
  */
 class RegistryDirectoryOwnerInjectorTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
 	private static final Path MERGED_BASE = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path NEO_RUNTIME = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
-	private static final Path VANILLA = TestFixtures.vanillaJar();
 	private static final Path SWEEP = Path.of("build/compat-inputs/sweep-1.21.1/mods");
-	private static final Path FABRIC_API = SWEEP.resolve("fabric-api-0.161.0+26.2.jar");
-	private static final Path WORLDWEAVER = SWEEP.resolve("worldweaver-26.201.2.jar");
+	private static final Path FABRIC_API = SWEEP.resolve("fabric-api-0.116.17+1.21.1.jar");
+	private static final Path WORLDWEAVER = SWEEP.resolve("worldweaver-21.0.13.jar");
 
 	private static final String REGISTRIES = "net/minecraft/core/registries/Registries";
 	private static final String COMMON_HOOKS = "net/neoforged/neoforge/common/CommonHooks";
-	private static final String IDENTIFIER = "net/minecraft/resources/Identifier";
-	private static final String RESOURCE_KEY = "net/minecraft/resources/ResourceKey";
 	private static final String FABRIC_MIXIN = "net/fabricmc/fabric/mixin/registry/sync/RegistriesMixin";
-	private static final String WOVER_MIXIN = "de/ambertation/wover/core/mixin/registry/RegistryDataLoaderMixinEarly";
-	private static final String WOVER_BUILDER = "de/ambertation/wover/core/impl/registry/DatapackRegistryBuilderImpl";
-	private static final String MIXIN_MERGED = "Lorg/spongepowered/asm/mixin/transformer/meta/MixinMerged;";
-	private static final String NOT_IN_REGISTRIES = "RegistriesMixin is not in Registries";
-	private static final Set<String> DIR_METHODS = Set.of("registryDirPath", "elementsDirPath", "tagsDirPath",
-			"componentsDirPath");
-
-	private static final String PRESET_INFO = "wover/world_preset_info";
-	private static final String BIOME_DATA = "wover/worldgen/biome_data";
+	private static final String WOVER_MIXIN = "org/betterx/wover/core/mixin/registry/RegistryDataLoaderMixinEarly";
+	private static final String DIR_DESC = "(Lnet/minecraft/resources/ResourceKey;)Ljava/lang/String;";
+	private static final String WOVER_HANDLER_DESC = "(Lnet/minecraft/class_5321;"
+			+ "Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V";
 
 	@BeforeEach
 	@AfterEach
@@ -108,88 +91,59 @@ class RegistryDirectoryOwnerInjectorTest {
 		System.clearProperty(RegistryDirectoryOwnerInjector.PROPERTY);
 		ModPresence.publishForgeFamily(List.of());
 		ModPresence.publishFabric(List.of());
-		// The arms run fabric-registry-sync's modifier beside Registries rather than merged into it, so the hook is
-		// told it is there; the tests of that question below build a Registries that carries it, or does not.
+		// The hook is told fabric-registry-sync's modifier is beside Registries, which is what the arms used to
+		// simulate; on this base nothing ships one, which is what the test below pins.
 		KernelRegistryDirectories.resetForTests(Boolean.TRUE);
 	}
 
 	@Test
-	void theMergedBodyIsNeoForgesAndTheEditHandsEveryAnswerToTheOwner() throws Exception {
+	void theMergedBodyIsNeoForgesAndTheInjectorsSeamIsNotOnThisBase() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
 		byte[] in = classBytes(MERGED_BASE, REGISTRIES);
-		assertTrue(calls(method(node(in), "registryDirPath"), COMMON_HOOKS, "prefixNamespace"),
-				"the merged body prefixes through NeoForge's hook — if it stopped, re-derive the repair");
+		ClassNode merged = node(in);
+
+		// Re-anchored: this drove the injector over the merged Registries and asserted the edit handed every answer
+		// to the owner, anchored on RegistryDirectoryOwnerInjector.METHOD. On 1.21.1 that method is not there — the
+		// two directory methods are elementsDirPath and tagsDirPath — so the injector stands down, and what can be
+		// asserted is the premise it would have to match.
+		assertTrue(merged.methods.stream().noneMatch(m -> RegistryDirectoryOwnerInjector.METHOD.equals(m.name)),
+				"the injector's anchor is on this base again — re-derive the edit it makes: " + names(merged));
+		assertTrue(merged.methods.stream().noneMatch(m -> m.name.endsWith("DirPath") && !DIR_DESC.equals(m.desc)),
+				"a directory method with another shape appeared: " + names(merged));
+		for (String dir : List.of("elementsDirPath", "tagsDirPath")) {
+			MethodNode body = method(merged, dir);
+			assertEquals(DIR_DESC, body.desc, dir);
+			assertTrue(calls(body, COMMON_HOOKS, "prefixNamespace"),
+					"the merged body prefixes through NeoForge's hook — if it stopped, re-derive the repair");
+		}
 
 		byte[] out = transform(in);
-		assertNotSame(in, out);
-		ClassNode node = node(out);
-		MethodNode body = method(node, "registryDirPath");
-		assertTrue(calls(body, RegistryDirectoryOwnerInjector.HOOK_OWNER, "registryDirPath"));
-		assertTrue(body.maxStack >= 3, "namespace and path ride on top of the merged answer");
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, body);
-		assertSame(out, transform(out), "a second pass must not wrap the answer twice");
-	}
-
-	@Test
-	void woversRegistriesReadTheDirectoryWoverShipsAsOnNativeFabric() throws Exception {
-		requireAll(VANILLA, MERGED_BASE, NEO_RUNTIME, FABRIC_API, WORLDWEAVER);
-		ModPresence.publishFabric(List.of(mod(Ecosystem.FABRIC, "wover")));
-
-		Arm nativeFabric = arm(registries(VANILLA, false));
-		Arm before = arm(registries(MERGED_BASE, false));
-		Arm after = arm(registries(MERGED_BASE, true));
-
-		// Native Fabric: wover's own mixin hands back vanilla's body before fabric-registry-sync can prefix it.
-		assertEquals(PRESET_INFO, nativeFabric.elements("wover", PRESET_INFO));
-		assertEquals(Map.of("minecraft", 5, "wover", 3), shipped(nativeFabric.elements("wover", PRESET_INFO)),
-				"the census's native-Fabric count: five vanilla presets and wover's own three");
-		assertEquals(Map.of("minecraft", 10), shipped(nativeFabric.elements("wover", BIOME_DATA)));
-
-		// The merged body prefixed already, so wover handed back a directory nothing ships.
-		assertEquals("wover/" + PRESET_INFO, before.elements("wover", PRESET_INFO));
-		assertEquals(Map.of(), shipped(before.elements("wover", PRESET_INFO)), "the census's NeoForbric count");
-		assertEquals(Map.of(), shipped(before.elements("wover", BIOME_DATA)));
-
-		for (String registry : List.of(PRESET_INFO, BIOME_DATA)) {
-			assertEquals(nativeFabric.elements("wover", registry), after.elements("wover", registry), registry);
-			assertEquals(shipped(nativeFabric.elements("wover", registry)), shipped(after.elements("wover", registry)));
-			// wover's mixin leaves tagsDirPath alone, so fabric-registry-sync prefixes its tags on both.
-			assertEquals("tags/wover/" + registry, nativeFabric.tags("wover", registry));
-			assertEquals(nativeFabric.tags("wover", registry), after.tags("wover", registry), registry);
+		assertSame(in, out, "the anchor is missing, so the injector must stand down and say so");
+		for (MethodNode m : node(out).methods) {
+			assertTrue(!calls(m, RegistryDirectoryOwnerInjector.HOOK_OWNER, "registryDirPath"),
+					m.name + " hands its answer to the owner, but this base has no seam to do it from");
 		}
 	}
 
 	@Test
-	void everyOtherRegistryEndsWhereItsOwnLoaderPutsIt() throws Exception {
-		requireAll(VANILLA, MERGED_BASE, NEO_RUNTIME, FABRIC_API, WORLDWEAVER);
-		ModPresence.publishFabric(List.of(mod(Ecosystem.FABRIC, "wover"), mod(Ecosystem.FABRIC, "owo"),
-				mod(Ecosystem.FABRIC, "cloth-config")));
-		ModPresence.publishForgeFamily(List.of(mod(Ecosystem.NEOFORGE, "examplemod"),
-				mod(Ecosystem.NEOFORGE, "cloth_config")));
+	void neitherLoaderShipsTheDirectoryRaceThisInjectorArbitrated() throws Exception {
+		// The arms that stood in for the two loaders are gone with their 26.x jars. Both halves are asserted against
+		// the real 1.21.1 jars, because the day fabric-registry-sync's handler comes back is the day this repair has
+		// to be re-derived instead of stood down, and wover's own handler is what it would have to arbitrate against.
+		requireAll(FABRIC_API, WORLDWEAVER);
 
-		Arm nativeFabric = arm(registries(VANILLA, false));
-		Arm before = arm(registries(MERGED_BASE, false));
-		Arm after = arm(registries(MERGED_BASE, true));
+		ClassNode fabric = node(nestedClassBytes(FABRIC_API, "fabric-registry-sync-v0-", FABRIC_MIXIN));
+		Set<String> fabricMethods = names(fabric);
+		assertTrue(fabricMethods.stream().anyMatch(name -> name.startsWith("init(")),
+				"the mixin is still there, just without a directory handler: " + fabricMethods);
+		assertTrue(fabricMethods.stream().noneMatch(name -> name.startsWith("prependDirectory")
+						|| name.startsWith("prependTagDirectory")),
+				"fabric-registry-sync has a directory handler again — re-derive the repair this test stands down on: "
+						+ fabricMethods);
 
-		// A plain Fabric registry: vanilla body now, and fabric-registry-sync puts the namespace back as natively.
-		assertEquals("owo_things", after.body("elementsDirPath", "owo", "owo_things"));
-		assertEquals("owo/owo_things", after.elements("owo", "owo_things"));
-		assertEquals(nativeFabric.elements("owo", "owo_things"), after.elements("owo", "owo_things"));
-		assertEquals(before.elements("owo", "owo_things"), after.elements("owo", "owo_things"));
-		assertEquals(before.tags("owo", "owo_things"), after.tags("owo", "owo_things"));
-
-		// A NeoForge mod's registry, one no mod claims, one two ecosystems claim, and vanilla's: the merged answer.
-		for (String[] id : new String[][] {{"examplemod", "thing"}, {"unclaimed", "thing"}, {"cloth_config", "thing"},
-				{"minecraft", "worldgen/biome"}}) {
-			assertEquals(before.body("elementsDirPath", id[0], id[1]), after.body("elementsDirPath", id[0], id[1]),
-					id[0]);
-			assertEquals(before.body("tagsDirPath", id[0], id[1]), after.body("tagsDirPath", id[0], id[1]), id[0]);
-		}
-		assertEquals("examplemod/thing", after.body("elementsDirPath", "examplemod", "thing"));
-		assertEquals("worldgen/biome", after.body("elementsDirPath", "minecraft", "worldgen/biome"));
-		// componentsDirPath is datagen's, and Fabric never prefixed it.
-		assertEquals(nativeFabric.body("componentsDirPath", "owo", "owo_things"),
-				after.body("componentsDirPath", "owo", "owo_things"));
+		ClassNode wover = node(nestedClassBytes(WORLDWEAVER, "wover-core-api-", WOVER_MIXIN));
+		assertEquals(WOVER_HANDLER_DESC, method(wover, "prependDirectoryWithNamespace").desc,
+				"wover's own handler is still what puts its presets and biome data back on Fabric");
 	}
 
 	@Test
@@ -220,56 +174,6 @@ class RegistryDirectoryOwnerInjectorTest {
 	}
 
 	@Test
-	void aRegistriesThatTookFabricsModifierHandsFabricRegistriesVanillasDirectory() throws Exception {
-		requireAll(VANILLA, MERGED_BASE, NEO_RUNTIME, FABRIC_API, WORLDWEAVER);
-		ModPresence.publishFabric(List.of(mod(Ecosystem.FABRIC, "wover")));
-		Arm nativeFabric = arm(registries(VANILLA, false));
-		KernelRegistryDirectories.resetForTests(null);
-		Arm after = arm(withFabricsModifier(registries(MERGED_BASE, true)));
-
-		String log = capture(() -> {
-			for (String registry : List.of(PRESET_INFO, BIOME_DATA)) {
-				assertEquals(nativeFabric.elements("wover", registry), after.elements("wover", registry), registry);
-			}
-		});
-		assertFalse(log.contains(NOT_IN_REGISTRIES), log);
-	}
-
-	@Test
-	void withoutFabricsModifierInRegistriesEveryRegistryKeepsTheMergedDirectory() throws Exception {
-		requireAll(MERGED_BASE, NEO_RUNTIME, FABRIC_API, WORLDWEAVER);
-		ModPresence.publishFabric(List.of(mod(Ecosystem.FABRIC, "wover"), mod(Ecosystem.FABRIC, "owo")));
-		Arm before = arm(registries(MERGED_BASE, false));
-		KernelRegistryDirectories.resetForTests(null);
-		// Mixin never merged fabric-registry-sync's mixin into this one: pinned, dropped as unfit, or not installed.
-		Arm after = arm(registries(MERGED_BASE, true));
-
-		String log = capture(() -> {
-			for (String registry : List.of(PRESET_INFO, BIOME_DATA)) {
-				assertEquals(before.elements("wover", registry), after.elements("wover", registry), registry);
-			}
-			// vanilla's path here would have nothing to put the namespace back
-			assertEquals("owo/owo_things", after.body("elementsDirPath", "owo", "owo_things"));
-			assertEquals("tags/owo/owo_things", after.body("tagsDirPath", "owo", "owo_things"));
-		});
-		assertEquals(1, log.split(NOT_IN_REGISTRIES, -1).length - 1, "one WARN, however many registries ask: " + log);
-	}
-
-	@Test
-	void forceHandsFabricRegistriesVanillasDirectoryWithoutAsking() throws Exception {
-		requireAll(VANILLA, MERGED_BASE, NEO_RUNTIME, FABRIC_API, WORLDWEAVER);
-		System.setProperty(RegistryDirectoryOwnerInjector.PROPERTY, "force");
-		ModPresence.publishFabric(List.of(mod(Ecosystem.FABRIC, "wover")));
-		Arm nativeFabric = arm(registries(VANILLA, false));
-		KernelRegistryDirectories.resetForTests(null);
-		Arm after = arm(registries(MERGED_BASE, true));
-
-		for (String registry : List.of(PRESET_INFO, BIOME_DATA)) {
-			assertEquals(nativeFabric.elements("wover", registry), after.elements("wover", registry), registry);
-		}
-	}
-
-	@Test
 	void fabricsModifierIsNotPinnedOffTheMergedBase() {
 		// Pinned, it would not crash anything: the hook finds it missing from Registries, every registry keeps the
 		// merged directory, and WorldWeaver's world presets and biome data load empty again. That cost is the pin's.
@@ -279,279 +183,13 @@ class RegistryDirectoryOwnerInjectorTest {
 		assertFalse(MergedBaseMixinCompat.DISABLED_CONFIGS.contains("fabric-registry-sync-v0.mixins.json"));
 	}
 
-	// --- one arm: Registries' directory methods, plus the two mixins as Mixin lays them out on native Fabric ---
-
-	private record Arm(Class<?> registries, Class<?> identifier, Class<?> resourceKey, Method fabricElements,
-			Method fabricTags, Method wover) {
-		Object key(String namespace, String path) throws Exception {
-			Object id = identifier.getConstructor(String.class, String.class).newInstance(namespace, path);
-			return resourceKey.getConstructor(identifier).newInstance(id);
-		}
-
-		String body(String method, String namespace, String path) throws Exception {
-			return (String) registries.getMethod(method, resourceKey).invoke(null, key(namespace, path));
-		}
-
-		/**
-		 * {@code elementsDirPath} with both mixins applied. wover's {@code @Inject} (priority 200, applied first) goes
-		 * in before the return; fabric-registry-sync's {@code @ModifyReturnValue} goes in after it, right in front of
-		 * the same return. A cancelled callback returns from inside the first, so the second never sees it.
-		 */
-		String elements(String namespace, String path) throws Exception {
-			Object key = key(namespace, path);
-			String body = (String) registries.getMethod("elementsDirPath", resourceKey).invoke(null, key);
-			CallbackInfoReturnable<String> callback = new CallbackInfoReturnable<>("elementsDirPath", true, body);
-			wover.invoke(null, key, callback);
-			if (callback.isCancelled()) return callback.getReturnValue();
-			return (String) fabricElements.invoke(null, body, key);
-		}
-
-		/** {@code tagsDirPath}: only fabric-registry-sync's modifier targets it. */
-		String tags(String namespace, String path) throws Exception {
-			Object key = key(namespace, path);
-			return (String) fabricTags.invoke(null, registries.getMethod("tagsDirPath", resourceKey).invoke(null, key),
-					key);
-		}
-	}
-
-	private static Arm arm(byte[] registries) throws Exception {
-		Map<String, byte[]> classes = new HashMap<>();
-		classes.put(REGISTRIES, registries);
-		classes.put(IDENTIFIER, identifierStandIn());
-		classes.put(RESOURCE_KEY, resourceKeyStandIn());
-		classes.put(WOVER_BUILDER, woverBuilderStandIn());
-		if (Files.isRegularFile(NEO_RUNTIME)) {
-			classes.put(COMMON_HOOKS, only(node(classBytes(NEO_RUNTIME, COMMON_HOOKS)), Set.of("prefixNamespace")));
-		}
-		if (Files.isRegularFile(FABRIC_API)) {
-			classes.put(FABRIC_MIXIN, only(node(nestedClassBytes(FABRIC_API, "fabric-registry-sync-v0-", FABRIC_MIXIN)),
-					Set.of("prependDirectoryWithNamespace", "prependTagDirectoryWithNamespace")));
-		}
-		if (Files.isRegularFile(WORLDWEAVER)) {
-			classes.put(WOVER_MIXIN, only(node(nestedClassBytes(WORLDWEAVER, "wover-core-api-", WOVER_MIXIN)),
-					Set.of("prependDirectoryWithNamespace")));
-		}
-		Game game = new Game(classes);
-		Class<?> key = game.loadClass(RESOURCE_KEY.replace('/', '.'));
-		Method fabricElements = null;
-		Method fabricTags = null;
-		Method wover = null;
-		if (classes.containsKey(FABRIC_MIXIN)) {
-			Class<?> fabric = game.loadClass(FABRIC_MIXIN.replace('/', '.'));
-			fabricElements = fabric.getMethod("prependDirectoryWithNamespace", String.class, key);
-			fabricTags = fabric.getMethod("prependTagDirectoryWithNamespace", String.class, key);
-		}
-		if (classes.containsKey(WOVER_MIXIN)) {
-			wover = game.loadClass(WOVER_MIXIN.replace('/', '.'))
-					.getMethod("prependDirectoryWithNamespace", key, CallbackInfoReturnable.class);
-		}
-		return new Arm(game.loadClass(REGISTRIES.replace('/', '.')), game.loadClass(IDENTIFIER.replace('/', '.')), key,
-				fabricElements, fabricTags, wover);
-	}
-
-	/** {@code Registries} from {@code jar}, optionally through the injector, cut down to its directory methods. */
-	private static byte[] registries(Path jar, boolean repaired) throws IOException {
-		byte[] bytes = classBytes(jar, REGISTRIES);
-		if (repaired) {
-			byte[] out = transform(bytes);
-			assertNotSame(bytes, out, "the injector must edit " + jar.getFileName());
-			bytes = out;
-		}
-		return only(node(bytes), DIR_METHODS);
-	}
-
-	/**
-	 * {@code registries} as Mixin leaves it once fabric-registry-sync's mixin applied: the mixin's two handlers
-	 * merged in, each marked the way Mixin marks every method it merges. The arm still calls fabric's handlers
-	 * itself, where Mixin's injection would; the mark is what the hook reads.
-	 */
-	private static byte[] withFabricsModifier(byte[] registries) throws IOException {
-		ClassNode target = node(registries);
-		ClassNode fabric = node(only(node(nestedClassBytes(FABRIC_API, "fabric-registry-sync-v0-", FABRIC_MIXIN)),
-				Set.of("prependDirectoryWithNamespace", "prependTagDirectoryWithNamespace")));
-		for (MethodNode handler : fabric.methods) {
-			AnnotationNode merged = new AnnotationNode(MIXIN_MERGED);
-			merged.values = new ArrayList<>(List.of("mixin", FABRIC_MIXIN.replace('/', '.'), "priority", 1000,
-					"sessionId", "test"));
-			handler.visibleAnnotations = new ArrayList<>(List.of(merged));
-			target.methods.add(handler);
-		}
-		ClassWriter writer = new ClassWriter(0);
-		target.accept(writer);
-		return writer.toByteArray();
-	}
-
-	/**
-	 * The class with only {@code keep}, made public and stripped of annotations (the mixin handlers' name
-	 * MixinExtras types). Frames are kept as they are; the JVM verifies them when the arm defines the class.
-	 */
-	private static byte[] only(ClassNode source, Set<String> keep) {
-		ClassNode out = new ClassNode();
-		out.version = source.version;
-		out.access = Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER;
-		out.name = source.name;
-		out.superName = "java/lang/Object";
-		for (MethodNode m : source.methods) {
-			if (!keep.contains(m.name)) continue;
-			m.access = (m.access & ~(Opcodes.ACC_PRIVATE | Opcodes.ACC_PROTECTED)) | Opcodes.ACC_PUBLIC;
-			m.visibleAnnotations = null;
-			m.invisibleAnnotations = null;
-			m.visibleParameterAnnotations = null;
-			m.invisibleParameterAnnotations = null;
-			out.methods.add(m);
-		}
-		assertEquals(keep.size(), out.methods.size(), source.name + " lacks one of " + keep);
-		ClassWriter writer = new ClassWriter(0);
-		out.accept(writer);
-		return writer.toByteArray();
-	}
-
-	private static byte[] identifierStandIn() {
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_SUPER, IDENTIFIER, null,
-				"java/lang/Object", null);
-		cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "namespace", "Ljava/lang/String;", null, null).visitEnd();
-		cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "path", "Ljava/lang/String;", null, null).visitEnd();
-		MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(Ljava/lang/String;Ljava/lang/String;)V",
-				null, null);
-		init.visitCode();
-		init.visitVarInsn(Opcodes.ALOAD, 0);
-		init.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
-		init.visitVarInsn(Opcodes.ALOAD, 0);
-		init.visitVarInsn(Opcodes.ALOAD, 1);
-		init.visitFieldInsn(Opcodes.PUTFIELD, IDENTIFIER, "namespace", "Ljava/lang/String;");
-		init.visitVarInsn(Opcodes.ALOAD, 0);
-		init.visitVarInsn(Opcodes.ALOAD, 2);
-		init.visitFieldInsn(Opcodes.PUTFIELD, IDENTIFIER, "path", "Ljava/lang/String;");
-		init.visitInsn(Opcodes.RETURN);
-		init.visitMaxs(0, 0);
-		init.visitEnd();
-		getter(cw, IDENTIFIER, "getNamespace", "namespace", "Ljava/lang/String;");
-		getter(cw, IDENTIFIER, "getPath", "path", "Ljava/lang/String;");
-		cw.visitEnd();
-		return cw.toByteArray();
-	}
-
-	private static byte[] resourceKeyStandIn() {
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_SUPER, RESOURCE_KEY, null,
-				"java/lang/Object", null);
-		cw.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "id", "L" + IDENTIFIER + ";", null, null).visitEnd();
-		MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "(L" + IDENTIFIER + ";)V", null, null);
-		init.visitCode();
-		init.visitVarInsn(Opcodes.ALOAD, 0);
-		init.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false);
-		init.visitVarInsn(Opcodes.ALOAD, 0);
-		init.visitVarInsn(Opcodes.ALOAD, 1);
-		init.visitFieldInsn(Opcodes.PUTFIELD, RESOURCE_KEY, "id", "L" + IDENTIFIER + ";");
-		init.visitInsn(Opcodes.RETURN);
-		init.visitMaxs(0, 0);
-		init.visitEnd();
-		getter(cw, RESOURCE_KEY, "identifier", "id", "L" + IDENTIFIER + ";");
-		cw.visitEnd();
-		return cw.toByteArray();
-	}
-
-	/** wover's "is this one of my datapack registries": its registries are all in its own namespace. */
-	private static byte[] woverBuilderStandIn() {
-		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
-		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, WOVER_BUILDER, null, "java/lang/Object", null);
-		MethodVisitor m = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "isRegistered",
-				"(L" + IDENTIFIER + ";)Z", null, null);
-		m.visitCode();
-		m.visitLdcInsn("wover");
-		m.visitVarInsn(Opcodes.ALOAD, 0);
-		m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, IDENTIFIER, "getNamespace", "()Ljava/lang/String;", false);
-		m.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals", "(Ljava/lang/Object;)Z", false);
-		m.visitInsn(Opcodes.IRETURN);
-		m.visitMaxs(0, 0);
-		m.visitEnd();
-		cw.visitEnd();
-		return cw.toByteArray();
-	}
-
-	private static void getter(ClassWriter cw, String owner, String name, String field, String desc) {
-		MethodVisitor m = cw.visitMethod(Opcodes.ACC_PUBLIC, name, "()" + desc, null, null);
-		m.visitCode();
-		m.visitVarInsn(Opcodes.ALOAD, 0);
-		m.visitFieldInsn(Opcodes.GETFIELD, owner, field, desc);
-		m.visitInsn(Opcodes.ARETURN);
-		m.visitMaxs(0, 0);
-		m.visitEnd();
-	}
-
-	/** Defines the arm's classes itself and asks the test's loader for everything else (Mixin's callback types). */
-	private static final class Game extends ClassLoader {
-		private final Map<String, byte[]> classes;
-
-		Game(Map<String, byte[]> classes) {
-			super(RegistryDirectoryOwnerInjectorTest.class.getClassLoader());
-			this.classes = classes;
-		}
-
-		@Override
-		protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-			synchronized (getClassLoadingLock(name)) {
-				Class<?> loaded = findLoadedClass(name);
-				if (loaded != null) return loaded;
-				byte[] bytes = classes.get(name.replace('.', '/'));
-				if (bytes == null) return super.loadClass(name, resolve);
-				return defineClass(name, bytes, 0, bytes.length);
-			}
-		}
-	}
-
-	// --- what WorldWeaver's jar ships, counted the way RegistryDataLoader lists it ---
-
-	/** Elements per namespace under {@code data/<ns>/<dir>/}, over wover's jar and every jar nested in it. */
-	private static Map<String, Integer> shipped(String dir) throws IOException {
-		Map<String, Integer> byNamespace = new TreeMap<>();
-		try (ZipFile outer = new ZipFile(WORLDWEAVER.toFile())) {
-			for (ZipEntry entry : Collections.list(outer.entries())) {
-				count(entry.getName(), dir, byNamespace);
-				if (!entry.getName().startsWith("META-INF/jars/") || !entry.getName().endsWith(".jar")) continue;
-				try (ZipInputStream nested = new ZipInputStream(outer.getInputStream(entry))) {
-					for (ZipEntry inner; (inner = nested.getNextEntry()) != null; ) count(inner.getName(), dir, byNamespace);
-				}
-			}
-		}
-		return byNamespace;
-	}
-
-	private static void count(String name, String dir, Map<String, Integer> into) {
-		if (!name.startsWith("data/") || !name.endsWith(".json")) return;
-		int slash = name.indexOf('/', "data/".length());
-		if (slash > 0 && name.startsWith(dir + "/", slash + 1)) into.merge(name.substring(5, slash), 1, Integer::sum);
-	}
-
 	// --- plumbing ---
-
-	private interface Body {
-		void run() throws Exception;
-	}
-
-	/** What {@code body} logged; without log4j on the test classpath NeoForbricLog writes to the standard streams. */
-	private static String capture(Body body) throws Exception {
-		PrintStream out = System.out;
-		PrintStream err = System.err;
-		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-		PrintStream sink = new PrintStream(buffer, true, StandardCharsets.UTF_8);
-		System.setOut(sink);
-		System.setErr(sink);
-		try {
-			body.run();
-		} finally {
-			System.setOut(out);
-			System.setErr(err);
-		}
-		return buffer.toString(StandardCharsets.UTF_8);
-	}
 
 	private static byte[] transform(byte[] bytes) {
 		return new RegistryDirectoryOwnerInjector().transform(RegistryDirectoryOwnerInjector.TARGET, bytes, null);
 	}
 
-	/** Each input under its own fixture kind: stock 1.21.1, the staged jars and the sweep's mods are on different machines. */
+	/** Each input under its own fixture kind: the staged jars and the sweep's mods are on different machines. */
 	private static void requireAll(Path... inputs) {
 		for (Path input : inputs) {
 			TestFixtures.require(NativeCoremodParityTest.fixtureOf(input), Files.isRegularFile(input),
@@ -591,6 +229,12 @@ class RegistryDirectoryOwnerInjectorTest {
 		ClassNode node = new ClassNode();
 		new ClassReader(bytes).accept(node, 0);
 		return node;
+	}
+
+	private static Set<String> names(ClassNode node) {
+		Set<String> names = new TreeSet<>();
+		for (MethodNode m : node.methods) names.add(m.name + m.desc);
+		return names;
 	}
 
 	private static MethodNode method(ClassNode node, String name) {

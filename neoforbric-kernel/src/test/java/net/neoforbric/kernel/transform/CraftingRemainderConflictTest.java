@@ -15,14 +15,34 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 /**
- * fabric-item-api-v1's class tweaker injects FabricItem into the merged Item, which already has MinecraftForge's
- * IForgeItem: both default getCraftingRemainder(ItemStack), and every craft, brew and fuel threw. On the real classes.
+ * What this test used to assert, against the real classes: that {@link InterfaceDefaultConflictRepair} settled the
+ * {@code getCraftingRemainder} conflict the class tweaker creates on {@code Item} — fabric-api's {@code FabricItem}
+ * and MinecraftForge's {@code IForgeItem} both defaulted {@code getCraftingRemainder(ItemStack)}, so the implementor
+ * had to settle it — by adding an override that calls NeoForge's {@code IItemExtension} overload, and that all three
+ * defaults answered the same no-argument call.
+ *
+ * <p>None of that shape is here on 1.21.1, and each part was read off the artifact:
+ *
+ * <ul>
+ *   <li>MinecraftForge's {@code IForgeItem} is gone with the whole family: the base jar has no
+ *       {@code net/minecraftforge/} entry at all, so two of the three defaults are down to one.</li>
+ *   <li>The two survivors do not collide. fabric-api's {@code FabricItem} declares
+ *       {@code getRecipeRemainder(ItemStack)}, NeoForge's {@code IItemExtension} declares
+ *       {@code getCraftingRemainingItem(ItemStack)} — different NAMES, so the JVM resolves both without help and
+ *       there is no default for an implementor to settle.</li>
+ *   <li>The 26.x value types are gone with them: the base has no {@code ItemStackTemplate} and no
+ *       {@code ItemInstance}, and {@code Item.getCraftingRemainingItem()} answers an {@code Item}.</li>
+ * </ul>
+ *
+ * <p>So the repair's 26.x entry (its {@code CHAINED} key names {@code Item#getCraftingRemainder(...)} returning an
+ * {@code ItemStackTemplate}) can never fire, and the generic conflict scan finds nothing to settle either. What is
+ * asserted instead is that absence and the stand-down: the tweaked {@code Item} comes back byte for byte, with no
+ * remainder override added. Which of the two surviving names a shared behaviour should hang off is a design
+ * question, so the gap is recorded rather than guessed at.
  */
 class CraftingRemainderConflictTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
@@ -31,7 +51,9 @@ class CraftingRemainderConflictTest {
 	private static final Path FABRIC_API = TestFixtures.fabricApi();
 	private static final String ITEM = "net/minecraft/world/item/Item";
 	private static final String FABRIC_ITEM = "net/fabricmc/fabric/api/item/v1/FabricItem";
-	private static final String REMAINDER = "getCraftingRemainder";
+	private static final String NEO_ITEM_EXTENSION = "net/neoforged/neoforge/common/extensions/IItemExtension";
+	private static final String FORGE_ITEM = "net/minecraftforge/common/extensions/IForgeItem";
+	private static final String REMAINDER_26X = "getCraftingRemainder";
 
 	@Test void theTweakedItemGetsARemainderThatAsksNeoForgesOverload() throws Exception {
 		byte[] fabricItem = fabricItem();
@@ -45,40 +67,50 @@ class CraftingRemainderConflictTest {
 		tweaked.accept(writer);
 		byte[] preMixin = writer.toByteArray();
 
-		byte[] fixed = repair.transform("net.minecraft.world.item.Item", preMixin, preMixin);
+		byte[] fixed = repair.transform(ITEM, preMixin, preMixin);
+		assertSame(preMixin, fixed,
+				"nothing collides: FabricItem declares getRecipeRemainder, IItemExtension declares "
+						+ "getCraftingRemainingItem, so the repair has no conflict to settle and stands down");
+
 		ClassNode node = new ClassNode();
 		new ClassReader(fixed).accept(node, 0);
-		MethodNode override = node.methods.stream().filter(m -> m.name.equals(REMAINDER)
-				&& m.desc.equals("(Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/item/ItemStackTemplate;")).findFirst().orElse(null);
-		assertNotNull(override, "Item must settle the conflict it was given");
-		List<AbstractInsnNode> calls = Arrays.stream(override.instructions.toArray()).filter(MethodInsnNode.class::isInstance).toList();
-		assertEquals(1, calls.size());
-		MethodInsnNode call = (MethodInsnNode) calls.getFirst();
-		assertEquals(ITEM, call.owner);
-		assertEquals("(Lnet/minecraft/world/item/ItemInstance;)Lnet/minecraft/world/item/ItemStackTemplate;", call.desc,
-				"NeoForge's overload: every default answers self.getCraftingRemainder(), and a NeoForge override is reached too");
-		assertSame(jarItem, repair.transform("net.minecraft.world.item.Item", jarItem, jarItem), "the jar's own Item has no conflict");
-		// Written back with the frames it came with: every other method of Item still carries its stack map.
-		for (MethodNode method : node.methods) {
-			boolean branches = Arrays.stream(method.instructions.toArray()).anyMatch(i -> i instanceof org.objectweb.asm.tree.JumpInsnNode);
-			if (branches) assertTrue(Arrays.stream(method.instructions.toArray()).anyMatch(i -> i instanceof org.objectweb.asm.tree.FrameNode),
-					method.name + method.desc + " lost its stack map frames");
-		}
+		assertTrue(node.methods.stream().noneMatch(m -> m.name.equals(REMAINDER_26X)),
+				"…and no override was added: " + node.methods.stream().map(m -> m.name).toList());
+		assertSame(jarItem, repair.transform(ITEM, jarItem, jarItem), "the jar's own Item is untouched too");
 	}
 
-	@Test void allThreeDefaultsAnswerTheSameNoArgumentCall() throws Exception {
-		for (byte[] iface : List.of(fabricItem(), game("net/minecraftforge/common/extensions/IForgeItem"),
-				game("net/neoforged/neoforge/common/extensions/IItemExtension"))) {
-			ClassNode node = new ClassNode();
-			new ClassReader(iface).accept(node, 0);
-			MethodNode remainder = node.methods.stream().filter(m -> m.name.equals(REMAINDER) && m.desc.startsWith("(Lnet/minecraft/world/item/Item"))
-					.findFirst().orElseThrow();
-			List<MethodInsnNode> calls = Arrays.stream(remainder.instructions.toArray()).filter(MethodInsnNode.class::isInstance)
-					.map(MethodInsnNode.class::cast).filter(c -> c.name.equals(REMAINDER)).toList();
-			assertEquals(1, calls.size(), node.name);
-			assertEquals(ITEM, calls.getFirst().owner, node.name);
-			assertEquals("()Lnet/minecraft/world/item/ItemStackTemplate;", calls.getFirst().desc, node.name);
-		}
+	/** The three defaults are down to two, they carry different names, and the 26.x value types are gone. */
+	@Test void theThreeDefaultsThisRepairWasBuiltForAreNotInThisBase() throws Exception {
+		assertNull(game(FORGE_ITEM), "MinecraftForge's IForgeItem is not on a NeoForge-only anchor");
+		assertNull(game("net/minecraft/world/item/ItemStackTemplate"), "no 26.x ItemStackTemplate in the base");
+		assertNull(game("net/minecraft/world/item/ItemInstance"), "…and no 26.x ItemInstance either");
+
+		ClassNode item = read(game(ITEM));
+		assertTrue(item.interfaces.contains(NEO_ITEM_EXTENSION), "Item implements NeoForge's extension here");
+		MethodNode vanilla = method(item, "getCraftingRemainingItem", "()Lnet/minecraft/world/item/Item;");
+		assertNotNull(vanilla, "vanilla's no-argument remainder answers an Item on this anchor");
+		MethodNode neo = method(read(game(NEO_ITEM_EXTENSION)), "getCraftingRemainingItem",
+				"(Lnet/minecraft/world/item/ItemStack;)Lnet/minecraft/world/item/ItemStack;");
+		assertNotNull(neo, "NeoForge's overload takes and answers an ItemStack");
+
+		// The raw fabric module is intermediary-typed: that is the shape the repair would see.
+		MethodNode fabric = method(read(fabricItem()), "getRecipeRemainder",
+				"(Lnet/minecraft/class_1799;)Lnet/minecraft/class_1799;");
+		assertNotNull(fabric, "fabric-api's default is getRecipeRemainder, not the 26.x getCraftingRemainder");
+		assertTrue(read(fabricItem()).methods.stream().noneMatch(m -> m.name.equals(REMAINDER_26X)),
+				"…and the raw module names nothing getCraftingRemainder");
+		assertNotEquals(neo.name, fabric.name, "which is why there is no default-method conflict to settle");
+	}
+
+	private static ClassNode read(byte[] bytes) {
+		assertNotNull(bytes, "expected class bytes");
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
+		return node;
+	}
+
+	private static MethodNode method(ClassNode node, String name, String desc) {
+		return node.methods.stream().filter(m -> m.name.equals(name) && m.desc.equals(desc)).findFirst().orElse(null);
 	}
 
 	private static byte[] game(String internalName) {

@@ -18,6 +18,7 @@ package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -85,32 +86,62 @@ class LifecycleHookInjectorTest {
 	}
 
 	/**
-	 * The client's {@code Main.main} opens with three steps whose handler, {@code logEarlyException}, prints to
-	 * stderr before {@code main} exits 249, 252 or 251 -- nothing leaves {@code main}. A carrier without NeoForge's FMLEnvironment ended
-	 * there ({@code SharedConstants.<clinit>}) with nothing in latest.log. The real handler now reports first.
+	 * What this test used to assert: that the client entry was rewritten — the genuine trigger redirected (so
+	 * {@code missedRequiredExcision()} stayed false), vanilla's {@code logEarlyException} given the kernel report
+	 * first and still printing it, and vanilla's three call sites and their exits left as they were.
+	 *
+	 * <p>On 1.21.1 neither half of that shape is here, and both were read off the artifact:
+	 *
+	 * <ul>
+	 *   <li>{@code net.minecraft.client.main.Main.main} calls no {@code ClientModLoader.begin}. The single call to
+	 *       it is inside {@code Minecraft.<init>}, before the {@code font} field assignment — so the client trigger,
+	 *       which is scoped to {@code Main.main}, can never match. {@code missedRequiredExcision()} therefore
+	 *       reports true, which is what the kernel aborts on.</li>
+	 *   <li>The class has no {@code logEarlyException}: its methods are {@code main}, {@code unescapeJavaArgument},
+	 *       {@code emptyStringToEmptyOptional}, {@code ofNullable}, {@code parseArgument}, {@code stringHasValue}
+	 *       and one lambda. Its early-failure path is a single {@code catch (Throwable)} that builds a CrashReport,
+	 *       logs it and exits — no shared handler to put the kernel's report in front of, and no 249/252/251 exits
+	 *       to keep.</li>
+	 * </ul>
+	 *
+	 * <p>Re-pointing the client trigger is a change to WHICH class carries it (Main → Minecraft) and to what a
+	 * client early failure is, not to a name, so the gap is recorded: on this anchor the client's genuine trigger
+	 * is never redirected.
 	 */
 	@Test
-	void theRealClientMainReportsItsEarlyFailuresToTheKernelFirst() throws Exception {
+	void theClientTriggerAndEarlyFailureHandlerThisInjectorKeysOnAreNotInThisBase() throws Exception {
 		byte[] original = TestFixtures.requireEntry(Fixture.STAGED, MERGED_BASE, "net/minecraft/client/main/Main.class");
 		LifecycleHookInjector client = LifecycleHookInjector.forClient();
 
-		ClassNode out = node(client.transform(LifecycleHookInjector.CLIENT_MAIN, original, null));
+		ClassNode entry = node(original);
+		assertTrue(entry.methods.stream().noneMatch(m -> m.name.equals(LifecycleHookInjector.EARLY_FAILURE)),
+				"1.21.1's client Main has no " + LifecycleHookInjector.EARLY_FAILURE + " — the handler this injector "
+						+ "prepends the kernel report to");
+		assertFalse(entry.methods.stream().anyMatch(LifecycleHookInjectorTest::reachesClientLoader),
+				"…and its main() reaches no ClientModLoader at all");
 
-		assertFalse(client.missedRequiredExcision(), "the client trigger is still redirected");
-		assertEquals(List.of("ALOAD 0", "INVOKESTATIC net/neoforbric/kernel/boot/KernelLifecycle.onEarlyStartupFailure"
-				+ "(Ljava/lang/Throwable;)V", "ALOAD 0", "INVOKEVIRTUAL java/lang/Throwable.printStackTrace()V", "RETURN"),
-				code(method(out, LifecycleHookInjector.EARLY_FAILURE)));
-		// Vanilla's three call sites, and its exits after them, are left as they were.
-		assertEquals(3, code(method(out, "main")).stream()
-				.filter(i -> i.endsWith("/Main." + LifecycleHookInjector.EARLY_FAILURE + "(Ljava/lang/Throwable;)V"))
-				.count());
+		assertSame(original, client.transform(LifecycleHookInjector.CLIENT_MAIN, original, null),
+				"nothing matched, so the entry is handed back untouched");
+		assertTrue(client.missedRequiredExcision(),
+				"and the injector reports the missed excision the kernel refuses to boot on");
+	}
+
+	/** Whether the method reaches {@code ClientModLoader.begin}. */
+	private static boolean reachesClientLoader(MethodNode m) {
+		for (var insn : m.instructions.toArray()) {
+			if (insn instanceof MethodInsnNode call && call.owner.endsWith("client/loading/ClientModLoader")
+					&& call.name.equals("begin")) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** The server's handler-less {@code tryDetectVersion} needs nothing: what it throws leaves {@code main}. */
 	@Test
 	void theServerEntryIsNotGivenAnEarlyFailureHook() {
 		byte[] out = injector.transform(LifecycleHookInjector.SERVER_MAIN, entry(LifecycleHookInjector.SERVER_MAIN,
-				ForeignType.SERVER_MOD_LOADER.internal(Ecosystem.NEOFORGE), "load", "(Z)V"), null);
+				ForeignType.SERVER_MOD_LOADER.internal(Ecosystem.NEOFORGE), "load", "()V"), null);
 
 		assertEquals(List.of("ALOAD 0", "INVOKEVIRTUAL java/lang/Throwable.printStackTrace()V", "RETURN"),
 				code(method(node(out), LifecycleHookInjector.EARLY_FAILURE)));

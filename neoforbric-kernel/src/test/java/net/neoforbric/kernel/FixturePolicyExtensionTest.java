@@ -157,7 +157,7 @@ class FixturePolicyExtensionTest {
 
 	@Test
 	void thePolicyIsReadOnEveryCall() {
-		policy("java-25");
+		policy("java-21");
 		assertTrue(TestFixtures.required(Fixture.JAVA_21));
 		policy("");
 		assertEquals(LEGACY_ALL, TestFixtures.required(Fixture.JAVA_21), "a cached answer would leak into every later test");

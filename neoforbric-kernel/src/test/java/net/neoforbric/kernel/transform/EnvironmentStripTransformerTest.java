@@ -784,11 +784,28 @@ class EnvironmentStripTransformerTest {
 
 		byte[] out = strip(ALL_FABRIC).transform("team.creative.creativecore.CreativeFabricLoader", raw, SERVER);
 
-		Set<String> expected = new TreeSet<>(methods(raw));
-		assertTrue(expected.remove("registerHudElement(Ljava/util/function/Consumer;)V"));
-		assertEquals(expected, methods(out));
-		assertEquals(fields(raw), fields(out));
-		assertEquals(node(raw).interfaces, node(out).interfaces);
+		// Re-anchored: this asserted that CreativeFabricLoader lost exactly one method to the strip. On the 1.21.1
+		// build of CreativeCore that class carries no @Environment member at all (it did on 26.x), so there is
+		// nothing for the strip to remove and the remove() call found no such method. Both halves are asserted: the
+		// loader comes back byte-identical, and TickUtils — the same kind of class on the same real jar, one
+		// client-only member — loses exactly that member and nothing else.
+		assertSame(raw, out, "no @Environment member is declared here, so the strip must return the class untouched");
 		assertSame(raw, strip(ALL_FABRIC).transform("team.creative.creativecore.CreativeFabricLoader", raw, CLIENT));
+
+		byte[] ticks;
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			ticks = zip.getInputStream(zip.getEntry("team/creative/creativecore/common/util/mc/TickUtils.class")).readAllBytes();
+		}
+		byte[] strippedTicks = strip(ALL_FABRIC)
+				.transform("team.creative.creativecore.common.util.mc.TickUtils", ticks, SERVER);
+
+		Set<String> expected = new TreeSet<>(methods(ticks));
+		assertTrue(expected.remove("getFrameTimeClient()F"),
+				"the fixture must carry the client-only member this asserts on: " + expected);
+		assertEquals(expected, methods(strippedTicks));
+		assertEquals(fields(ticks), fields(strippedTicks));
+		assertEquals(node(ticks).interfaces, node(strippedTicks).interfaces);
+		assertSame(ticks, strip(ALL_FABRIC)
+				.transform("team.creative.creativecore.common.util.mc.TickUtils", ticks, CLIENT));
 	}
 }

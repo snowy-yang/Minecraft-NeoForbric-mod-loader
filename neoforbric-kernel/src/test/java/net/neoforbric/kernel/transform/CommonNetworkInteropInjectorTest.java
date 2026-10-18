@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -153,14 +154,61 @@ class CommonNetworkInteropInjectorTest {
 	@Test
 	void everyHookSplicedIntoTheRealListenersResolves() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged base absent — skipping real-bytecode check");
-		for (String entry : List.of(
-				"net/minecraft/server/network/ServerConfigurationPacketListenerImpl",
-				"net/minecraft/client/multiplayer/ClientConfigurationPacketListenerImpl")) {
-			byte[] in = readClass(entry + ".class");
-			byte[] out = new CommonNetworkInteropInjector().transform(entry.replace('/', '.'), in, null);
-			assertTrue(out != in, entry + " must still need the injection");
-			InteropHookAssertions.assertEveryInteropCallResolves(out);
+		String server = "net/minecraft/server/network/ServerConfigurationPacketListenerImpl";
+		byte[] serverIn = readClass(server + ".class");
+		byte[] serverOut = new CommonNetworkInteropInjector().transform(server.replace('/', '.'), serverIn, null);
+		assertTrue(serverOut != serverIn, server + " must still need the injection");
+		InteropHookAssertions.assertEveryInteropCallResolves(serverOut);
+
+		// Re-anchored: the client listener used to be in the loop above, because it took the second interop hook —
+		// the one spliced onto handleCustomPayload's sendInitialListeningChannels call. 1.21.1's listener makes no
+		// such call (its handleCustomPayload only tests the connection type), so that hook is not spliced and the
+		// only edit left is the flag guard, which is a GETFIELD and not an interop call at all. Asserted here: the
+		// edit happened, every initializedConnection read it adds resolves to a field the class declares, and the
+		// premise that the client-side interop seam is absent. Nothing reaches PayloadInterop from this listener.
+		byte[] clientIn = readClass(LISTENER + ".class");
+		byte[] clientOut = new CommonNetworkInteropInjector().transform(LISTENER_NAME, clientIn, null);
+		assertTrue(clientOut != clientIn, LISTENER + " must still need its flag guard");
+		ClassNode before = parse(clientIn);
+		MethodNode handlePayload = method(before, "handleCustomPayload");
+		List<String> clientSeams = new ArrayList<>();
+		for (AbstractInsnNode insn : handlePayload.instructions) {
+			if (insn instanceof MethodInsnNode call && "sendInitialListeningChannels".equals(call.name)) {
+				clientSeams.add(call.owner + "." + call.name);
+			}
 		}
+		assertEquals(List.of(), clientSeams, "the client-side interop seam is back — re-derive the hook and put this "
+				+ "listener back in the loop above: " + clientSeams);
+
+		ClassNode after = parse(clientOut);
+		assertTrue(after.fields.stream().anyMatch(f -> "initializedConnection".equals(f.name) && "Z".equals(f.desc)),
+				"the guard reads a field the class declares");
+		List<String> interop = new ArrayList<>();
+		int guards = 0;
+		for (MethodNode m : after.methods) {
+			for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof FieldInsnNode read && read.getOpcode() == Opcodes.GETFIELD
+						&& "initializedConnection".equals(read.name) && "Z".equals(read.desc)) guards++;
+				if (insn instanceof MethodInsnNode call && call.owner.startsWith(InteropHookAssertions.INTEROP_PACKAGE)) {
+					interop.add(m.name + " -> " + call.owner + "." + call.name);
+				}
+			}
+		}
+		assertEquals(2, guards - flagReads(before),
+				"the brand-payload site and the enabled-features site — the third was already guarded");
+		assertEquals(List.of(), interop, "no interop hook belongs in this listener on this base: " + interop);
+	}
+
+	/** Every {@code initializedConnection} read the class already had, which the splice must leave alone. */
+	private static int flagReads(ClassNode node) {
+		int reads = 0;
+		for (MethodNode m : node.methods) {
+			for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof FieldInsnNode read && read.getOpcode() == Opcodes.GETFIELD
+						&& "initializedConnection".equals(read.name) && "Z".equals(read.desc)) reads++;
+			}
+		}
+		return reads;
 	}
 
 	// --- helpers -------------------------------------------------------------------------------------------------

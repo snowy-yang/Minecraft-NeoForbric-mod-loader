@@ -31,8 +31,16 @@ import org.objectweb.asm.tree.MethodNode;
  * extension's {@code writeByte(byte)}.
  *
  * <p>The decisive assertions read the other jars: the extension's overload only forwards to vanilla's, and after the
- * repair every merged method that made the extension call makes exactly the {@code writeByte} calls vanilla's makes —
- * the same owners, the same descriptors, as often.
+ * repair every merged method that made the extension call makes vanilla's call instead.
+ *
+ * <p>Re-anchored, twice over. The census used to be a three-way one — vanilla's own body for the class was read out
+ * of {@link TestFixtures#vanillaJar()} and the repaired merged method had to make exactly the calls vanilla makes,
+ * same owners, same descriptors, as often. That half cannot run on this anchor: the fixture is Mojang's OBFUSCATED
+ * launcher jar, so it has no {@code net/minecraft/...} entry for a merged class to be compared against (checked in
+ * {@link #everyMergedSiteBecomesVanillasCall()} rather than assumed). And the shape the census was counting is not in
+ * this base at all: 1.21.1's patched jar calls {@code writeByte(int)} everywhere vanilla does, so the repair stands
+ * down, which is what the census now asserts — with the per-site re-bind loop left live for the day NeoForge's
+ * recompile binds one again.
  */
 class MergedBaseVanillaWriteByteTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
@@ -65,31 +73,71 @@ class MergedBaseVanillaWriteByteTest {
 				BUF + ".writeByte" + INT, Integer.toString(Opcodes.ARETURN)), code);
 	}
 
-	@Test void everyMergedSiteBecomesTheCallVanillaMakes() throws Exception {
+	@Test void everyMergedSiteBecomesVanillasCall() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
 		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
-		Map<String, Integer> repaired = new TreeMap<>();
-		try (ZipFile merged = new ZipFile(MERGED_BASE.toFile()); ZipFile vanilla = new ZipFile(VANILLA.toFile())) {
+		// The premise of the re-anchor above: the vanilla fixture cannot answer for a merged class, because its
+		// entries are obfuscated. Asserted, not assumed — the day a Mojmap-named jar is staged here, the three-way
+		// census can be restored and this fails saying so.
+		try (ZipFile vanilla = new ZipFile(VANILLA.toFile())) {
+			assertNull(vanilla.getEntry(BUF + ".class"),
+					"premise: the staged 1.21.1.jar is Mojang's OBFUSCATED launcher jar, so it cannot be read by the "
+							+ "names the merged base uses");
+			assertNotNull(vanilla.getEntry("net/minecraft/client/main/Main.class"),
+					"…and only the launcher's own entries keep their Mojmap names");
+		}
+
+		Map<String, Integer> sites = new TreeMap<>();
+		int scanned = 0;
+		try (ZipFile merged = new ZipFile(MERGED_BASE.toFile())) {
 			for (ZipEntry entry : Collections.list(merged.entries())) {
 				if (!entry.getName().startsWith("net/minecraft/") || !entry.getName().endsWith(".class")) continue;
+				scanned++;
 				byte[] before = merged.getInputStream(entry).readAllBytes();
 				ClassNode node = read(before);
 				Map<String, List<String>> calls = writeBytes(node);
 				if (calls.values().stream().noneMatch(c -> c.stream().anyMatch(s -> s.endsWith(BYTE)))) continue;
-				ZipEntry original = vanilla.getEntry(entry.getName());
-				assertNotNull(original, entry.getName() + " is not a vanilla class");
-				Map<String, List<String>> vanillaCalls = writeBytes(read(vanilla.getInputStream(original).readAllBytes()));
+				// Nothing in this base takes this path today (the assertion below says so), and it is kept live so
+				// that the day NeoForge's recompile binds a call to the extension again, the repair is driven
+				// against the real bytes that came back rather than against the synthetic fixture alone.
 				String name = node.name.replace('/', '.');
 				Map<String, List<String>> after = writeBytes(read(new NeoForbricMergedBaseCompatTransformer().transform(name, before, null)));
 				for (Map.Entry<String, List<String>> method : calls.entrySet()) {
-					if (method.getValue().stream().noneMatch(s -> s.endsWith(BYTE))) continue;
-					assertEquals(vanillaCalls.get(method.getKey()), after.get(method.getKey()), name + "." + method.getKey());
-					repaired.merge(name, (int) method.getValue().stream().filter(s -> s.endsWith(BYTE)).count(), Integer::sum);
+					long count = method.getValue().stream().filter(s -> s.endsWith(BYTE)).count();
+					if (count == 0) continue;
+					sites.merge(name, (int) count, Integer::sum);
+					// Every site keeps its position and its owner: only the descriptor moves, to vanilla's overload.
+					assertEquals(method.getValue().size(), after.get(method.getKey()).size(),
+							name + "." + method.getKey() + " lost or gained a writeByte call");
+					assertTrue(after.get(method.getKey()).stream().noneMatch(s -> s.endsWith(BYTE)),
+							name + "." + method.getKey() + " still calls NeoForge's writeByte(byte): "
+									+ after.get(method.getKey()));
+					assertEquals(count, after.get(method.getKey()).stream().filter(s -> s.endsWith(INT)).count(),
+							name + "." + method.getKey() + " did not re-bind every site to vanilla's writeByte(int)");
 				}
 			}
 		}
-		assertEquals(14, repaired.values().stream().mapToInt(Integer::intValue).sum(), "sites: " + repaired);
-		assertTrue(repaired.containsKey(ABILITIES.replace('/', '.')), "ViaFabricPlus' packet: " + repaired);
+		assertTrue(scanned > 7000, "the census must read the whole game, not a corner of it: " + scanned);
+		// Re-anchored: this base is NeoForge 1.21.1's own patched jar, and its recompile never bound these calls to
+		// the extension — every site vanilla makes is already writeByte(int) (ServerboundPlayerAbilitiesPacket.write
+		// included, which the test below pins), so the repair has nothing to re-bind and stands down. 26.x's
+		// fourteen sites in ten write methods are not here; if any come back, the loop above drives the repair
+		// against them.
+		assertEquals(Map.of(), sites, "the extension call is back in the merged base — the loop above must be "
+				+ "re-derived against these bytes: " + sites);
+	}
+
+	/**
+	 * The injector's premise, read off the real base. ViaFabricPlus' 1.15.2 ability-flags redirect anchors on
+	 * {@code ServerboundPlayerAbilitiesPacket.write}'s call to vanilla's {@code writeByte(int)}; that is the call the
+	 * merged method makes on this base, so the mixin binds with no repair in between — where 26.x's recompile had
+	 * bound it to the extension's {@code writeByte(byte)} first.
+	 */
+	@Test void theInjectorsAnchorIsAlreadyVanillasCallOnThisBase() throws Exception {
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
+		ClassNode node = read(entry(MERGED_BASE, ABILITIES + ".class"));
+		assertEquals(Map.of("write(L" + BUF + ";)V", List.of(BUF + ".writeByte" + INT)), writeBytes(node),
+				"ViaFabricPlus' redirect binds this exact call");
 	}
 
 	@Test void switchedOffItLeavesNeoForgesCall() {

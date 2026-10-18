@@ -25,19 +25,16 @@ import net.neoforbric.api.Ecosystem;
  * as an injector that never runs — which marks the mod's row and stops nothing — instead of a required injector that
  * bound nowhere, which stops a strict launch.
  *
- * <p>The fixture's {@code ItemStack} has the shape of the carrier-renames.txt pair
+ * <p>The fixture's {@code ItemStack} has the shape of the 26.x carrier-renames.txt pair
  * {@code addDetailsToTooltip -> addDetailsToTooltipComponents | PIECE | FABRIC,FORGE | UNCALLED}: the dispatcher makes none
  * of vanilla's component calls, the private renamed body makes one and nothing calls it. The mixin is malilib's, cut
  * down: a HEAD hook that binds in the dispatcher, so the mixin reads PARTIAL, and a hook after the component call. The
  * probe builds a tooltip through the dispatcher.
- * <ul>
- *   <li>fabric — the hook moves into the renamed body and is attached there; it never runs; the final-class check
- *       reports it as never running, confirmed and not required;</li>
- *   <li>uncalled-off — {@code -Dneoforbric.mixinRetarget.renameCensus.uncalled=off}: it stays, binds nowhere, and is a
- *       confirmed required loss, which is what stopped every strict client with malilib;</li>
- *   <li>liveness-off — {@code -Dneoforbric.mixinFit.liveness=off}: it moves and reads as attached, with nothing reported,
- *       which is how the move read before the census.</li>
- * </ul>
+ *
+ * <p>The fixture is hand-written to that pair and is compiled by the harness, so it needs every source the pair
+ * names: {@code net/minecraft/world/item/component/TooltipDisplay.java} had been dropped from the fixture in the
+ * re-anchor, which failed the class in {@code @BeforeAll} before any assertion ran. It is restored, and the four tests
+ * below are the ones that were written for this row.
  */
 class MixinRetargetUncalledBodyWeaveTest {
 	private static final Path SOURCES = Path.of("src/test/resources/weave/uncalledbody");

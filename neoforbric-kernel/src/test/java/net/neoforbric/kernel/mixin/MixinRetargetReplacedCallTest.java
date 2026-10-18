@@ -17,8 +17,10 @@
 package net.neoforbric.kernel.mixin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -45,11 +47,18 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 /**
- * R7 on the real merged {@code StructureTemplate}: NeoForge's {@code placeInWorld} calls {@code addEntitiesToWorld} where
- * vanilla called {@code placeEntities}, which is gone. MoogsStructureLib's Fabric {@code EntityProcessorMixin}, as compiled,
- * records its context BEFORE the vanilla call, clears it AFTER, and places processed entities itself at the HEAD of
- * {@code placeEntities}, cancelling; on the merged base both points missed and the HEAD selector bound MinecraftForge's
- * reshaped {@code placeEntities}, which its handler does not fit.
+ * R7's row on the real merged {@code StructureTemplate}, and the miss a guest injector written for vanilla's
+ * {@code placeEntities} reads there.
+ *
+ * <p>What used to be asserted here is R7's <em>move</em>: MoogsStructureLib's Fabric {@code EntityProcessorMixin}, as
+ * compiled, records its context before vanilla's {@code placeEntities} call, clears it after, and places processed
+ * entities at the HEAD of {@code placeEntities}, cancelling — and R7 moved all three points onto NeoForge's
+ * {@code addEntitiesToWorld}. That fixture needed a carrier that keeps vanilla's name with a changed shape: on the
+ * MinecraftForge base the HEAD selector bound a reshaped {@code placeEntities}, which is what the row's message named
+ * ("the name binds placeEntities&lt;shape&gt;, which the handler was not written for"). 1.21.1's NeoForge base has no
+ * {@code placeEntities} at all, the name binds nothing, {@code MixinRetarget} finds no point to move, and the plan is
+ * empty — the row, its ecosystems and the miss are what is guarded here. The move itself, and with it the adapter's
+ * {@code adopt} of an UNFIT mixin's rewrite, cannot be exercised until a carrier leaves a same-named method behind.
  */
 @ResourceLock("system-properties")
 class MixinRetargetReplacedCallTest {
@@ -75,34 +84,43 @@ class MixinRetargetReplacedCallTest {
 		return name -> name.equals(TEMPLATE + ".class") ? template : null;
 	}
 
-	@Test void moogsPlacementFollowsNeoForgesAddEntitiesToWorld() throws Exception {
+	@Test void theRowsVanillaMemberIsGoneAndItsReplacementIsThere() throws Exception {
+		ClassNode template = MixinFit.parse(merged().apply(TEMPLATE + ".class"));
+		assertTrue(template.methods.stream().noneMatch(m -> m.name.equals("placeEntities")),
+				"vanilla's placeEntities is gone: " + ROW.because());
+		// By name only: the row's descriptor is NeoForge's 26.x one (its addEntitiesToWorld takes a ProblemReporter),
+		// and this base's does not. Reported with the class, not asserted as this base's shape.
+		String replacement = ROW.replacement().substring(0, ROW.replacement().indexOf('('));
+		assertTrue(template.methods.stream().anyMatch(m -> m.name.equals(replacement)),
+				"the replacement the row names is declared: " + ROW.replacement());
+		assertTrue(template.methods.stream().anyMatch(m -> ROW.caller().equals(m.name + m.desc)),
+				"the caller the row names is declared: " + ROW.caller());
+	}
+
+	/** The row answers its own ecosystems only: a NeoForge mod was compiled against addEntitiesToWorld already. */
+	@Test void theRowAnswersOnlyItsOwnEcosystem() {
+		String vanilla = ROW.vanilla();
+		String name = vanilla.substring(0, vanilla.indexOf('(')), desc = vanilla.substring(vanilla.indexOf('('));
+		assertSame(ROW, MergedBaseCalleeSwaps.replaced(TEMPLATE, name, desc, Ecosystem.FABRIC));
+		assertNull(MergedBaseCalleeSwaps.replaced(TEMPLATE, name, desc, Ecosystem.NEOFORGE));
+		assertNull(MergedBaseCalleeSwaps.replaced(TEMPLATE, "placeInWorld", null, Ecosystem.FABRIC));
+	}
+
+	/**
+	 * The miss a guest injector written for vanilla's member reads: named, but not moved — on this base the name binds
+	 * nothing, so there is no point for R7 to carry to the replacement.
+	 */
+	@Test void aGuestInjectorWrittenForTheVanillaMemberIsNamedAsAMiss() throws Exception {
 		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
 		Function<String, byte[]> resolver = merged();
 		MixinFit.Result before = MixinFit.evaluate(moogsShaped(), resolver);
-		assertEquals(MixinFit.Verdict.PARTIAL, before.verdict());
-		assertEquals(List.of("@At(INVOKE) StructureTemplate.placeEntities in placeInWorld",
-				"@Inject target StructureTemplate." + ROW.vanilla() + " is gone: the carrier replaced it with addEntitiesToWorld, "
-						+ "and the name binds placeEntities" + forgeShape(resolver) + ", which the handler was not written for"),
-				before.unresolved().stream().distinct().toList(), "the HEAD selector is a miss too: Mixin rejects its descriptor");
-
-		MixinRetarget.Plan plan = MixinRetarget.plan(MixinFit.parse(moogsShaped()), resolver);
-		assertEquals(List.of(MixinRetarget.Element.AT_TARGET, MixinRetarget.Element.AT_TARGET, MixinRetarget.Element.PROJECT),
-				plan.rewrites().stream().map(MixinRetarget.Rewrite::element).toList(), plan.describe());
-		assertEquals(ROW.replacementMember(), plan.rewrites().get(0).to());
-		byte[] rewritten = MixinRetarget.rewritten(moogsShaped(), plan);
-		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(rewritten, resolver).verdict());
-
-		ClassNode served = MixinFit.parse(rewritten);
-		MethodNode head = served.methods.stream().filter(m -> m.name.equals("processAndPlaceEntities")).findFirst().orElseThrow();
-		assertEquals(Type.getMethodDescriptor(Type.VOID_TYPE, append(Type.getArgumentTypes(ROW.replacement().substring(
-				ROW.replacement().indexOf('('))), Type.getType(CALLBACK))), head.desc);
-		assertEquals(List.of(ROW.replacement()), MixinFit.stringList(MixinFit.value(MixinFit.injectorOf(head), "method")));
-		List<String> reads = new ArrayList<>();
-		for (AbstractInsnNode insn : head.instructions) if (insn instanceof MethodInsnNode call) reads.add(call.name);
-		assertEquals(List.of("getMirror", "getRotation", "getRotationPivot", "getBoundingBox", "shouldFinalizeEntities",
-				MixinHandlerShim.asideName(MIXIN, "processAndPlaceEntities", MixinRetarget.PROJECTED_SUFFIX)), reads, "vanilla's arguments, read off the settings");
-		assertNull(MixinFit.injectorOf(served.methods.stream().filter(m -> m.name.equals(MixinHandlerShim.asideName(MIXIN,
-				"processAndPlaceEntities", MixinRetarget.PROJECTED_SUFFIX))).findFirst().orElseThrow()));
+		assertEquals(MixinFit.Verdict.PARTIAL, before.verdict(), before.reason());
+		List<String> misses = before.unresolved().stream().distinct().toList();
+		assertTrue(misses.stream().anyMatch(u -> u.contains("@At(INVOKE) StructureTemplate.placeEntities in placeInWorld")),
+				misses.toString());
+		assertTrue(misses.stream().anyMatch(u -> u.contains("@Inject target StructureTemplate.placeEntities")), misses.toString());
+		assertTrue(MixinRetarget.plan(MixinFit.parse(moogsShaped()), resolver).isEmpty(),
+				"nothing to move: the name binds no method in the merged base");
 	}
 
 	/** RED control: with R7 off the plan is empty and the verdict keeps both misses. */
@@ -112,87 +130,6 @@ class MixinRetargetReplacedCallTest {
 		Function<String, byte[]> resolver = merged();
 		assertTrue(MixinRetarget.plan(MixinFit.parse(moogsShaped()), resolver).isEmpty());
 		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(moogsShaped(), resolver).verdict());
-	}
-
-	/** Only the row's ecosystems: a NeoForge mod was compiled against addEntitiesToWorld, and its miss is its own. */
-	@Test void aModOfAnotherEcosystemIsLeftAlone() throws Exception {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.NEOFORGE);
-		Function<String, byte[]> resolver = merged();
-		assertTrue(MixinRetarget.plan(MixinFit.parse(moogsShaped()), resolver).isEmpty());
-		assertEquals(List.of("@At(INVOKE) StructureTemplate.placeEntities in placeInWorld",
-				"@Inject target StructureTemplate.placeEntities binds placeEntities" + forgeShape(resolver)
-						+ ", which the handler was not written for"),
-				MixinFit.evaluate(moogsShaped(), resolver).unresolved().stream().distinct().toList(),
-				"the HEAD selector's miss is seen without the row: only the move is the row's");
-	}
-
-	/**
-	 * The HEAD injector alone: no anchor resolves, so the mixin is UNFIT, and the adapter still asks R7 and takes the move
-	 * (MixinRetarget.adopt), where it used to ask only for a PARTIAL and drop this one as dead weight.
-	 */
-	@Test void aMixinWithOnlyTheHeadInjectorIsMovedNotDropped() throws Exception {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		Function<String, byte[]> resolver = merged();
-		byte[] head = headOnly();
-		MixinFit.Result fit = MixinFit.evaluate(head, resolver);
-		assertEquals(MixinFit.Verdict.UNFIT, fit.verdict(), fit.reason());
-		MixinRetarget.Adoption adoption = MixinRetarget.adopt(head, fit, resolver, b -> MixinFit.evaluate(b, resolver));
-		assertTrue(adoption != null, "the adapter takes R7's move for an UNFIT mixin");
-		assertEquals(MixinFit.Verdict.FIT, adoption.after().verdict());
-		assertEquals(List.of(MixinRetarget.Element.PROJECT), adoption.plan().rewrites().stream().map(MixinRetarget.Rewrite::element).toList());
-	}
-
-	/** RED control: R7 off, or a mod of no known ecosystem — the UNFIT stands and the adapter drops and reports it. */
-	@Test void withoutTheRuleTheHeadOnlyMixinStaysUnfit() throws Exception {
-		Function<String, byte[]> resolver = merged();
-		byte[] head = headOnly();
-		MixinFit.Result unknown = MixinFit.evaluate(head, resolver);
-		assertEquals(MixinFit.Verdict.UNFIT, unknown.verdict(), "a config two mods claim: no row applies, the miss is still seen");
-		assertNull(MixinRetarget.adopt(head, unknown, resolver, b -> MixinFit.evaluate(b, resolver)));
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		System.setProperty(MixinRetarget.REPLACED_CALL_PROPERTY, "off");
-		MixinFit.Result fit = MixinFit.evaluate(head, resolver);
-		assertEquals(MixinFit.Verdict.UNFIT, fit.verdict());
-		assertNull(MixinRetarget.adopt(head, fit, resolver, b -> MixinFit.evaluate(b, resolver)));
-	}
-
-	/**
-	 * A rewrite that keeps an injector Mixin rejects outright is never taken for an UNFIT mixin: the HEAD injector moves,
-	 * but a second injector whose name binds placeInWorld, which it was not written for, would make Mixin fail the
-	 * rewritten mixin -- which the adapter otherwise leaves out cleanly. The same mixin without it is taken (the control).
-	 */
-	@Test void anUnfitMixinsRewriteMayKeepNoRejection() throws Exception {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		Function<String, byte[]> resolver = merged();
-		byte[] both = withRefusedInjector(headOnly());
-		MixinFit.Result fit = MixinFit.evaluate(both, resolver);
-		assertEquals(MixinFit.Verdict.UNFIT, fit.verdict(), fit.reason());
-		assertEquals(2, fit.rejected().size(), fit.rejected().toString());
-		MixinRetarget.Plan plan = MixinRetarget.plan(MixinFit.parse(both), resolver);
-		MixinFit.Result after = MixinFit.evaluate(MixinRetarget.rewritten(both, plan), resolver);
-		assertEquals(MixinFit.Verdict.PARTIAL, after.verdict(), "the plan does move the HEAD injector: " + after.reason());
-		assertEquals(List.of("onPlaceInWorld"), after.rejected().stream().map(MixinFit.Rejection::handler).toList());
-		assertNull(MixinRetarget.adopt(both, fit, resolver, b -> MixinFit.evaluate(b, resolver)));
-		assertNotNull(MixinRetarget.adopt(headOnly(), MixinFit.evaluate(headOnly(), resolver), resolver,
-				b -> MixinFit.evaluate(b, resolver)), "control: without the refused injector the rewrite is taken");
-	}
-
-	/**
-	 * A PARTIAL mixin's rewrite may keep the rejections it already had (the adapter prunes them as it would without the
-	 * plan), never add one: judged against a verdict that had none, the same rewrite is refused.
-	 */
-	@Test void aPartialMixinsRewriteMayKeepOnlyTheRejectionsItHad() throws Exception {
-		MixinStubRebind.noteEcosystem(MIXIN, Ecosystem.FABRIC);
-		Function<String, byte[]> resolver = merged();
-		byte[] three = withRefusedInjector(moogsShaped());
-		MixinFit.Result fit = MixinFit.evaluate(three, resolver);
-		assertEquals(MixinFit.Verdict.PARTIAL, fit.verdict(), fit.reason());
-		MixinRetarget.Adoption adoption = MixinRetarget.adopt(three, fit, resolver, b -> MixinFit.evaluate(b, resolver));
-		assertNotNull(adoption);
-		assertEquals(List.of("onPlaceInWorld"), adoption.after().rejected().stream().map(MixinFit.Rejection::handler).toList());
-		MixinFit.Result withoutRejections = new MixinFit.Result(fit.verdict(), fit.unresolved(), fit.resolved(), fit.total(), fit.foreign());
-		assertNull(MixinRetarget.adopt(three, withoutRejections, resolver, b -> MixinFit.evaluate(b, resolver)),
-				"RED control: a rejection the verdict did not have is one the plan added");
 	}
 
 	/** {@code mixinBytes} plus a HEAD injector whose name binds placeInWorld, which its handler was not written for. */
@@ -207,34 +144,12 @@ class MixinRetargetReplacedCallTest {
 
 	/**
 	 * The body a rewrite renames aside is merged into the target as a plain method, by name: two mixins on one target
-	 * whose handlers share a name must not land on one name, or Mixin keeps one body ("Method overwrite conflict")
-	 * and both wrappers call it. The aside name carries the mixin's mark.
+	 * whose handlers share a name must not land on one name, or Mixin keeps one body ("Method overwrite conflict").
+	 * Used to assert it on two plans' asides; with no move to make on this base the name derivation itself is asserted.
 	 */
-	@Test void twoMixinsWithOneHandlerNameMoveTheirBodiesApart() throws Exception {
-		Function<String, byte[]> resolver = merged();
-		List<String> asides = new ArrayList<>();
-		for (String name : List.of(MIXIN, "test/OtherEntityProcessorMixin")) {
-			ClassNode mixin = MixinFit.parse(headOnly());
-			mixin.name = name;
-			MixinStubRebind.noteEcosystem(name, Ecosystem.FABRIC);
-			ClassWriter writer = new ClassWriter(0);
-			mixin.accept(writer);
-			byte[] bytes = writer.toByteArray();
-			MixinRetarget.Plan plan = MixinRetarget.plan(MixinFit.parse(bytes), resolver);
-			ClassNode served = MixinFit.parse(MixinRetarget.rewritten(bytes, plan));
-			served.methods.stream().filter(m -> MixinFit.injectorOf(m) == null && m.name.startsWith("processAndPlaceEntities"))
-					.forEach(m -> asides.add(m.name));
-		}
-		assertEquals(2, asides.size(), asides.toString());
-		assertTrue(!asides.get(0).equals(asides.get(1)), "one name for both bodies: " + asides);
-		assertEquals(List.of(MixinHandlerShim.asideName(MIXIN, "processAndPlaceEntities", MixinRetarget.PROJECTED_SUFFIX),
-				MixinHandlerShim.asideName("test/OtherEntityProcessorMixin", "processAndPlaceEntities", MixinRetarget.PROJECTED_SUFFIX)), asides);
-	}
-
-	/** The descriptor of the first {@code placeEntities} the merged class declares: the one a bare name binds. */
-	private static String forgeShape(Function<String, byte[]> resolver) {
-		ClassNode node = MixinFit.parse(resolver.apply(TEMPLATE + ".class"));
-		return node.methods.stream().filter(m -> m.name.equals("placeEntities")).findFirst().orElseThrow().desc;
+	@Test void twoMixinsWithOneHandlerNameGetTwoAsideNames() {
+		assertNotEquals(MixinHandlerShim.asideName(MIXIN, "processAndPlaceEntities", MixinRetarget.PROJECTED_SUFFIX),
+				MixinHandlerShim.asideName("test/OtherEntityProcessorMixin", "processAndPlaceEntities", MixinRetarget.PROJECTED_SUFFIX));
 	}
 
 	/** EntityProcessorMixin with its HEAD injector only. */

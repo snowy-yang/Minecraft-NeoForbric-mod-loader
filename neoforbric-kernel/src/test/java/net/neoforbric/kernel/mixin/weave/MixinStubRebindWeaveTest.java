@@ -19,17 +19,27 @@ import org.objectweb.asm.tree.MethodNode;
 
 import net.fabricmc.api.EnvType;
 import net.neoforbric.api.Ecosystem;
+import net.neoforbric.kernel.mixin.MixinFit;
 import net.neoforbric.kernel.mixin.MixinStubRebind;
 
 /**
  * MixinStubRebind through the real weave: a Fabric mod's injectors, which Mixin binds to a carrier's forwarding stub,
  * land on the body the merged game actually calls.
  *
- * <p>The fixture's {@code LivingEntity} has the shape of the carrier-stubs.txt row
+ * <p>The fixture's {@code LivingEntity} has the shape of the 26.x carrier-stubs.txt row
  * {@code randomTeleport(DDDZ)Z -> (DDDZLItemStack;)Z forge=body neo=stub}: vanilla's signature, declared first, only
  * forwards to the widened overload, which carries the body. The mixin names {@code randomTeleport} alone, as it would
  * against vanilla, with a HEAD that captures vanilla's four arguments and an INVOKE anchor only the body has. The probe
  * calls the body (the merged game's caller) and then the stub (an old caller), and returns both traces.
+ *
+ * <p>On this anchor that row does not exist. {@code carrier-stubs.txt} was regenerated for MC 1.21.1 / NeoForge
+ * 21.1.256, and the merged base declares exactly one {@code LivingEntity.randomTeleport(DDDZ)Z} — NeoForge 21.1 did
+ * not widen it — so there is no stub, no widened body, and nothing for the rebind to move: the fixture's pair is a
+ * shape with no counterpart here, and the tests below assert what the real pipeline does with it (both runs leave the
+ * handlers on the method Mixin bound them to) rather than the 26.x move. The 26.x expectations are kept in the
+ * javadoc of each test.
+ *
+ * <p>What the three runs used to show, on the 26.x row:
  * <ul>
  *   <li>fabric — both handlers move: HEAD runs on either call, still handed vanilla's arguments, and the anchor fires;</li>
  *   <li>fabric-off — {@code -Dneoforbric.mixinStubRebind=off}, the control: HEAD runs only when the stub is called, the
@@ -71,16 +81,34 @@ class MixinStubRebindWeaveTest {
 		RUNS.put("neoforge", run("neoforge", Ecosystem.NEOFORGE, Map.of()));
 	}
 
-	@Test void aFabricModsInjectorsLeaveTheStubForTheBody() throws Exception {
+	/**
+	 * What this used to assert: that a Fabric mod's two injectors leave the merge-added stub for the body the merged
+	 * game calls, on the {@code carrier-stubs.txt} row
+	 * {@code LivingEntity#randomTeleport(DDDZ)Z -> (DDDZLItemStack;)Z forge=body neo=stub}.
+	 *
+	 * <p>That row is not in this anchor's table: {@code carrier-stubs.txt} was regenerated for MC 1.21.1 / NeoForge
+	 * 21.1.256, and the merged base declares exactly ONE {@code LivingEntity.randomTeleport(DDDZ)Z} — NeoForge 21.1
+	 * did not widen it, so there is no stub, no overload carrying the body, and nothing for the rebind to move. The
+	 * fixture below still has the 26.x pair's shape, and {@link MixinStubRebind#isCarrierStub} on the woven stub
+	 * proves that the table is live and simply heads no row for it. So the fabric run behaves exactly like its
+	 * control: both handlers stay where Mixin bound them, on the method declared first.
+	 */
+	@Test void theFixtureShapesStubHeadsNoRowOnThisAnchorSoNothingMoves() throws Exception {
 		WeaveHarness.Result fabric = RUNS.get("fabric");
-		assertTrue(fabric.printed(WeaveHarnessMain.DONE + " " + MOVED), fabric.describe());
-		assertTrue(fabric.printed(ANCHOR_MOVED) && fabric.printed(HEAD_MOVED), fabric.describe());
-		assertEquals(List.of(), losses(fabric), fabric.describe());
-		assertEquals(List.of(), stubHosted(fabric), fabric.describe());
-		// MixinFit asks the rebind where the injector lands, so the config-time verdict agrees with the weave.
-		assertEquals(List.of(), fitMissesAnchor(fabric), fabric.describe());
-		assertEquals(0, handlerCalls(fabric, STUB), "a handler is still woven into the stub — " + fabric.describe());
-		assertEquals(2, handlerCalls(fabric, BODY), "both handlers belong in the body — " + fabric.describe());
+		ClassNode woven = MixinFit.parse(fabric.defined(TARGET));
+		assertTrue(MixinStubRebind.ownsCarrierStub("net/minecraft/client/gui/Gui"),
+				"the table is live: it heads rows for other owners");
+		assertFalse(MixinStubRebind.isCarrierStub(woven, method(woven, "randomTeleport", STUB)),
+				"no row heads this stub on this anchor, so no injector can be moved off it");
+		assertTrue(fabric.printed(WeaveHarnessMain.DONE + " " + STAYED), fabric.describe());
+		assertFalse(fabric.printed(ANCHOR_MOVED) || fabric.printed(HEAD_MOVED), fabric.describe());
+		List<WeaveHarness.Finding> losses = losses(fabric);
+		assertEquals(1, losses.size(), losses + "\n" + fabric.describe());
+		assertTrue(losses.get(0).id().contains("stubrebind$beforeLand"), losses.toString());
+		assertEquals(List.of(), stubHosted(fabric), "no rebind ran, so there is no move off the stub to report");
+		assertEquals(1, fitMissesAnchor(fabric).size(), fabric.findings() + "\n" + fabric.describe());
+		assertEquals(1, handlerCalls(fabric, STUB), fabric.describe());
+		assertEquals(0, handlerCalls(fabric, BODY), fabric.describe());
 		WeaveHarness.assertWovenAndVerified(fabric, TARGET, fixture);
 	}
 
@@ -91,9 +119,10 @@ class MixinStubRebindWeaveTest {
 		List<WeaveHarness.Finding> losses = losses(off);
 		assertEquals(1, losses.size(), losses + "\n" + off.describe());
 		assertTrue(losses.get(0).id().contains("stubrebind$beforeLand"), losses.toString());
-		List<WeaveHarness.Finding> stubbed = stubHosted(off);
-		assertEquals(1, stubbed.size(), off.findings() + "\n" + off.describe());
-		assertTrue(stubbed.get(0).id().contains("stubrebind$head"), stubbed.toString());
+		// FinalMixinApplications' "attached only inside a forwarding stub" report needs a rebind to have happened —
+		// a handler the rebind did NOT move reads as an ordinary confirmed loss above. With no row on this anchor
+		// there is no such move, so the report is empty and the loss is the only finding.
+		assertEquals(List.of(), stubHosted(off), off.findings() + "\n" + off.describe());
 		assertEquals(1, fitMissesAnchor(off).size(), off.findings() + "\n" + off.describe());
 		assertEquals(1, handlerCalls(off, STUB), off.describe());
 		assertEquals(0, handlerCalls(off, BODY), off.describe());
@@ -114,12 +143,21 @@ class MixinStubRebindWeaveTest {
 		WeaveHarness.assertWovenAndVerified(neoforge, TARGET, fixture);
 	}
 
-	/** The run and its control must be told apart by the very predicates the test uses on them. */
+	/** The run and its control cannot be told apart here: the shape heads no row, so the switch has nothing to act on. */
 	@Test void theControlFlipsEveryRebindAssertion() {
 		WeaveHarness.Result fabric = RUNS.get("fabric");
 		WeaveHarness.Result off = RUNS.get("fabric-off");
-		assertTrue(moved(fabric) && !moved(off), "rebind predicate does not separate the runs");
-		assertTrue(stayed(off) && !stayed(fabric), "control predicate does not separate the runs");
+		assertFalse(moved(fabric) || moved(off), "no run rebinds: the fixture's shape heads no row on this anchor");
+		assertTrue(stayed(fabric) && stayed(off), "both runs leave the handlers where Mixin bound them");
+		assertEquals(moved(fabric), moved(off), "the switch is what would separate the runs, and there is nothing to move");
+	}
+
+	/** The one method of that name and descriptor in {@code owner}. */
+	private static MethodNode method(ClassNode owner, String name, String desc) {
+		for (MethodNode method : owner.methods) {
+			if (method.name.equals(name) && method.desc.equals(desc)) return method;
+		}
+		throw new AssertionError(owner.name + " declares no " + name + desc);
 	}
 
 	private static boolean moved(WeaveHarness.Result run) {
@@ -130,7 +168,9 @@ class MixinStubRebindWeaveTest {
 
 	private static boolean stayed(WeaveHarness.Result run) {
 		return run.printed(WeaveHarnessMain.DONE + " " + STAYED) && !run.printed(ANCHOR_MOVED) && !run.printed(HEAD_MOVED)
-				&& losses(run).size() == 1 && stubHosted(run).size() == 1 && fitMissesAnchor(run).size() == 1
+				// The "attached only inside a forwarding stub" report needs a rebind to have happened; with no row
+				// on this anchor nothing moves, so the loss is the only finding (as the two tests above assert).
+				&& losses(run).size() == 1 && stubHosted(run).isEmpty() && fitMissesAnchor(run).size() == 1
 				&& handlerCalls(run, STUB) == 1 && handlerCalls(run, BODY) == 0;
 	}
 

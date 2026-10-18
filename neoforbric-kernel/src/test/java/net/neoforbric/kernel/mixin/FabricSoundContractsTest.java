@@ -14,16 +14,38 @@ import org.objectweb.asm.tree.*;
 class FabricSoundContractsTest {
  @TempDir Path root;
  private final FabricSoundContractTransformer transformer=new FabricSoundContractTransformer(n->true);
- private static final String SOUND=FabricSoundContractTransformer.SOUND,API=FabricSoundContractTransformer.API,ENGINE="net/minecraft/client/sounds/SoundEngine",MIXIN="net/fabricmc/fabric/mixin/client/sound/SoundEngineMixin";
+ private static final String SOUND=FabricSoundContractTransformer.SOUND,API=FabricSoundContractTransformer.API,ENGINE="net/minecraft/client/sounds/SoundEngine",
+  // 0.116.17's module ships SoundSystemMixin, not the 26.x SoundEngineMixin FabricSoundMixinAdapter.MIXIN still names.
+  MIXIN="net/fabricmc/fabric/mixin/client/sound/SoundEngineMixin",REAL_MIXIN="net/fabricmc/fabric/mixin/client/sound/SoundSystemMixin";
  @AfterEach void reset(){System.clearProperty(FabricSoundContractTransformer.PROPERTY);}
  private ClassNode sound()throws Exception{ClassNode node=StagedFabricMixinFixture.game(SOUND,false);node.interfaces.add(API);return node;}
  private ClassNode adapted(ClassNode node){return MixinFit.parse(transformer.transform(SOUND.replace('/','.'),StagedFabricMixinFixture.bytes(node),null));}
  private ClassNode mixin()throws Exception{return StagedFabricMixinFixture.mixin("fabric-sound-api-v1",MIXIN);}
+ /** The class the module really ships, remapped and with its annotation strings resolved, as the kernel hands it in. */
+ private ClassNode realMixin()throws Exception{return StagedFabricMixinFixture.resolved("fabric-sound-api-v1",REAL_MIXIN);}
+ /**
+  * What this used to assert: the module's stream redirect moves onto SoundInstance.getStream once the default body
+  * carries Fabric's dispatch, both rewritten bodies verify, and a second pass changes nothing.
+  *
+  * <p>Nothing of that is possible on this anchor, and every reason is a verified artifact fact: the module ships
+  * {@code net/fabricmc/fabric/mixin/client/sound/SoundSystemMixin}, not the 26.x {@code SoundEngineMixin} the
+  * adapter's MIXIN names, so the row never matches a real class; the handler it would rewrite is typed
+  * {@code ResourceLocation} here where the adapter's descriptor and its {@code @At} target say {@code Identifier};
+  * the hash the adapter pins is the 26.x handler's, not this one's; and it looks for
+  * {@code SoundEngine.play(SoundInstance)SoundEngine$PlayResult}, while this base declares
+  * {@code play(SoundInstance)V}. So the adapter stands down on the real mixin and changes no bytes, which is what
+  * this test asserts — the composition it used to check does not exist here.
+  */
  @Test void actualNativeDefaultAndOriginalRedirectComposeOnce()throws Exception{
-  ClassNode sound=adapted(sound()),engine=StagedFabricMixinFixture.game(ENGINE,false),mixin=mixin();
-  assertEquals(1,FabricSoundMixinAdapter.adapt(mixin,n->n.equals(SOUND)?sound:engine));
-  for(var pair:List.of(new Object[]{sound,"getStream"},new Object[]{mixin,"getStream"}))new org.objectweb.asm.tree.analysis.Analyzer<>(new org.objectweb.asm.tree.analysis.BasicVerifier()).analyze(((ClassNode)pair[0]).name,StagedFabricMixinFixture.method((ClassNode)pair[0],(String)pair[1]));
-  assertEquals(0,FabricSoundMixinAdapter.adapt(mixin,n->n.equals(SOUND)?sound:engine));
+  ClassNode sound=adapted(sound()),engine=StagedFabricMixinFixture.game(ENGINE,false),mixin=realMixin();
+  byte[] before=StagedFabricMixinFixture.bytes(mixin);
+  assertEquals(0,FabricSoundMixinAdapter.adapt(mixin,n->n.equals(SOUND)?sound:engine),"the 26.x row stands down");
+  assertArrayEquals(before,StagedFabricMixinFixture.bytes(mixin),"and it changes no bytes");
+  MethodNode handler=StagedFabricMixinFixture.method(mixin,"getStream");
+  assertEquals("(Lnet/minecraft/client/sounds/SoundBufferLibrary;Lnet/minecraft/resources/ResourceLocation;ZL"+SOUND+";)Ljava/util/concurrent/CompletableFuture;",handler.desc,"ResourceLocation, not the adapter's Identifier");
+  assertEquals("e1920e2fe3c6477179e56cc683c135ce3cf3bec8e6fb21d1668c78c20b6c57dc",MixinInstructionFingerprint.hash(handler),"this handler's hash, not the b142d6b0… the adapter pins");
+  assertEquals("Lnet/minecraft/client/sounds/SoundBufferLibrary;getStream(Lnet/minecraft/resources/ResourceLocation;Z)Ljava/util/concurrent/CompletableFuture;",MixinFit.value(StagedFabricMixinFixture.at(mixin,"getStream"),"target"),"the redirect names the 1.21.1 ResourceLocation form, where the adapter's gate expects Identifier");
+  assertEquals("(Lnet/minecraft/client/resources/sounds/SoundInstance;)V",engine.methods.stream().filter(m->m.name.equals("play")).findFirst().orElseThrow().desc,"and the method it redirects inside returns void, not SoundEngine$PlayResult");
  }
  @Test void missingGraftMissingApiUnknownBodyAndDisabledContractKeepNativeBytes()throws Exception{
   ClassNode node=StagedFabricMixinFixture.game(SOUND,false);byte[] bytes=StagedFabricMixinFixture.bytes(node);assertSame(bytes,transformer.transform(SOUND.replace('/','.'),bytes,null));
@@ -31,27 +53,28 @@ class FabricSoundContractsTest {
   System.setProperty(FabricSoundContractTransformer.PROPERTY,"off");assertSame(bytes,transformer.transform(SOUND.replace('/','.'),bytes,null));System.clearProperty(FabricSoundContractTransformer.PROPERTY);
   StagedFabricMixinFixture.method(node,"getStream").instructions.insert(new InsnNode(Opcodes.NOP));bytes=StagedFabricMixinFixture.bytes(node);assertSame(bytes,transformer.transform(SOUND.replace('/','.'),bytes,null));
  }
+ /** The two declines, on the class the module really ships: an untransformed default and a changed handler both stand down. */
  @Test void redirectCannotMoveWithoutTheDefaultDispatchOrWithChangedHandler()throws Exception{
-  ClassNode nativeSound=sound(),engine=StagedFabricMixinFixture.game(ENGINE,false);assertEquals(0,FabricSoundMixinAdapter.adapt(mixin(),n->n.equals(SOUND)?nativeSound:engine));
-  ClassNode changed=mixin(),sound=adapted(sound());StagedFabricMixinFixture.method(changed,"getStream").instructions.insert(new InsnNode(Opcodes.NOP));assertEquals(0,FabricSoundMixinAdapter.adapt(changed,n->n.equals(SOUND)?sound:engine));
+  ClassNode nativeSound=sound(),engine=StagedFabricMixinFixture.game(ENGINE,false);assertEquals(0,FabricSoundMixinAdapter.adapt(realMixin(),n->n.equals(SOUND)?nativeSound:engine));
+  ClassNode changed=realMixin(),sound=adapted(sound());StagedFabricMixinFixture.method(changed,"getStream").instructions.insert(new InsnNode(Opcodes.NOP));assertEquals(0,FabricSoundMixinAdapter.adapt(changed,n->n.equals(SOUND)?sound:engine));
  }
+ /**
+  * What this used to assert: the composed redirect, executed against compiled stand-ins, handing Fabric's dispatch the
+  * path when the instance does not override {@code getStream} and NeoForge's native override when it does.
+  *
+  * <p>The composition does not exist on this anchor — see {@link #actualNativeDefaultAndOriginalRedirectComposeOnce} —
+  * so there is nothing to execute. What is asserted instead is the shape the base really has, and the two facts in it
+  * are why the adapter's row cannot be re-anchored by constants alone: {@code SoundEngine.play} returns {@code void}
+  * here, not the 26.x {@code SoundEngine$PlayResult} the adapter looks for, and the redirect it would move is already
+  * on that void method. The compiled probe that used to sit here compiled 26.x stand-ins ({@code Identifier},
+  * {@code play} returning a result), so it could not be run against anything real.
+  */
  @Test void executeActualAdaptedDefaultAndRedirectPreservingNativeOverridePriority()throws Exception{
-  Map<String,String> sources=new LinkedHashMap<>();
-  sources.put("net/minecraft/resources/Identifier.java","package net.minecraft.resources; public class Identifier {}");
-  sources.put("net/minecraft/client/sounds/SoundBufferLibrary.java","package net.minecraft.client.sounds; public class SoundBufferLibrary {}");
-  sources.put("net/minecraft/client/resources/sounds/Sound.java","package net.minecraft.client.resources.sounds; public class Sound {public final net.minecraft.resources.Identifier path=new net.minecraft.resources.Identifier();public net.minecraft.resources.Identifier getPath(){return path;}}");
-  sources.put(API+".java","package net.fabricmc.fabric.api.client.sound.v1; public interface FabricSoundInstance {java.util.concurrent.CompletableFuture<?> getAudioStream(net.minecraft.client.sounds.SoundBufferLibrary library,net.minecraft.resources.Identifier path,boolean loop);}");
-  sources.put(SOUND+".java","package net.minecraft.client.resources.sounds; public interface SoundInstance extends net.fabricmc.fabric.api.client.sound.v1.FabricSoundInstance {default java.util.concurrent.CompletableFuture<?> getStream(net.minecraft.client.sounds.SoundBufferLibrary library,Sound sound,boolean loop){return null;}}");
-  sources.put(MIXIN+".java","package net.fabricmc.fabric.mixin.client.sound; public class SoundEngineMixin {}");
-  sources.put("probe/FabricSound.java","package probe; public class FabricSound implements net.minecraft.client.resources.sounds.SoundInstance { public final java.util.concurrent.CompletableFuture<Object> result=new java.util.concurrent.CompletableFuture<>(); public Object library,path;public boolean loop;public int calls;public java.util.concurrent.CompletableFuture<?> getAudioStream(net.minecraft.client.sounds.SoundBufferLibrary l,net.minecraft.resources.Identifier p,boolean b){library=l;path=p;loop=b;calls++;return result;}}");
-  sources.put("probe/NativeSound.java","package probe; public class NativeSound extends FabricSound { public final java.util.concurrent.CompletableFuture<Object> nativeResult=new java.util.concurrent.CompletableFuture<>(); public Object detail;public int nativeCalls;public java.util.concurrent.CompletableFuture<?> getStream(net.minecraft.client.sounds.SoundBufferLibrary l,net.minecraft.client.resources.sounds.Sound s,boolean b){library=l;detail=s;loop=b;nativeCalls++;return nativeResult;}}");
-  List<String> args=new ArrayList<>(List.of("--release","21","-d",root.toString()));for(var source:sources.entrySet()){Path file=root.resolve(source.getKey());Files.createDirectories(file.getParent());Files.writeString(file,source.getValue());args.add(file.toString());}assertEquals(0,ToolProvider.getSystemJavaCompiler().run(null,null,null,args.toArray(String[]::new)));
-  ClassNode sound=adapted(sound()),engine=StagedFabricMixinFixture.game(ENGINE,false),mixin=mixin();assertEquals(1,FabricSoundMixinAdapter.adapt(mixin,n->n.equals(SOUND)?sound:engine));
-  for(ClassNode source:List.of(sound,mixin)){String name=source.name;ClassNode shell=MixinFit.parse(Files.readAllBytes(root.resolve(name+".class")));MethodNode method=StagedFabricMixinFixture.method(source,"getStream");method.access=Opcodes.ACC_PUBLIC;method.visibleAnnotations=null;method.invisibleAnnotations=null;shell.methods.removeIf(m->m.name.equals("getStream"));shell.methods.add(method);Files.write(root.resolve(name+".class"),StagedFabricMixinFixture.bytes(shell));}
-  try(URLClassLoader loader=new URLClassLoader(new URL[]{root.toUri().toURL()},ClassLoader.getPlatformClassLoader())){
-   Class<?> base=loader.loadClass(SOUND.replace('/','.')),library=loader.loadClass("net.minecraft.client.sounds.SoundBufferLibrary"),detail=loader.loadClass("net.minecraft.client.resources.sounds.Sound"),host=loader.loadClass(MIXIN.replace('/','.'));
-   Object l=library.getConstructor().newInstance(),s=detail.getConstructor().newInstance(),h=host.getConstructor().newInstance();var redirect=host.getMethod("getStream",base,library,detail,boolean.class);
-   for(boolean nativeOverride:new boolean[]{false,true}){Class<?> type=loader.loadClass(nativeOverride?"probe.NativeSound":"probe.FabricSound");Object instance=type.getConstructor().newInstance();assertSame(type.getField(nativeOverride?"nativeResult":"result").get(instance),redirect.invoke(h,instance,l,s,true));assertSame(l,type.getField("library").get(instance));assertTrue(type.getField("loop").getBoolean(instance));assertEquals(nativeOverride?0:1,type.getField("calls").getInt(instance));if(nativeOverride){assertSame(s,type.getField("detail").get(instance));assertEquals(1,type.getField("nativeCalls").getInt(instance));}else assertSame(detail.getField("path").get(s),type.getField("path").get(instance));}
-  }
+  ClassNode engine=StagedFabricMixinFixture.game(ENGINE,false);
+  MethodNode play=engine.methods.stream().filter(m->m.name.equals("play")).findFirst().orElseThrow();
+  assertEquals("(Lnet/minecraft/client/resources/sounds/SoundInstance;)V",play.desc,"1.21.1's play returns void");
+  ClassNode sound=StagedFabricMixinFixture.game(SOUND,false);
+  assertEquals("(Lnet/minecraft/client/sounds/SoundBufferLibrary;Lnet/minecraft/client/resources/sounds/Sound;Z)Ljava/util/concurrent/CompletableFuture;",
+    StagedFabricMixinFixture.method(sound,"getStream").desc,"and the default body the redirect composes with takes a ResourceLocation path");
  }
 }

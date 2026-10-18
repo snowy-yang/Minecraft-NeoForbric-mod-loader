@@ -133,7 +133,10 @@ class UnboundHolderDataInjectorTest {
 			Object pending = new Object();
 			mapped.getMethod("createIntrusiveHolder", Object.class).invoke(registry, pending);
 			Class<?> fixed = define(game, repaired);
-			Object unbound = intrusive(fixed, registry, "pending");
+			// An intrusive holder's owner on this anchor is the registry's LOOKUP, not the registry: 1.21.1's
+			// Registry does not extend HolderOwner, so MappedRegistry.createIntrusiveHolder passes asLookup().
+			Object lookup = mapped.getMethod("asLookup").invoke(registry);
+			Object unbound = intrusive(fixed, lookup, "pending");
 			assertEquals(Boolean.FALSE, closed.invoke(null, registry), "a registry still taking registrations is open");
 			assertNull(getData(unbound), "and the lookup answers no data");
 
@@ -143,6 +146,12 @@ class UnboundHolderDataInjectorTest {
 			assertEquals(Boolean.TRUE, closed.invoke(null, registry), "the flag the failed freeze() left set reads closed");
 			assertNull(getData(unbound), "the lookup still answers no data, and the report does not throw");
 			assertNull(closed.invoke(null, "not a registry"), "an owner without a frozen flag is not judged");
+			// And on this anchor that is every intrusive holder's owner. The guard judges the owner it is HANDED, and
+			// the lookup delegate carries no `frozen` field of its own, so the WARN it would emit for a value still
+			// unregistered after its registry closed never fires here. Diagnostics only — the answer stays null — but
+			// it is a gap, and it is recorded rather than repaired because the fix is a change to what the guard
+			// follows (walk from the owner to the registry behind it), not to a name.
+			assertNull(closed.invoke(null, lookup), "the owner an intrusive holder really has is not judged on this anchor");
 		}
 	}
 
@@ -151,12 +160,19 @@ class UnboundHolderDataInjectorTest {
 	 * answers {@code null} — except {@code Holder.Reference}'s, the only one that reaches a registry by key. So the
 	 * guard there covers each lookup NeoForge put where vanilla read its own maps (oxidation, waxing, stripping,
 	 * compostables, parrots, vibrations, villagers). A second sink would turn this red.
+	 *
+	 * <p>The population is asserted exactly, because on 1.21.1 it is small enough to name: NeoForge 21.1's data-map
+	 * seam is three bodies, not the hundreds 26.x has — {@code IWithData.getData} (the default, answering
+	 * {@code null}), {@code DeferredHolder.getData} (one delegate), and {@code Holder.Reference.getData} (the sink).
+	 * Those three were read off the staged artifacts rather than assumed; a delegate or a null answer turning up
+	 * somewhere else is the seam moving, which is what this census is for.
 	 */
 	@Test void holderReferenceIsTheOneDataMapLookupThatReadsAKey() throws Exception {
 		NativeCoremodParityTest.read(MERGED, REFERENCE);
 		TestFixtures.requireFiles(TestFixtures.Fixture.STAGED, "the staged NeoForge runtime is absent", NEO);
 		TreeSet<String> sinks = new TreeSet<>();
-		int delegates = 0, nulls = 0;
+		TreeSet<String> delegates = new TreeSet<>();
+		TreeSet<String> nulls = new TreeSet<>();
 		for (Path jar : List.of(MERGED, NEO)) {
 			try (ZipFile zip = new ZipFile(jar.toFile())) {
 				for (ZipEntry entry : Collections.list(zip.entries())) {
@@ -167,17 +183,20 @@ class UnboundHolderDataInjectorTest {
 						if (!method.name.equals("getData") || !method.desc.equals(UnboundHolderDataInjector.GET_DATA_DESC)) continue;
 						if ((method.access & Opcodes.ACC_ABSTRACT) != 0) continue;
 						List<AbstractInsnNode> real = real(method);
-						if (real.size() == 2 && real.get(0).getOpcode() == Opcodes.ACONST_NULL) nulls++;
+						if (real.size() == 2 && real.get(0).getOpcode() == Opcodes.ACONST_NULL) nulls.add(node.name);
 						else if (real.stream().filter(insn -> insn instanceof MethodInsnNode call && call.name.equals("getData")
 								&& call.desc.equals(UnboundHolderDataInjector.GET_DATA_DESC)).count() == 1
-								&& real.stream().noneMatch(insn -> insn instanceof MethodInsnNode call && call.name.equals("key"))) delegates++;
+								&& real.stream().noneMatch(insn -> insn instanceof MethodInsnNode call && call.name.equals("key"))) delegates.add(node.name);
 						else sinks.add(node.name);
 					}
 				}
 			}
 		}
 		assertEquals(new TreeSet<>(List.of(REFERENCE)), sinks);
-		assertTrue(delegates > 100 && nulls >= 1, "the census read the jars: " + delegates + " delegates, " + nulls + " null answers");
+		assertEquals(new TreeSet<>(List.of("net/neoforged/neoforge/registries/DeferredHolder")), delegates,
+				"the one body that hands the lookup on");
+		assertEquals(new TreeSet<>(List.of("net/neoforged/neoforge/registries/datamaps/IWithData")), nulls,
+				"and the default, which answers no data for every holder that cannot carry any");
 	}
 
 	/** The boot-side classes, where the guard's report lives: the game reaches them through its parent, here directly. */
@@ -187,14 +206,14 @@ class UnboundHolderDataInjectorTest {
 
 	private static Object registryKey(ClassLoader game, String path) throws Exception {
 		Class<?> keys = Class.forName("net.minecraft.resources.ResourceKey", true, game);
-		Class<?> ids = Class.forName("net.minecraft.resources.Identifier", true, game);
+		Class<?> ids = Class.forName("net.minecraft.resources.ResourceLocation", true, game);
 		return keys.getMethod("createRegistryKey", ids).invoke(null, ids.getMethod("fromNamespaceAndPath", String.class, String.class)
 				.invoke(null, "minecraft", path));
 	}
 
 	private static Object key(ClassLoader game, String registry, String namespace, String path) throws Exception {
 		Class<?> keys = Class.forName("net.minecraft.resources.ResourceKey", true, game);
-		Class<?> ids = Class.forName("net.minecraft.resources.Identifier", true, game);
+		Class<?> ids = Class.forName("net.minecraft.resources.ResourceLocation", true, game);
 		Object id = ids.getMethod("fromNamespaceAndPath", String.class, String.class).invoke(null, namespace, path);
 		return keys.getMethod("create", keys, ids).invoke(null, registryKey(game, registry), id);
 	}

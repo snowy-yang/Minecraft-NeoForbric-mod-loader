@@ -18,6 +18,7 @@ package net.neoforbric.kernel.mixin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -45,6 +46,10 @@ import org.objectweb.asm.tree.ClassNode;
  * the client said only "Failed to connect to the server — Internal Exception: ExceptionInInitializerError".
  * fabric-api's own {@code CustomPayloadStreamCodecMixin} and {@code TagAppenderMixin} were binding to the same
  * dead half.
+ *
+ * <p>On this anchor (MC 1.21.1, NeoForge only) the base is NeoForge's own patched client jar rather than a byte
+ * merge of two game jars, so no anonymous class was ever renamed and the adapter has nothing to add; see
+ * {@link #theMergedBaseCarriesTheVanillaNamedHalfAndNoRenamedTwin}. The rules below still hold as rules.
  */
 @ResourceLock("system-properties")
 class MixinMergedTwinTest {
@@ -149,16 +154,27 @@ class MixinMergedTwinTest {
 		assertEquals(0, MixinMergedTwin.addTwins(mixin, present(TARGET + MixinMergedTwin.NEO_SUFFIX)));
 	}
 
+	/**
+	 * What this used to assert: that the merged base really carries {@code CustomPacketPayload$1$neoforbricneo}
+	 * beside {@code CustomPacketPayload$1}, the renamed half the merge made when two anonymous classes could not
+	 * keep one name — the case {@link MixinMergedTwin} exists for.
+	 *
+	 * <p>On 1.21.1 the base is NeoForge's own patched client jar, not a byte merge of two game jars, so nothing was
+	 * ever renamed: {@code .dev/staged/run/neoforge-base/patched-mc-neoforge-1.21.1.jar.pins} records
+	 * {@code result=gameJarNoRecomp} and the jar holds not one class whose name carries the suffix. The adapter
+	 * therefore stands down on every real mixin here, and this test says so — with the vanilla-named half still
+	 * asserted, because that is what a guest mixin's target must keep resolving to.
+	 */
 	@Test
-	void theMergedBaseReallyCarriesTheTwinThisIsAbout() throws Exception {
+	void theMergedBaseCarriesTheVanillaNamedHalfAndNoRenamedTwin() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
 		try (ZipFile zip = new ZipFile(MERGED_BASE.toFile())) {
 			assertNotNull(zip.getEntry(TARGET.replace('.', '/') + ".class"), "the vanilla-named half must exist");
-			assertNotNull(zip.getEntry((TARGET + MixinMergedTwin.NEO_SUFFIX).replace('.', '/') + ".class"),
-					"the renamed twin must exist — if the merge stopped renaming, this adapter is dead code");
+			assertNull(zip.getEntry((TARGET + MixinMergedTwin.NEO_SUFFIX).replace('.', '/') + ".class"),
+					"no renamed twin: this base is NeoForge's patched client, not a two-jar byte merge");
 			long twins = zip.stream().map(java.util.zip.ZipEntry::getName)
 					.filter(n -> n.contains(MixinMergedTwin.NEO_SUFFIX)).count();
-			assertTrue(twins >= 1, "at least one renamed twin");
+			assertEquals(0, twins, "not one class in the base carries the suffix, so addTwins has nothing to add");
 		}
 	}
 

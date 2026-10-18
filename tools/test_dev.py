@@ -156,7 +156,10 @@ class DevelopmentWorkflowTest(unittest.TestCase):
             mac = dev.launch_arguments('client', info, mc, stage, self.root, self.root, system='osx', pathsep=':')
             linux = dev.launch_arguments('client', info, mc, stage, self.root, self.root, system='linux', pathsep=':')
         self.assertIn(';dependency.jar;', win[win.index('-cp')+1])
-        self.assertIn(';', win[win.index('--runtimeJar')+1])
+        # One ecosystem runtime on this anchor: MinecraftForge's jar went with its support, so --runtimeJar carries
+        # the single staged NeoForge runtime and has no separator in it. The flag still ACCEPTS several jars joined
+        # by the platform separator (KernelBoot splits on it) -- -cp above is what proves the Windows separator here.
+        self.assertEqual(str(stage / dev.STAGED_FILES[1]), win[win.index('--runtimeJar')+1])
         self.assertNotIn('-XstartOnFirstThread', win)
         self.assertNotIn('-XstartOnFirstThread', linux)
         self.assertIn('-XstartOnFirstThread', mac)

@@ -46,7 +46,10 @@ class ThinnedCallOrdinalsTest {
 	@Test void theRowIsWhatVanillaAndTheMergedBaseSay() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED), "actual game required");
 		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "vanilla jar required");
-		MethodNode vanilla = method(read(VANILLA, SITE.owner()), SITE.method());
+		// 1.21.1's own client jar is OBFUSCATED and holds no net/minecraft/<Mojmap>.class entry at all, so the
+		// vanilla body is read off the fixture's intermediary cache of that jar in the base's names, as
+		// StagedFabricMixinFixture.game(name, true) does everywhere else.
+		MethodNode vanilla = method(StagedFabricMixinFixture.vanilla(SITE.owner()), SITE.method());
 		List<Boolean> followed = new ArrayList<>();
 		for (AbstractInsnNode insn = vanilla.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 			if (insn instanceof MethodInsnNode call && member(call).equals(SITE.call())) followed.add(member(nextCall(insn)).equals(SITE.next()));

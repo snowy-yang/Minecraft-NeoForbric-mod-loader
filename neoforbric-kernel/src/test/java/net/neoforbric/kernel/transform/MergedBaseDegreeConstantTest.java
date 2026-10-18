@@ -17,14 +17,18 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.ZipEntry;
@@ -49,6 +53,10 @@ import org.objectweb.asm.tree.MethodNode;
  * {@code Entity} must carry the SAME literal vanilla carries, and neither must carry the other's. Asserting
  * "57.2957763671875 is now there" alone would only pin the number this test and the transformer both hard-code,
  * and the whole point of the defect is that a plausible-looking number was the wrong one.
+ *
+ * <p>The vanilla side reads that jar through the pinned Mojang mapping, because the fixture staged here is Mojang's
+ * obfuscated launcher jar and the class has no Mojmap name inside it — see
+ * {@link #vanillaCarriesTheSameLiteralAndNeverTheExpression()}.
  */
 class MergedBaseDegreeConstantTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
@@ -80,14 +88,27 @@ class MergedBaseDegreeConstantTest {
 				+ "rather than re-based");
 	}
 
+	/**
+	 * Re-anchored: this read {@code net/minecraft/world/entity/Entity.class} out of
+	 * {@link TestFixtures#vanillaJar()} by name. That jar is Mojang's OBFUSCATED launcher jar, so the entry is not
+	 * there under that name — and dropping the cross-check would give up the point of this test, which is that the
+	 * repair's number is the number vanilla carries rather than a plausible-looking other one. The name is resolved
+	 * through the pinned Mojang mapping the module already remaps the game with (the same input
+	 * {@code StagedFabricMixinFixture} loads), so both original assertions still run against vanilla's own bytes.
+	 */
 	@Test
 	void vanillaCarriesTheSameLiteralAndNeverTheExpression() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
 		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
-		ClassNode vanilla = read(entry(VANILLA, ENTITY + ".class"));
-		assertEquals(0, sites(vanilla), "vanilla does not carry the unfolded expression; if it does, the premise "
-				+ "of this repair is wrong");
-		assertTrue(carries(vanilla, FOLDED), "vanilla's Entity must carry the folded literal this repair restores");
+		try (ZipFile vanilla = new ZipFile(VANILLA.toFile())) {
+			assertNull(vanilla.getEntry(ENTITY + ".class"),
+					"premise: the staged 1.21.1.jar is obfuscated, so the class is not in it under its Mojmap name");
+			ClassNode entity = read(entry(vanilla, obfuscated(ENTITY.replace('/', '.')) + ".class"));
+			assertEquals(0, sites(entity), "vanilla does not carry the unfolded expression; if it does, the premise "
+					+ "of this repair is wrong");
+			assertTrue(carries(entity, FOLDED), "vanilla's Entity must carry the folded literal this repair restores");
+			assertFalse(carries(entity, HALF_TURN / PI_AS_FLOAT), "…and never the run-time double quotient, which is "
+					+ "the number a reader of the source would write down");
+		}
 	}
 
 	@Test
@@ -189,6 +210,42 @@ class MergedBaseDegreeConstantTest {
 		ClassNode node = new ClassNode();
 		new ClassReader(bytes).accept(node, 0);
 		return node;
+	}
+
+	/**
+	 * The obfuscated name of {@code mojmap} in the pinned Mojang mapping the module remaps the game with
+	 * ({@code net.minecraft.world.entity.Entity -> bsr}), which is how a test can still read a named class out of the
+	 * obfuscated fixture. Probes upward from the staged tree like {@code StagedFabricMixinFixture.devInput}, so a
+	 * second worktree reads its own stage's inputs.
+	 */
+	private static String obfuscated(String mojmap) throws IOException {
+		Path mappings = devInput("minecraft/.neoforbric-build/nfrt/artifacts/minecraft_1.21.1_client_mappings.txt");
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(mappings),
+				"the mapping inputs the module remap reads (python3 ../tools/dev.py prepare stages them): " + mappings);
+		String prefix = mojmap + " -> ";
+		for (String line : Files.readAllLines(mappings, StandardCharsets.UTF_8)) {
+			if (!line.startsWith(prefix)) continue;
+			String obfuscated = line.substring(prefix.length()).trim();
+			return obfuscated.endsWith(":") ? obfuscated.substring(0, obfuscated.length() - 1) : obfuscated;
+		}
+		throw new AssertionError(mojmap + " is not in " + mappings);
+	}
+
+	/** A staged dev input ({@code .dev/...}), probing upward from the staged tree. */
+	private static Path devInput(String relative) {
+		for (Path root = TestFixtures.stagedRoot(); root != null; root = root.getParent()) {
+			if (Files.isRegularFile(root.resolve(relative))) return root.resolve(relative);
+			if (Files.isRegularFile(root.resolve(".dev").resolve(relative))) return root.resolve(".dev").resolve(relative);
+		}
+		return Path.of(".dev").resolve(relative);
+	}
+
+	private static byte[] entry(ZipFile jar, String path) throws Exception {
+		ZipEntry found = jar.getEntry(path);
+		assertTrue(found != null, path + " is absent from " + jar.getName());
+		try (InputStream in = jar.getInputStream(found)) {
+			return in.readAllBytes();
+		}
 	}
 
 	private static byte[] entry(Path jarPath, String path) throws Exception {

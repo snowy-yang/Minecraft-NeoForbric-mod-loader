@@ -65,7 +65,19 @@ class RestoredAccessTransformerTest {
 		assertEquals(43, later.getField("added").getInt(null));
 	}
 
-	@Test void actualMergedFeatureFieldIsReconciledAfterItsDescriptorRepair() throws Exception {
+	/**
+	 * The real merged base's own feature field, and the access fabric-biome-api's widener asks for.
+	 *
+	 * <p>Was {@code actualMergedFeatureFieldIsReconciledAfterItsDescriptorRepair}: on the 26.x base
+	 * {@code ChunkGenerator.featuresPerStep} had a descriptor the Fabric rule did not name, so the rule missed,
+	 * a coremod repair fixed the descriptor, and the replay had to reconcile the member. This base's merge writes
+	 * the {@code Supplier} descriptor itself — the repair is not among
+	 * {@code NeoForbricMergedBaseCompatTransformer.REPAIRS} any more — so there is no early miss to reproduce and
+	 * the same rule now matches on the first pass. The claim kept is the one that still has content: the rule
+	 * matches the real class, and neither the first pass nor the replay leaves the census holding an unmatched
+	 * directive.
+	 */
+	@Test void actualMergedFeatureFieldTakesTheWidenerOnTheFirstPass() throws Exception {
 		var staged = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 		String owner = "net/minecraft/world/level/chunk/ChunkGenerator";
 		byte[] original = TestFixtures.requireEntry(Fixture.STAGED, staged, owner + ".class");
@@ -73,18 +85,27 @@ class RestoredAccessTransformerTest {
 				+ "\nmutable field " + owner + " featuresPerStep " + SUPPLIER + "\n";
 		var aw = ClassTweakerTransformer.createFrom(List.of(new ClassTweakerTransformer.File("fabric-biome-api.jar",
 				rules.getBytes(StandardCharsets.UTF_8))), (name, bytes) -> fail("unexpected generated class"));
-		byte[] early = aw.transform(owner.replace('/', '.'), original, CONTEXT);
-		assertFalse(AccessCensus.entries().isEmpty(), "negative control: the raw base must reproduce the early miss");
-		byte[] repaired = new net.neoforbric.kernel.transform.NeoForbricMergedBaseCompatTransformer()
-				.transform(owner.replace('/', '.'), early, CONTEXT);
-		byte[] result = new RestoredAccessTransformer(aw, null).transform(owner, repaired, CONTEXT);
+
+		// The negative control is now the other way round: the base is what the rule expects, narrow as vanilla
+		// left it.
+		var raw = new org.objectweb.asm.tree.ClassNode();
+		new org.objectweb.asm.ClassReader(original).accept(raw, 0);
+		var narrow = raw.fields.stream().filter(f -> f.name.equals("featuresPerStep")).findFirst().orElseThrow();
+		assertEquals(SUPPLIER, narrow.desc, "the merged base carries the descriptor fabric-biome-api declares");
+		assertEquals(0, narrow.access & Opcodes.ACC_PUBLIC, "and still has vanilla's own access");
+		assertTrue((narrow.access & Opcodes.ACC_FINAL) != 0);
+
+		byte[] widened = aw.transform(owner.replace('/', '.'), original, CONTEXT);
+		assertTrue(AccessCensus.entries().isEmpty(),
+				"the rule matches the base as merged, so nothing is left unmatched: " + AccessCensus.entries());
+		byte[] result = new RestoredAccessTransformer(aw, null).transform(owner, widened, CONTEXT);
 		var node = new org.objectweb.asm.tree.ClassNode();
 		new org.objectweb.asm.ClassReader(result).accept(node, 0);
 		var field = node.fields.stream().filter(f -> f.name.equals("featuresPerStep")).findFirst().orElseThrow();
 		assertEquals(SUPPLIER, field.desc);
-		assertTrue((field.access & Opcodes.ACC_PUBLIC) != 0);
-		assertEquals(0, field.access & Opcodes.ACC_FINAL);
-		assertTrue(AccessCensus.entries().isEmpty(), "final evidence must reflect the actual repaired member");
+		assertTrue((field.access & Opcodes.ACC_PUBLIC) != 0, "the widener must still be what made it reachable");
+		assertEquals(0, field.access & Opcodes.ACC_FINAL, "…and mutable");
+		assertTrue(AccessCensus.entries().isEmpty(), "final evidence must reflect the actual member");
 	}
 
 	private static ClassTweakerTransformer widener() {

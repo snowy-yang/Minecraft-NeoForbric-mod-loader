@@ -23,6 +23,11 @@ import net.fabricmc.api.EnvType;
  * <p>The hook is the kernel's real {@code KernelSpawnPosition}, compiled from {@code src/runtime/java} against
  * stand-ins; the stand-in NeoForge hooks it replaces post the same event and run the same two calls inside themselves.
  * The stand-in {@code Mob} records which method called each check.
+ *
+ * <p>The spawn enum the stand-ins name is {@code net.minecraft.world.entity.MobSpawnType} — 1.21.1's own name, the
+ * one {@code KernelSpawnPosition} and NeoForge 21.1.256's {@code EventHooks} are compiled against. These stand-ins
+ * used to declare the 26.x {@code EntitySpawnReason} instead, which is not a class on this anchor at all, so the
+ * emitted descriptors named nothing the real hook could be compiled or bound against.
  */
 @ExecutesInjector(SpawnPositionCallsInjector.class)
 class SpawnPositionCallsInjectorExecutionTest {
@@ -40,8 +45,8 @@ class SpawnPositionCallsInjectorExecutionTest {
 			Map.entry("net.minecraft.server.level.ServerLevel",
 					"package net.minecraft.server.level; public class ServerLevel implements net.minecraft.world.level.ServerLevelAccessor { }"),
 			Map.entry("net.minecraft.core.BlockPos", "package net.minecraft.core; public record BlockPos(int x, int y, int z) { }"),
-			Map.entry("net.minecraft.world.entity.EntitySpawnReason",
-					"package net.minecraft.world.entity; public enum EntitySpawnReason { NATURAL, SPAWNER }"),
+			Map.entry("net.minecraft.world.entity.MobSpawnType",
+					"package net.minecraft.world.entity; public enum MobSpawnType { NATURAL, SPAWNER }"),
 			Map.entry("net.minecraft.world.entity.Mob", """
 					package net.minecraft.world.entity;
 
@@ -55,7 +60,7 @@ class SpawnPositionCallsInjectorExecutionTest {
 						public boolean rulesAllow = true;
 						public boolean roomFree = true;
 
-						public boolean checkSpawnRules(LevelAccessor level, EntitySpawnReason reason) {
+						public boolean checkSpawnRules(LevelAccessor level, MobSpawnType reason) {
 							checks.add("rules from " + caller());
 							return rulesAllow;
 						}
@@ -86,7 +91,7 @@ class SpawnPositionCallsInjectorExecutionTest {
 			Map.entry(EVENT, """
 					package net.neoforged.neoforge.event.entity.living;
 
-					import net.minecraft.world.entity.EntitySpawnReason;
+					import net.minecraft.world.entity.MobSpawnType;
 					import net.minecraft.world.entity.Mob;
 					import net.minecraft.world.level.BaseSpawner;
 					import net.minecraft.world.level.ServerLevelAccessor;
@@ -98,7 +103,7 @@ class SpawnPositionCallsInjectorExecutionTest {
 							public static Result listenerAnswer = Result.DEFAULT;
 							private Result result = Result.DEFAULT;
 
-							public PositionCheck(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason, BaseSpawner spawner) {
+							public PositionCheck(Mob mob, ServerLevelAccessor level, MobSpawnType reason, BaseSpawner spawner) {
 							}
 
 							public Result getResult() {
@@ -130,7 +135,7 @@ class SpawnPositionCallsInjectorExecutionTest {
 			Map.entry("net.neoforged.neoforge.event.EventHooks", """
 					package net.neoforged.neoforge.event;
 
-					import net.minecraft.world.entity.EntitySpawnReason;
+					import net.minecraft.world.entity.MobSpawnType;
 					import net.minecraft.world.entity.Mob;
 					import net.minecraft.world.level.BaseSpawner;
 					import net.minecraft.world.level.ServerLevelAccessor;
@@ -139,14 +144,14 @@ class SpawnPositionCallsInjectorExecutionTest {
 					import net.neoforged.neoforge.event.entity.living.MobSpawnEvent.PositionCheck;
 
 					public class EventHooks {
-						public static boolean checkSpawnPositionSpawner(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason,
+						public static boolean checkSpawnPositionSpawner(Mob mob, ServerLevelAccessor level, MobSpawnType reason,
 								SpawnData data, BaseSpawner spawner) {
 							PositionCheck event = NeoForge.EVENT_BUS.post(new PositionCheck(mob, level, reason, spawner));
 							if (event.getResult() != PositionCheck.Result.DEFAULT) return event.getResult() == PositionCheck.Result.SUCCEED;
 							return (data.getCustomSpawnRules().isPresent() || mob.checkSpawnRules(level, reason)) && mob.checkSpawnObstruction(level);
 						}
 
-						public static boolean checkSpawnPosition(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason) {
+						public static boolean checkSpawnPosition(Mob mob, ServerLevelAccessor level, MobSpawnType reason) {
 							PositionCheck event = NeoForge.EVENT_BUS.post(new PositionCheck(mob, level, reason, null));
 							if (event.getResult() != PositionCheck.Result.DEFAULT) return event.getResult() == PositionCheck.Result.SUCCEED;
 							return mob.checkSpawnRules(level, reason) && mob.checkSpawnObstruction(level);
@@ -160,7 +165,7 @@ class SpawnPositionCallsInjectorExecutionTest {
 					import java.util.List;
 					import net.minecraft.core.BlockPos;
 					import net.minecraft.server.level.ServerLevel;
-					import net.minecraft.world.entity.EntitySpawnReason;
+					import net.minecraft.world.entity.MobSpawnType;
 					import net.minecraft.world.entity.Mob;
 					import net.neoforged.neoforge.event.EventHooks;
 
@@ -171,7 +176,7 @@ class SpawnPositionCallsInjectorExecutionTest {
 
 						public void serverTick(ServerLevel level, BlockPos pos) {
 							Mob mob = next;
-							if (!EventHooks.checkSpawnPositionSpawner(mob, level, EntitySpawnReason.SPAWNER, nextSpawnData, this)) return;
+							if (!EventHooks.checkSpawnPositionSpawner(mob, level, MobSpawnType.SPAWNER, nextSpawnData, this)) return;
 							spawned.add("mob at " + pos);
 						}
 					}
@@ -180,13 +185,13 @@ class SpawnPositionCallsInjectorExecutionTest {
 					package net.minecraft.world.level;
 
 					import net.minecraft.server.level.ServerLevel;
-					import net.minecraft.world.entity.EntitySpawnReason;
+					import net.minecraft.world.entity.MobSpawnType;
 					import net.minecraft.world.entity.Mob;
 					import net.neoforged.neoforge.event.EventHooks;
 
 					public class NaturalSpawner {
 						public static boolean isValidPositionForMob(ServerLevel level, Mob mob) {
-							return EventHooks.checkSpawnPosition(mob, level, EntitySpawnReason.NATURAL);
+							return EventHooks.checkSpawnPosition(mob, level, MobSpawnType.NATURAL);
 						}
 					}
 					"""));

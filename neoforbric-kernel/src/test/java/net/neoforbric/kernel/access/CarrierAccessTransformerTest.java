@@ -57,16 +57,30 @@ class CarrierAccessTransformerTest {
 
 	private static final String MENU_SCREENS = "net/minecraft/client/gui/screens/MenuScreens.class";
 
+	/**
+	 * Was {@code theCarrierFeedIsBeltAndBracesNowThatTheMergeWidensIt}, which asserted that the merge tool had
+	 * learned to keep the wider of the two ecosystems' access so the base shipped {@code MenuScreens.register}
+	 * public and the carrier feed no longer had to rescue it.
+	 *
+	 * <p>On this anchor the merge does NOT widen it: the base keeps vanilla's {@code private}, and the carrier
+	 * whose file used to rescue it — traditional MinecraftForge's {@code forge-runtime.jar} — is not part of this
+	 * anchor at all, which is why the two carrier tests below skip rather than run. That is reported, not papered
+	 * over, and it costs nothing here: a MinecraftForge mod cannot exist on a base with no
+	 * {@code net/minecraftforge} in it, and a NeoForge mod reaches screens through
+	 * {@code RegisterMenuScreensEvent}. The pair of assertions is what makes the absence visible: the moment a
+	 * MinecraftForge carrier is staged again, or the merge starts widening this method, this goes red and the two
+	 * tests below are worth running again.
+	 */
 	@Test
-	void theCarrierFeedIsBeltAndBracesNowThatTheMergeWidensIt() throws Exception {
-		// This asserted the opposite until the merge tool learned to keep the wider of the two ecosystems'
-		// access, which it now does — so the base ships this method public and the carrier feed no longer has to
-		// rescue it. The feed stays: it costs nothing, and it is what covers a base built before that fix.
+	void theMergedBaseKeepsMenuScreensRegisterPrivateAndThisAnchorHasNoCarrierToWidenIt() throws Exception {
 		MethodNode register = registerIn(original());
 
-		assertTrue((register.access & Opcodes.ACC_PUBLIC) != 0,
-				"the merged base should widen this at build time now; if it does not, the merge tool's access "
-						+ "reconciliation has regressed and only the carrier feed is holding this up");
+		assertTrue((register.access & Opcodes.ACC_PRIVATE) != 0,
+				"the merged base no longer keeps vanilla's private access for MenuScreens.register: if the merge "
+						+ "started widening it, re-check what the carrier feed in KernelBoot is still for");
+		assertFalse((register.access & Opcodes.ACC_PUBLIC) != 0);
+		assertFalse(Files.isRegularFile(FORGE_CARRIER),
+				"a MinecraftForge carrier is staged after all — the two carrier tests below can run against it again");
 	}
 
 	@Test

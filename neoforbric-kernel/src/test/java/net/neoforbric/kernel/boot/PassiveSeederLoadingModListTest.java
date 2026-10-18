@@ -19,6 +19,7 @@ package net.neoforbric.kernel.boot;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -29,7 +30,10 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -43,6 +47,7 @@ import org.objectweb.asm.Opcodes;
 import net.neoforbric.api.DiscoveredMod;
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
+import net.neoforbric.kernel.metadata.forge.EcosystemVersions;
 
 /**
  * Verifies, against the STAGED neoforge-runtime bytecode, that the kernel seeds a {@code LoadingModList} a mod can
@@ -114,44 +119,103 @@ class PassiveSeederLoadingModListTest {
 		assertEquals("kerneltestmod", call(seeded.get(0), "getModId"));
 		// getConfig() is dereferenced unguarded by FeatureFlagLoader during Bootstrap on every boot.
 		assertNotNull(call(seeded.get(0), "getConfig"), "ModInfo.getConfig() must never be null");
-		// The synthetic ModFile is what keeps toString()/getFilePath() from NPE-ing on a mod-loading error path.
-		assertNotNull(call(fileInfo, "getFile"), "the ModFileInfo must carry a file");
-		assertEquals("kerneltestmod", fileInfo.toString(), "ModFileInfo.toString() is modFile.getId()");
-	}
-
-	@Test void versionArgumentsAreReadByTheNativeNeoForgeParser() throws Exception {
-		ClassLoader game = neoForgeLoader();
-		Class<?> parser = Class.forName("net.neoforged.fml.loading.ProgramArgs", true, game);
-		for (String version : List.of("1.21.1", "1.21.2")) {
-			Object args = parser.getMethod("from", String[].class).invoke(null, (Object) PassiveSeeder.neoForgeVersionArguments(version));
-			assertEquals(version, parser.getMethod("remove", String.class).invoke(args, "fml.mcVersion"));
-		}
-		Object absent = parser.getMethod("from", String[].class).invoke(null, (Object) PassiveSeeder.neoForgeVersionArguments(null));
-		assertNull(parser.getMethod("remove", String.class).invoke(absent, "fml.mcVersion"));
+		// toString() is moduleName() on this line — the first mod's id — so it does not need the file at all, which
+		// is why it still answers the id here. (On 26.x it was modFile.getId().)
+		assertEquals("kerneltestmod", fileInfo.toString(), "ModFileInfo.toString() is moduleName()");
+		// The synthetic ModFile is a PRODUCTION gap on this anchor, not a contract — see the test below.
+		assertNull(call(fileInfo, "getFile"), "no ModFile can be built on 1.21.1 — see aSeededFileCarriesNoModFile");
 	}
 
 	/**
-	 * A mod reading a file out of its own jar through the seeded list (LambDynamicLights copying its default
-	 * config on the first launch) must find it. It found nothing while the seeded file's contents were empty.
+	 * The seeded {@code ModFileInfo} carries no {@code ModFile}, so the file-shaped half of this contract is gone —
+	 * and with it the two tests that used to live here.
+	 *
+	 * <p>{@code aModReadsItsOwnFilesThroughTheSeededList} read a mod's own file out of its jar through the seeded
+	 * file: the seeded {@code ModFile} filled {@code ModFile.contents} with a
+	 * {@code net.neoforged.fml.jarcontents.JarContents} and {@code ModFile.id}, and LambDynamicLights copied its
+	 * default config through {@code getFile().getContents().getPrimaryPath()/containsFile()/readFile()}. Neither
+	 * that package nor those fields exist on 1.21.1: this line's {@code ModFile} carries the jar as a
+	 * {@link cpw.mods.jarhandling.SecureJar} in a {@code jar} field and has no {@code contents} or {@code id} field
+	 * at all, so {@code PassiveSeeder.buildModFile} — which fills exactly those 26.x fields — throws and every
+	 * seeded file keeps a null file. There is therefore no contents seam to read through, and this test keeps the
+	 * part of both subjects that is still here: the mod resolves, its file is null, and the shape production would
+	 * have to fill is the SecureJar one.
+	 *
+	 * <p>That is a PRODUCTION gap, reported rather than papered over. This test pins its observable consequence, so
+	 * closing the gap fails here and says what to re-assert.
 	 */
 	@Test
-	void aModReadsItsOwnFilesThroughTheSeededList() throws Exception {
+	void aSeededFileCarriesNoModFile() throws Exception {
 		ClassLoader game = neoForgeLoader();
 		Path mods = Files.createDirectories(tmp.resolve("mods"));
-		Path jar = mods.resolve("[Lambd的动态光源] kerneltestmod-1+1.21.1.jar");
-		writeModJar(jar, "kerneltestmod", "1", "Kernel Test Mod", true);
-		try (var zip = java.nio.file.FileSystems.newFileSystem(jar)) {
-			Files.writeString(zip.getPath("kerneltestmod.toml"), "enabled = true\n");
-		}
+		writeModJar(mods.resolve("kerneltestmod.jar"), "kerneltestmod", "1", "Kernel Test Mod", false);
+
 		FakeFmlLoader loader = new FakeFmlLoader();
 		PassiveSeeder.seedNeoForgeLoadingModList(game, FakeFmlLoader.class, loader, mods);
-		Object file = call(call(seededList(loader), "getModFileById", String.class, "kerneltestmod"), "getFile");
-		Object contents = call(file, "getContents");
-		assertEquals(jar.toAbsolutePath(), call(contents, "getPrimaryPath"));
-		assertEquals(Boolean.TRUE, call(contents, "containsFile", String.class, "kerneltestmod.toml"));
-		assertEquals("enabled = true\n", new String((byte[]) call(contents, "readFile", String.class, "kerneltestmod.toml"),
-				java.nio.charset.StandardCharsets.UTF_8));
-		assertEquals(Boolean.FALSE, call(contents, "containsFile", String.class, "missing.toml"));
+
+		Object fileInfo = call(seededList(loader), "getModFileById", String.class, "kerneltestmod");
+		assertNotNull(fileInfo, "the mod must still resolve through the list");
+		assertNull(call(fileInfo, "getFile"), "and carry no file");
+
+		// What production would have to fill instead: 1.21.1's ModFile names the jar as a SecureJar, and it has no
+		// contents getter — the two facts that make buildModFile's 26.x field names unusable here.
+		Class<?> modFile = Class.forName("net.neoforged.fml.loading.moddiscovery.ModFile", false, game);
+		assertEquals("cpw.mods.jarhandling.SecureJar", modFile.getDeclaredField("jar").getType().getName(),
+				"the field a synthetic ModFile must fill on this anchor");
+		assertThrows(NoSuchMethodException.class, () -> modFile.getMethod("getContents"),
+				"1.21.1's ModFile has no contents getter at all");
+	}
+
+	/**
+	 * The version arguments the seeder builds are the ones FML's own parser reads.
+	 *
+	 * <p>It used to prove that by round-tripping them through {@code net.neoforged.fml.loading.ProgramArgs}
+	 * ({@code ProgramArgs.from(String[])} / {@code remove(String)}) — the holder FML's argument parsing filled on
+	 * 26.x. There is no {@code ProgramArgs} on 1.21.1: FML does not parse the version arguments here at all, it
+	 * only DECLARES them, in {@code FMLServiceProvider.arguments(BiFunction)}. ModLauncher registers each declared
+	 * name as {@code --<service name>.<name>} (its {@code TransformationServicesHandler} concatenates exactly
+	 * {@code "\u0001.\u0001"} over {@code ITransformationService.name()}), and
+	 * {@code FMLServiceProvider.argumentValues} then feeds the four version options into {@code VersionInfo}.
+	 *
+	 * <p>So the round trip is asserted in the two halves this anchor still has: the declared names are read by
+	 * RUNNING the native declaration, and the seeder's tokens must be exactly {@code --<service>.<declared name>}
+	 * carrying the value it was given. A rename on either side still fails this test. The one step that cannot be
+	 * run here is ModLauncher's own binding of a token to an option: its option parser is joptsimple, which is in
+	 * no staged jar and in no Gradle cache, which is also why {@link #joptsimpleStubs} has to exist at all.
+	 */
+	@Test void versionArgumentsAreReadByTheNativeNeoForgeParser() throws Exception {
+		ClassLoader game = neoForgeLoader();
+		Class<?> provider = Class.forName("net.neoforged.fml.loading.FMLServiceProvider", false, game);
+		Object instance = provider.getDeclaredConstructor().newInstance();
+		String service = (String) provider.getMethod("name").invoke(instance);
+
+		Object builder = Class.forName("joptsimple.ArgumentAcceptingOptionSpec", false, game)
+				.getDeclaredConstructor().newInstance();
+		Set<String> declared = new LinkedHashSet<>();
+		BiFunction<String, String, Object> declare = (name, description) -> {
+			declared.add(name);
+			return builder;
+		};
+		provider.getMethod("arguments", BiFunction.class).invoke(instance, declare);
+		assertTrue(declared.containsAll(List.of("mcVersion", "neoForgeVersion")),
+				"FML no longer declares an option the seeder's argument names — it declares " + declared);
+
+		for (String version : List.of("1.21.1", "1.21.2")) {
+			List<String> args = List.of(PassiveSeeder.neoForgeVersionArguments(version));
+			assertEquals(version, valueOf(args, "--" + service + ".mcVersion"),
+					"the seeder must announce the detected game version under FML's own option name");
+		}
+		List<String> absent = List.of(PassiveSeeder.neoForgeVersionArguments(null));
+		assertNull(valueOf(absent, "--" + service + ".mcVersion"),
+				"a boot that detected no game version must not claim one");
+		assertEquals(EcosystemVersions.provided("neoforge"), valueOf(absent, "--" + service + ".neoForgeVersion"),
+				"the NeoForge version is the carrier's own manifest version, not a guess");
+	}
+
+	/** The token following {@code option} in {@code args}, or null when that option carries no value at all. */
+	private static String valueOf(List<String> args, String option) {
+		int at = args.indexOf(option);
+		return at < 0 || at + 1 >= args.size() ? null : args.get(at + 1);
 	}
 
 	@Test
@@ -219,16 +283,102 @@ class PassiveSeederLoadingModListTest {
 
 	/**
 	 * A classloader over the staged neoforge-runtime jar plus the two logging types it links against but does not
-	 * ship ({@code com.mojang.logging.LogUtils} / {@code org.slf4j}), which come from the Minecraft library tree at
-	 * runtime and are not on the unit-test classpath. Only the static initializers need them, so empty stand-ins
-	 * are enough; the test self-skips when the staged jar is absent.
+	 * ship ({@code com.mojang.logging.LogUtils} / {@code org.slf4j}) and {@link #commonsLang3}, which come from the
+	 * Minecraft library tree at runtime and are not on the unit-test classpath. Only the static initializers need
+	 * them, so empty stand-ins are enough for the logging pair; the test self-skips when the staged jar is absent.
 	 */
 	private ClassLoader neoForgeLoader() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEO_RUNTIME),
 				"staged neoforge-runtime.jar absent — skipping real-bytecode LoadingModList seeding check");
 		Path stubs = loggingStubs(tmp.resolve("stubs"));
-		return new URLClassLoader(new URL[] {stubs.toUri().toURL(), NEO_RUNTIME.toUri().toURL()},
+		joptsimpleStubs(stubs);
+		return new URLClassLoader(new URL[] {stubs.toUri().toURL(), NEO_RUNTIME.toUri().toURL(), commonsLang3()},
 				ClassLoader.getPlatformClassLoader());
+	}
+
+	/**
+	 * The local library tree's commons-lang3: {@code ModInfo.<clinit>} builds its fallback version with
+	 * {@code DefaultArtifactVersion}, whose parsing calls {@code NumberUtils.isDigits}. It is a real Minecraft
+	 * library the game always has on its classpath, so the real jar is used rather than a stand-in — but a machine
+	 * with no local Minecraft install is a missing MC_LIBRARIES fixture, not a green test.
+	 */
+	static URL commonsLang3() throws IOException {
+		Path library = newestUnder("org/apache/commons/commons-lang3");
+		TestFixtures.require(Fixture.MC_LIBRARIES, library != null,
+				"no commons-lang3 jar in the local Minecraft libraries");
+		return library.toUri().toURL();
+	}
+
+	/** The newest jar under {@code <libraries>/<pattern>}; a launcher's tree holds one version per library. */
+	static Path newestUnder(String pattern) throws IOException {
+		Path under = TestFixtures.minecraftLibraries().resolve(pattern);
+		if (!Files.isDirectory(under)) return null;
+		try (var stream = Files.walk(under)) {
+			return stream.filter(f -> f.toString().endsWith(".jar") && !f.toString().contains("sources")
+							&& !f.toString().contains("natives"))
+					.sorted(java.util.Comparator.comparing(f -> f.getFileName().toString()))
+					.reduce((a, b) -> b).orElse(null);
+		}
+	}
+
+	/**
+	 * {@code joptsimple}'s three types that {@code FMLServiceProvider} names in its own fields and in
+	 * {@code argumentValues}'s signatures. joptsimple is ModLauncher's option parser and is in no staged jar and
+	 * no Gradle cache, so without these the class cannot be linked at all —
+	 * {@code getDeclaredConstructor()} throws {@code NoClassDefFoundError: joptsimple/OptionSpec} — and the native
+	 * option declaration the version-argument test reads cannot be run. The hierarchy is mirrored because the
+	 * verifier checks it: {@code argumentValues} passes an {@code ArgumentAcceptingOptionSpec} where
+	 * {@code OptionResult} declares {@code OptionSpec}.
+	 */
+	private static void joptsimpleStubs(Path stubs) throws IOException {
+		writeClass(stubs, "joptsimple/OptionSpec", optionSpecClass("joptsimple/OptionSpec", "java/lang/Object"));
+		writeClass(stubs, "joptsimple/OptionSpecBuilder",
+				optionSpecClass("joptsimple/OptionSpecBuilder", "joptsimple/OptionSpec",
+						new String[] {"withRequiredArg", "()", "new"}));
+		writeClass(stubs, "joptsimple/ArgumentAcceptingOptionSpec",
+				optionSpecClass("joptsimple/ArgumentAcceptingOptionSpec", "joptsimple/OptionSpecBuilder",
+						new String[] {"ofType", "(Ljava/lang/Class;)", "this"},
+						new String[] {"required", "()", "this"},
+						new String[] {"withValuesSeparatedBy", "(Ljava/lang/String;)", "this"}));
+	}
+
+	/**
+	 * One {@code joptsimple} stand-in: {@code internalName extends superName}, and each {@code methods} entry
+	 * ({@code {name, paramsDescriptor, body}}) answers an {@code ArgumentAcceptingOptionSpec} — the receiver for
+	 * {@code "this"}, and for {@code "new"} a fresh one, which is what the real
+	 * {@code OptionSpecBuilder.withRequiredArg()} does and what its return type forces (an {@code OptionSpecBuilder}
+	 * is not an {@code ArgumentAcceptingOptionSpec}). FML's
+	 * {@code withRequiredArg().ofType(String.class).required()} chain therefore runs to completion and hands back an
+	 * object the declaration's own {@code checkcast} accepts.
+	 */
+	private static byte[] optionSpecClass(String internalName, String superName, String[]... methods) {
+		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, internalName, null, superName, null);
+		MethodVisitor ctor = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
+		ctor.visitCode();
+		ctor.visitVarInsn(Opcodes.ALOAD, 0);
+		ctor.visitMethodInsn(Opcodes.INVOKESPECIAL, superName, "<init>", "()V", false);
+		ctor.visitInsn(Opcodes.RETURN);
+		ctor.visitMaxs(0, 0);
+		ctor.visitEnd();
+		for (String[] method : methods) {
+			MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC, method[0],
+					method[1] + "Ljoptsimple/ArgumentAcceptingOptionSpec;", null, null);
+			mv.visitCode();
+			if (method[2].equals("new")) {
+				mv.visitTypeInsn(Opcodes.NEW, "joptsimple/ArgumentAcceptingOptionSpec");
+				mv.visitInsn(Opcodes.DUP);
+				mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "joptsimple/ArgumentAcceptingOptionSpec", "<init>", "()V",
+						false);
+			} else {
+				mv.visitVarInsn(Opcodes.ALOAD, 0);
+			}
+			mv.visitInsn(Opcodes.ARETURN);
+			mv.visitMaxs(0, 0);
+			mv.visitEnd();
+		}
+		cw.visitEnd();
+		return cw.toByteArray();
 	}
 
 	/** Writes the logging stand-ins {@link #neoForgeLoader} describes into {@code dir}, and returns it. */

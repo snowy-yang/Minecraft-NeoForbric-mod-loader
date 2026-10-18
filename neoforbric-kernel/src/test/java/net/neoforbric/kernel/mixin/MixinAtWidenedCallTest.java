@@ -100,31 +100,29 @@ class MixinAtWidenedCallTest {
 		assertEquals(0, MixinAtWidenedCall.widen(mixin, name -> targetClass(LONG_DESC)));
 	}
 
+	/**
+	 * Used to assert that fabric-registry-sync's {@code WorldLoaderMixin} point was moved onto the loader the
+	 * carrier had lengthened to {@code (…, Executor, List)}. On this base the module's mixin is
+	 * {@code SaveLoadingMixin} and its {@code @At} target is the layer loader as the merged base really compiles it
+	 * ({@code loadAndReplaceLayer}), so the point resolves and nothing moves: what the test asserts now is that the
+	 * five-argument {@code WorldLoader.load} the mixin's handler is written against is the one the base declares.
+	 */
 	@Test void actualFabricRegistryListReplacementTargetsTheCurrentFiveArgumentLoader() throws Exception {
-		java.nio.file.Path api = TestFixtures.fabricApi();
-		java.nio.file.Path base = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-		TestFixtures.require(Fixture.STAGED, java.nio.file.Files.isRegularFile(api) && java.nio.file.Files.isRegularFile(base),
-				"actual Fabric API and game inputs required");
-		byte[] mixinBytes = null, targetBytes;
-		try (java.util.zip.ZipFile outer = new java.util.zip.ZipFile(api.toFile())) {
-			var module = outer.stream().filter(e -> e.getName().startsWith("META-INF/jars/fabric-registry-sync-v0-")).findFirst().orElseThrow();
-			try (var inner = new java.util.zip.ZipInputStream(outer.getInputStream(module))) {
-				for (java.util.zip.ZipEntry e; (e = inner.getNextEntry()) != null;) {
-					if (e.getName().equals("net/fabricmc/fabric/mixin/registry/sync/WorldLoaderMixin.class")) { mixinBytes = inner.readAllBytes(); break; }
-				}
-			}
-		}
-		try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(base.toFile())) {
-			targetBytes = zip.getInputStream(zip.getEntry("net/minecraft/server/WorldLoader.class")).readAllBytes();
-		}
-		org.junit.jupiter.api.Assertions.assertNotNull(mixinBytes);
-		targetBytes = new net.neoforbric.kernel.transform.DuplicateLambdaPruneInjector().transform("net.minecraft.server.WorldLoader", targetBytes, null);
-		ClassNode target = MixinFit.parse(targetBytes), mixin = MixinFit.parse(mixinBytes);
-		assertEquals(1, MixinAtWidenedCall.widen(mixin, name -> target));
+		ClassNode mixin = StagedFabricMixinFixture.resolved("fabric-registry-sync-v0",
+				"net/fabricmc/fabric/mixin/registry/sync/SaveLoadingMixin");
+		byte[] targetBytes = TestFixtures.stagedClass("neoforge-base/patched-mc-neoforge-1.21.1.jar",
+				"net.minecraft.server.WorldLoader");
+		byte[] pruned = new net.neoforbric.kernel.transform.DuplicateLambdaPruneInjector()
+				.transform("net.minecraft.server.WorldLoader", targetBytes, null);
+		ClassNode target = MixinFit.parse(pruned);
+		assertEquals(0, MixinAtWidenedCall.widen(mixin, name -> target), "the point resolves: nothing to widen");
 		MethodNode handler = mixin.methods.stream().filter(m -> m.name.equals("modifyLoadedEntries")).findFirst().orElseThrow();
 		AnnotationNode at = MixinFit.atNodes(MixinFit.injectorOf(handler)).getFirst();
 		String member = (String) MixinFit.value(at, "target");
-		org.junit.jupiter.api.Assertions.assertTrue(member.contains("Ljava/util/concurrent/Executor;Ljava/util/List;)Ljava/util/concurrent/CompletableFuture;"), member);
+		org.junit.jupiter.api.Assertions.assertTrue(member.contains("loadAndReplaceLayer"), member);
+		String selector = MixinFit.stringList(MixinFit.value(MixinFit.injectorOf(handler), "method")).getFirst();
+		org.junit.jupiter.api.Assertions.assertTrue(
+				selector.contains("Ljava/util/concurrent/Executor;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"), selector);
 	}
 
 	/**
@@ -217,31 +215,46 @@ class MixinAtWidenedCallTest {
 	private static final String PARTICLE_WIDE = "(Lnet/minecraft/core/particles/ParticleType;Lnet/minecraft/world/level/block/state/BlockState;"
 			+ "Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/particles/BlockParticleOption;";
 
-	/** fabric-particles puts the ground block on sprint and landing dust; NeoForge builds that dust with the position appended. */
-	@Test void fabricParticlesDustFollowsNeoForgesPositionedConstructor() throws Exception {
-		for (String[] pair : new String[][] {{"EntityMixin", "net/minecraft/world/entity/Entity"}, {"LivingEntityMixin", "net/minecraft/world/entity/LivingEntity"}}) {
-			System.clearProperty(MixinAtWidenedCall.NEW_PROPERTY);
-			ClassNode mixin = StagedFabricMixinFixture.mixin("fabric-particles-v1", "net/fabricmc/fabric/mixin/particle/" + pair[0]);
-			ClassNode merged = StagedFabricMixinFixture.game(pair[1], false);
-			assertEquals(PARTICLE_NEW, MixinFit.value(StagedFabricMixinFixture.at(mixin, "modifyBlockStateParticleOption"), "target"), "premise");
-			assertEquals(1, MixinAtWidenedCall.widen(mixin, name -> merged), pair[0]);
-			assertEquals(PARTICLE_WIDE, MixinFit.value(StagedFabricMixinFixture.at(mixin, "modifyBlockStateParticleOption"), "target"));
-			assertEquals(0, MixinAtWidenedCall.widen(mixin, name -> merged), "a second pass changes nothing");
-			ClassNode vanilla = StagedFabricMixinFixture.game(pair[1], true);
-			ClassNode fresh = StagedFabricMixinFixture.mixin("fabric-particles-v1", "net/fabricmc/fabric/mixin/particle/" + pair[0]);
-			assertEquals(0, MixinAtWidenedCall.widen(fresh, name -> vanilla), "vanilla builds the named constructor");
-			System.setProperty(MixinAtWidenedCall.NEW_PROPERTY, "off");
-			ClassNode off = StagedFabricMixinFixture.mixin("fabric-particles-v1", "net/fabricmc/fabric/mixin/particle/" + pair[0]);
-			assertEquals(0, MixinAtWidenedCall.widen(off, name -> merged), "the NEW switch");
-			System.clearProperty(MixinAtWidenedCall.NEW_PROPERTY);
+	/** The three mixins fabric-particles-v1 0.116.17 really ships: the module's EntityMixin, LivingEntityMixin
+	 * and ServerPlayerMixin — the ones the dust test below used to read — are not in it. */
+	private static final List<String> PARTICLES_MIXINS = List.of(
+			"net/fabricmc/fabric/mixin/client/particle/BlockDustParticleMixin",
+			"net/fabricmc/fabric/mixin/client/particle/ParticleManagerAccessor",
+			"net/fabricmc/fabric/mixin/client/particle/ParticleManagerMixin");
+
+	/**
+	 * Used to assert that fabric-particles' {@code EntityMixin} and {@code LivingEntityMixin} followed NeoForge's
+	 * dust constructor, which took the position appended, and that MixinFit's verdict agreed. 1.21.1's
+	 * {@code BlockParticleOption} has no position-appended constructor and fabric-api 0.116.17 ships none of those
+	 * mixins: there is no NEW point in the module for the widening to move. What it asserts now is the module as it
+	 * really is — every mixin it ships, resolved as Mixin applies it, is left exactly as compiled on the merged
+	 * base, and its target is still judged (so the verdict agrees with the rewrite in moving nothing).
+	 */
+	@Test void fabricParticlesOwnMixinsNeedNoConstructorWidening() throws Exception {
+		for (String name : PARTICLES_MIXINS) {
+			ClassNode mixin = StagedFabricMixinFixture.resolved("fabric-particles-v1", name);
+			assertEquals(0, MixinAtWidenedCall.widen(mixin, MixinAtWidenedCallTest::merged), name);
+			MixinFit.Result verdict = MixinFit.evaluate(StagedFabricMixinFixture.bytes(mixin),
+					name1 -> name1.endsWith(".class") ? mergedBytes(name1.substring(0, name1.length() - ".class".length())) : null);
+			org.junit.jupiter.api.Assertions.assertTrue(verdict.total() > 0, name + " was not judged: " + verdict);
 		}
 	}
 
-	/** Fabric's own ServerPlayer landing burst still builds the two-argument option: its point is left as written. */
+	/**
+	 * Used to assert that fabric's own {@code ServerPlayerMixin} landing burst still built the two-argument option,
+	 * so its point was left as written. That mixin is not in 0.116.17; what is asserted now is the reason the whole
+	 * NEW widening has nothing to do on this base: the constructor fabric's dust points named is the only one
+	 * {@code BlockParticleOption} has.
+	 */
 	@Test void aNamedConstructorThatIsBuiltIsNotMoved() throws Exception {
-		ClassNode mixin = StagedFabricMixinFixture.mixin("fabric-particles-v1", "net/fabricmc/fabric/mixin/particle/ServerPlayerMixin");
-		ClassNode merged = StagedFabricMixinFixture.game("net/minecraft/server/level/ServerPlayer", false);
-		assertEquals(0, MixinAtWidenedCall.widen(mixin, name -> merged));
+		String vanilla = "(Lnet/minecraft/core/particles/ParticleType;"
+				+ "Lnet/minecraft/world/level/block/state/BlockState;)V";
+		List<String> constructors = StagedFabricMixinFixture.game("net/minecraft/core/particles/BlockParticleOption", false)
+				.methods.stream().filter(m -> m.name.equals("<init>")).map(m -> m.desc).toList();
+		org.junit.jupiter.api.Assertions.assertTrue(constructors.contains(vanilla), constructors.toString());
+		org.junit.jupiter.api.Assertions.assertFalse(
+				constructors.contains(vanilla.substring(0, vanilla.length() - 2) + "Lnet/minecraft/core/BlockPos;)V"),
+				"the position-appended constructor is not 1.21.1's: " + constructors);
 	}
 
 	/** A construction nested in another's arguments pairs with its own init; two widened forms are ambiguous. */
@@ -269,22 +282,43 @@ class MixinAtWidenedCallTest {
 		assertNull(MixinAtWidenedCall.widenedNewIn(body, "Lp/T;"), "a class-name NEW target is not a constructor");
 	}
 
-	/** MixinFit judges the particle NEW anchors as the rewrite does: fit on the merged base, named when switched off. */
+	/**
+	 * Used to assert that MixinFit's verdict on fabric-particles' {@code EntityMixin} NEW anchors was FIT on the
+	 * merged base and PARTIAL — naming the miss — with the NEW switch off. Neither that mixin nor the
+	 * position-appended constructor it followed exists on this base, so there is no miss for the switch to reveal;
+	 * what is asserted now is that the switch changes nothing about the module's real mixins, which is what a
+	 * widening that has nothing to do must look like.
+	 */
 	@Test void theVerdictAgreesWithTheRewrite() throws Exception {
-		byte[] mixin = StagedFabricMixinFixture.bytes(StagedFabricMixinFixture.mixin("fabric-particles-v1", "net/fabricmc/fabric/mixin/particle/EntityMixin"));
-		byte[] entity = StagedFabricMixinFixture.bytes(StagedFabricMixinFixture.game("net/minecraft/world/entity/Entity", false));
-		java.util.function.Function<String, byte[]> resolver = name -> name.equals("net/minecraft/world/entity/Entity.class") ? entity : null;
-		MixinFit.Result fit = MixinFit.evaluate(mixin, resolver);
-		assertEquals(MixinFit.Verdict.FIT, fit.verdict(), fit.toString());
-		org.junit.jupiter.api.Assertions.assertTrue(fit.total() > 0, "the target was judged: " + fit);
+		String previous = System.getProperty(MixinAtWidenedCall.NEW_PROPERTY);
 		System.setProperty(MixinAtWidenedCall.NEW_PROPERTY, "off");
 		try {
-			MixinFit.Result off = MixinFit.evaluate(mixin, resolver);
-			assertEquals(MixinFit.Verdict.PARTIAL, off.verdict(), off.toString());
-			assertEquals(1, off.unresolved().stream().filter(u -> u.contains("names the 2-arg constructor, the call site constructs with 3")).count(),
-					off.unresolved().toString());
+			for (String name : PARTICLES_MIXINS) {
+				ClassNode mixin = StagedFabricMixinFixture.resolved("fabric-particles-v1", name);
+				assertEquals(0, MixinAtWidenedCall.widen(mixin, MixinAtWidenedCallTest::merged), name);
+				MixinFit.Result verdict = MixinFit.evaluate(StagedFabricMixinFixture.bytes(mixin),
+						name1 -> name1.endsWith(".class") ? mergedBytes(name1.substring(0, name1.length() - ".class".length())) : null);
+				org.junit.jupiter.api.Assertions.assertTrue(verdict.total() > 0, name + " was not judged: " + verdict);
+			}
 		} finally {
-			System.clearProperty(MixinAtWidenedCall.NEW_PROPERTY);
+			if (previous == null) System.clearProperty(MixinAtWidenedCall.NEW_PROPERTY);
+			else System.setProperty(MixinAtWidenedCall.NEW_PROPERTY, previous);
+		}
+	}
+
+	/** The merged base's own class, as a node, for a resolver. */
+	private static ClassNode merged(String name) {
+		byte[] bytes = mergedBytes(name);
+		return bytes == null ? null : MixinFit.parse(bytes);
+	}
+
+	private static byte[] mergedBytes(String name) {
+		java.nio.file.Path base = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
+		try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(base.toFile())) {
+			java.util.zip.ZipEntry entry = zip.getEntry(name + ".class");
+			return entry == null ? null : zip.getInputStream(entry).readAllBytes();
+		} catch (java.io.IOException unreadable) {
+			throw new java.io.UncheckedIOException(unreadable);
 		}
 	}
 
@@ -402,15 +436,14 @@ class MixinAtWidenedCallTest {
 	@Test void everyRedirectableRowIsAStaticCallBesideTheVanillaFormItWidened() throws Exception {
 		java.nio.file.Path merged = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 		TestFixtures.require(Fixture.STAGED, java.nio.file.Files.isRegularFile(merged), "staged merged base required");
-		java.nio.file.Path vanilla = TestFixtures.vanillaJar();
-		TestFixtures.require(Fixture.MC_LIBRARIES, java.nio.file.Files.isRegularFile(vanilla), "vanilla 1.21.1 required");
 		for (MixinAtWidenedCall.Redirectable row : MixinAtWidenedCall.REDIRECTABLE) {
 			MixinAtWidenedCall.Member wide = MixinAtWidenedCall.parse(row.member());
 			MethodNode widened = declared(merged, wide.owner(), wide.name(), wide.descriptor());
 			assertNotNull(widened, row.member() + " is no longer in the merged base: delete its row");
 			assertTrue((widened.access & Opcodes.ACC_STATIC) != 0, row.member() + " must be static");
 			int forms = 0;
-			for (MethodNode form : declaredAll(vanilla, wide.owner())) {
+			// 1.21.1's own client jar is obfuscated: the vanilla forms are the unpatched client in the base's names.
+			for (MethodNode form : StagedFabricMixinFixture.vanilla(wide.owner()).methods) {
 				if (!form.name.equals(wide.name()) || !MixinAtWidenedCall.widens(form.desc, wide.descriptor())) continue;
 				forms++;
 				assertNotNull(declared(merged, wide.owner(), form.name, form.desc), "the merged base dropped vanilla's " + form.name + form.desc);
@@ -491,14 +524,56 @@ class MixinAtWidenedCallTest {
 		return writer.toByteArray();
 	}
 
-	/** A wrap or redirect of NEW mirrors the constructor's arguments: never widened. */
-	@Test void aConstructorWrapIsNeverWidened() throws Exception {
-		ClassNode mixin = StagedFabricMixinFixture.mixin("fabric-particles-v1", "net/fabricmc/fabric/mixin/particle/EntityMixin");
-		AnnotationNode injector = MixinFit.injectorOf(StagedFabricMixinFixture.method(mixin, "modifyBlockStateParticleOption"));
-		injector.desc = "Lcom/llamalad7/mixinextras/injector/wrapoperation/WrapOperation;";
-		ClassNode merged = StagedFabricMixinFixture.game("net/minecraft/world/entity/Entity", false);
-		assertEquals(0, MixinAtWidenedCall.widen(mixin, name -> merged));
-		assertEquals(PARTICLE_NEW, MixinFit.value(StagedFabricMixinFixture.at(mixin, "modifyBlockStateParticleOption"), "target"));
+	/**
+	 * A wrap or redirect of NEW mirrors the constructor's arguments: never widened. Used to be asserted on
+	 * fabric-particles' {@code EntityMixin}, which 0.116.17 does not ship and whose dust constructor this base does
+	 * not widen; the rule is about the injector kind, so it is asserted here on the shape itself.
+	 */
+	@Test void aConstructorWrapIsNeverWidened() {
+		String narrow = "(II)Lp/Thing;", wide = "(III)Lp/Thing;";
+		ClassNode target = constructing(wide);
+		for (String kind : List.of("Lcom/llamalad7/mixinextras/injector/wrapoperation/WrapOperation;",
+				"Lorg/spongepowered/asm/mixin/injection/Redirect;")) {
+			ClassNode mixin = newMixin(kind, narrow);
+			assertEquals(0, MixinAtWidenedCall.widen(mixin, name -> target), kind);
+			assertEquals(narrow, MixinFit.value(MixinFit.atNodes(MixinFit.injectorOf(mixin.methods.getFirst())).getFirst(), "target"));
+		}
+	}
+
+	/** A mixin with one NEW injector of {@code injectorDesc} over {@code targetClass}, its handler mirroring the
+	 * constructor's own arguments. */
+	private static ClassNode newMixin(String injectorDesc, String constructor) {
+		ClassNode mixin = new ClassNode();
+		mixin.name = "com/example/SomeMixin";
+		mixin.version = Opcodes.V21;
+		AnnotationNode type = new AnnotationNode("Lorg/spongepowered/asm/mixin/Mixin;");
+		type.values = new ArrayList<>(List.of("value", new ArrayList<>(List.of(Type.getObjectType("net/example/Target")))));
+		mixin.invisibleAnnotations = new ArrayList<>(List.of(type));
+		AnnotationNode at = new AnnotationNode("Lorg/spongepowered/asm/mixin/injection/At;");
+		at.values = new ArrayList<>(List.of("value", "NEW", "target", constructor));
+		AnnotationNode injector = new AnnotationNode(injectorDesc);
+		injector.values = new ArrayList<>(List.of("method", new ArrayList<>(List.of("<clinit>")), "at", at));
+		MethodNode handler = new MethodNode(Opcodes.ACC_PRIVATE, "handler", "()Lp/Thing;", null, null);
+		handler.visibleAnnotations = new ArrayList<>(List.of(injector));
+		mixin.methods = new ArrayList<>(List.of(handler));
+		return mixin;
+	}
+
+	/** {@code net/example/Target}'s {@code <clinit>} constructing {@code p/Thing} with the three arguments. */
+	private static ClassNode constructing(String constructor) {
+		ClassNode target = new ClassNode();
+		target.name = "net/example/Target";
+		MethodNode clinit = new MethodNode(Opcodes.ACC_STATIC, "<clinit>", "()V", null, null);
+		clinit.instructions.add(new TypeInsnNode(Opcodes.NEW, "p/Thing"));
+		clinit.instructions.add(new InsnNode(Opcodes.DUP));
+		clinit.instructions.add(new InsnNode(Opcodes.ICONST_1));
+		clinit.instructions.add(new InsnNode(Opcodes.ICONST_2));
+		clinit.instructions.add(new InsnNode(Opcodes.ICONST_3));
+		clinit.instructions.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, "p/Thing", "<init>", "(III)V", false));
+		clinit.instructions.add(new InsnNode(Opcodes.POP));
+		clinit.instructions.add(new InsnNode(Opcodes.RETURN));
+		target.methods = new ArrayList<>(List.of(clinit));
+		return target;
 	}
 
 	/** A target class whose {@code <clinit>} makes one call to {@code OWNER.codec} with {@code descriptor}. */

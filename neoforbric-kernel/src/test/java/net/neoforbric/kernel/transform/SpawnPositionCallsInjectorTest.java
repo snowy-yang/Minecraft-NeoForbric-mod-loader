@@ -45,25 +45,48 @@ class SpawnPositionCallsInjectorTest {
 		assertEquals(MixinFit.Verdict.FIT, MixinFit.evaluate(mixin, after).verdict(), MixinFit.evaluate(mixin, after).toString());
 	}
 
+	/**
+	 * Every hook site becomes vanilla's pair again, in the caller.
+	 *
+	 * <p>This compared the rewritten methods against the SAME methods in {@link TestFixtures#vanillaJar()} — vanilla
+	 * made the two calls, so the counts had to come back equal. That cannot be done on 1.21.1: the file there is the
+	 * launcher's own client jar and its classes are still OBFUSCATED (it has every class, under names like
+	 * {@code guu}, and no {@code net/minecraft/world/level/NaturalSpawner} entry), so no vanilla method can be named
+	 * in it. The reference is NeoForge's own hook instead, read out of the staged runtime jar: its body is the pair
+	 * vanilla made, and the injector's whole claim is that it puts that pair back where the hook was. The counts
+	 * therefore still have to match site for site — one {@code checkSpawnRules} and one {@code checkSpawnObstruction}
+	 * per hook removed — and a missed or doubled site still fails.
+	 */
 	@Test void naturalAndSummonedSpawnsGetVanillasCallsBackInEveryMethodVanillaMadeThem() throws Exception {
-		Path vanilla = TestFixtures.vanillaJar();
+		byte[] hooks = read(NEO, "net/neoforged/neoforge/event/EventHooks.class");
+		MethodNode position = node(hooks).methods.stream()
+				.filter(m -> m.name.equals(SpawnPositionCallsInjector.NEO_POSITION)).findFirst().orElseThrow();
+		int rulesPerSite = calls(position, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_RULES);
+		int obstructionPerSite = calls(position, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_OBSTRUCTION);
+		assertEquals(1, rulesPerSite, "NeoForge's checkSpawnPosition runs the mob's own rules once");
+		assertEquals(1, obstructionPerSite, "…and its obstruction check once");
 		for (String target : List.of(SpawnPositionCallsInjector.NATURAL, SpawnPositionCallsInjector.SUMMON)) {
 			String entry = target.replace('.', '/') + ".class";
 			byte[] original = read(MERGED, entry);
 			byte[] rewritten = injector().transform(target, original, null);
 			assertNotSame(original, rewritten, target + " carries NeoForge's hook, so it must be rewritten");
-			ClassNode after = node(rewritten), before = node(read(vanilla, entry));
+			ClassNode after = node(rewritten), before = node(original);
+			int sites = 0;
+			for (MethodNode method : before.methods) sites += calls(method, SpawnPositionCallsInjector.NEO, SpawnPositionCallsInjector.NEO_POSITION);
+			assertTrue(sites > 0, "premise: " + target + " calls NeoForge's position hook somewhere");
 			for (MethodNode method : after.methods) {
 				assertEquals(0, calls(method, SpawnPositionCallsInjector.NEO, SpawnPositionCallsInjector.NEO_POSITION), method.name);
 				new Analyzer<>(new BasicVerifier()).analyze(after.name, method);
 			}
-			for (MethodNode vanillaMethod : before.methods) {
-				int rules = calls(vanillaMethod, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_RULES);
-				if (rules == 0) continue;
-				MethodNode rewrittenMethod = after.methods.stream().filter(m -> m.name.equals(vanillaMethod.name) && m.desc.equals(vanillaMethod.desc)).findFirst().orElseThrow();
-				assertEquals(rules, calls(rewrittenMethod, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_RULES), target + "." + vanillaMethod.name);
-				assertEquals(calls(vanillaMethod, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_OBSTRUCTION),
-						calls(rewrittenMethod, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_OBSTRUCTION), target + "." + vanillaMethod.name);
+			for (MethodNode beforeMethod : before.methods) {
+				int wasHooks = calls(beforeMethod, SpawnPositionCallsInjector.NEO, SpawnPositionCallsInjector.NEO_POSITION);
+				if (wasHooks == 0) continue;
+				MethodNode afterMethod = after.methods.stream()
+						.filter(m -> m.name.equals(beforeMethod.name) && m.desc.equals(beforeMethod.desc)).findFirst().orElseThrow();
+				assertEquals(wasHooks * rulesPerSite, calls(afterMethod, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_RULES),
+						target + "." + beforeMethod.name);
+				assertEquals(wasHooks * obstructionPerSite, calls(afterMethod, SpawnPositionCallsInjector.MOB, SpawnPositionCallsInjector.CHECK_OBSTRUCTION),
+						target + "." + beforeMethod.name);
 			}
 			assertSame(rewritten, injector().transform(target, rewritten, null), "a second pass changes nothing");
 		}

@@ -10,92 +10,88 @@ import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Both families decide, NeoForge first; the mob is finalized once, with what the last family left, or not at all. */
+/**
+ * One Forge family on this anchor: NeoForge's. {@code EventHooks.finalizeMobSpawn} and
+ * {@code finalizeMobSpawnSpawner} each post exactly one {@code FinalizeSpawnEvent} on {@code NeoForge.EVENT_BUS},
+ * finalize the mob once when the event was not canceled — the spawner hook only when it was asked to initialize —
+ * and hand the finalization the event's own difficulty, spawn reason and spawn data.
+ *
+ * <p>Re-anchored from a two-family model (NeoForge + a MinecraftForge {@code MobSpawnEvent.FinalizeSpawn}). This
+ * build carries no {@code net/minecraftforge} class at all and {@code EventHooks} posts no such event;
+ * introduction.md §8 records the deletion. The tests below pin the single-family behaviour the real bytecode has,
+ * which is also why the trace never contains a second event name.
+ */
 class KernelFinalizeSpawnTest {
 	@TempDir Path directory;
 
-	@Test void bothFamiliesThenOneFinalizationWithMinecraftForgesValues() throws Exception {
+	@Test void oneNeoForgeEventThenOneFinalizationWithWhatItLeft() throws Exception {
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
-			Object forgeDifficulty = fixture.newDifficulty(), forgeData = fixture.newData();
-			fixture.set("forge", (Consumer<Object>) event -> { set(event, "setDifficulty", forgeDifficulty); set(event, "setSpawnData", forgeData); });
+			Object chosenDifficulty = fixture.newDifficulty(), chosenData = fixture.newData();
+			fixture.set("neo", (Consumer<Object>) event -> {
+				set(event, "setDifficulty", chosenDifficulty);
+				set(event, "setSpawnData", chosenData);
+			});
 			Object result = fixture.finalizeMobSpawn();
-			assertEquals(List.of("neo", "forge", "finalize"), fixture.trace());
-			assertEquals(1, fixture.count("finalizes"));
-			assertSame(forgeDifficulty, fixture.value("finalDifficulty"), "MinecraftForge's listener chose the difficulty");
-			assertSame(forgeData, fixture.value("finalData"), "and the spawn data the one finalization receives");
+			assertEquals(List.of("neo", "finalize"), fixture.trace(), "one event, then the finalization");
+			assertEquals(1, fixture.count("neoPosts"));
+			assertEquals(1, fixture.count("finalizes"), "the mob is finalized exactly once");
+			assertSame(chosenDifficulty, fixture.value("finalDifficulty"), "the listener's difficulty reaches the finalization");
+			assertSame(chosenData, fixture.value("finalData"), "and the spawn data the one finalization receives");
 			assertSame(fixture.value("finalResult"), result, "finalizeSpawn's own answer is returned");
 		}
 	}
 
-	@Test void minecraftForgeSeesWhatNeoForgesListenersLeft() throws Exception {
+	@Test void theFinalizationReceivesTheEventsSpawnReason() throws Exception {
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
-			Object neoData = fixture.newData();
-			fixture.set("neo", (Consumer<Object>) event -> set(event, "setSpawnData", neoData));
 			fixture.finalizeMobSpawn();
-			assertSame(neoData, fixture.eventValue(fixture.value("lastForge"), "getSpawnData"));
-			assertSame(neoData, fixture.value("finalData"));
+			assertEquals("TRIAL_SPAWNER", String.valueOf(fixture.value("finalReason")),
+					"the event's getSpawnType is what EventHooks hands Mob.finalizeSpawn");
 		}
 	}
 
-	@Test void aNeoForgeCancelSkipsMinecraftForgeAndTheFinalization() throws Exception {
+	@Test void aCancelSkipsTheFinalization() throws Exception {
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
 			fixture.set("neo", (Consumer<Object>) event -> set(event, "setCanceled", true));
-			assertNull(fixture.finalizeMobSpawn());
-			assertEquals(List.of("neo"), fixture.trace());
+			assertNull(fixture.finalizeMobSpawn(), "a canceled event returns null");
+			assertEquals(List.of("neo"), fixture.trace(), "the event was still posted");
 			assertEquals(0, fixture.count("finalizes"));
 		}
 	}
 
-	@Test void aMinecraftForgeCancelSkipsTheFinalization() throws Exception {
-		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
-			fixture.set("forgeCanceled", true);
-			assertNull(fixture.finalizeMobSpawn());
-			assertEquals(List.of("neo", "forge"), fixture.trace());
-			assertEquals(0, fixture.count("finalizes"));
-		}
-	}
-
-	@Test void aNeoForgeVetoSurvivesAMinecraftForgeListenerClearingIt() throws Exception {
+	@Test void aVetoIsNotACancelSoTheMobIsStillFinalized() throws Exception {
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
 			fixture.set("neo", (Consumer<Object>) event -> set(event, "setSpawnCancelled", true));
-			fixture.set("forge", (Consumer<Object>) event -> set(event, "setSpawnCancelled", false));
 			fixture.finalizeMobSpawn();
 			assertTrue(fixture.vetoed(), "the world insertion stays vetoed");
 			assertEquals(1, fixture.count("finalizes"), "a veto is not a cancel: the mob is still finalized");
 		}
 	}
 
-	@Test void theTrialSpawnerPostsMinecraftForgeOnlyWhereItInitializes() throws Exception {
+	@Test void theTrialSpawnerFinalizesOnlyWhenAskedToInitialize() throws Exception {
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
-			Object forgeData = fixture.newData();
-			fixture.set("forge", (Consumer<Object>) event -> set(event, "setSpawnData", forgeData));
+			Object chosenData = fixture.newData();
+			fixture.set("neo", (Consumer<Object>) event -> set(event, "setSpawnData", chosenData));
 			Object event = fixture.finalizeTrialSpawner(true);
-			assertEquals(List.of("neo", "forge", "finalize"), fixture.trace());
-			assertEquals(1, fixture.count("finalizes"), "NeoForge's hook was asked not to initialize; the kernel finalizes once");
-			assertSame(forgeData, fixture.value("finalData"));
-			assertSame(forgeData, fixture.eventValue(event, "getSpawnData"), "the returned event carries what MinecraftForge left");
-			assertNotNull(((Object) fixture.value("lastNeo").getClass().getField("spawner").get(fixture.value("lastNeo"))), "NeoForge's event names its spawner");
+			assertEquals(List.of("neo", "finalize"), fixture.trace());
+			assertEquals(1, fixture.count("finalizes"), "initialize=true finalizes once");
+			assertSame(chosenData, fixture.value("finalData"));
+			assertSame(chosenData, fixture.eventValue(event, "getSpawnData"), "the returned event carries what the listener left");
+			assertNotNull(fixture.value("lastNeo").getClass().getField("spawner").get(fixture.value("lastNeo")),
+					"NeoForge's event names its spawner");
 		}
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory.resolve("uninitialized"))) {
 			Object event = fixture.finalizeTrialSpawner(false);
-			assertEquals(List.of("neo"), fixture.trace(), "no MinecraftForge event where vanilla does not initialize");
+			assertEquals(List.of("neo"), fixture.trace(), "initialize=false posts the event but does not finalize");
 			assertEquals(0, fixture.count("finalizes"));
-			assertFalse(fixture.canceled(event));
+			assertFalse(fixture.canceled(event), "the event is returned either way, and it was not canceled");
 		}
 	}
 
-	@Test void aMinecraftForgeCancelAtTheTrialSpawnerCancelsNeoForgesEvent() throws Exception {
+	@Test void aCancelAtTheTrialSpawnerIsReportedAndNothingIsFinalized() throws Exception {
 		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory)) {
-			fixture.set("forgeCanceled", true);
-			Object event = fixture.finalizeTrialSpawner(true);
-			assertTrue(fixture.canceled(event));
-			assertEquals(0, fixture.count("finalizes"));
-		}
-		try (FinalizeSpawnFixture fixture = new FinalizeSpawnFixture(directory.resolve("neo-cancel"))) {
 			fixture.set("neo", (Consumer<Object>) event -> set(event, "setCanceled", true));
 			Object event = fixture.finalizeTrialSpawner(true);
-			assertTrue(fixture.canceled(event));
-			assertEquals(List.of("neo"), fixture.trace());
+			assertTrue(fixture.canceled(event), "the returned event is the canceled one");
 			assertEquals(0, fixture.count("finalizes"));
 		}
 	}

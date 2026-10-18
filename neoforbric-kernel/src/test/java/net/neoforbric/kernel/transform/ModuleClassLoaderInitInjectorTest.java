@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
@@ -58,14 +57,18 @@ import net.neoforbric.kernel.mixin.MixinWeaverSlot;
  *
  * <p>The carrier's own class is staged; a stand-in with the same guarded {@code IMPL_LOOKUP} lookup is compiled here,
  * so the patched initialiser also runs on a checkout without it.
+ *
+ * <p><b>Re-anchored to 1.21.1.</b> The carrier class is {@code cpw.mods.cl.ModuleClassLoader}, not the 26.x
+ * {@code net.neoforged.fml.classloading.ModuleClassLoader} — the old path matched no zip entry, so every read of it
+ * here threw on the null entry and none of these tests ever reached its subject.
  */
 @ExecutesInjector(ModuleClassLoaderInitInjector.class)
 class ModuleClassLoaderInitInjectorTest {
 	private static final Path CARRIER = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar");
-	private static final String INTERNAL = "net/neoforged/fml/classloading/ModuleClassLoader";
+	private static final String INTERNAL = "cpw/mods/cl/ModuleClassLoader";
 	/** The guarded lookup the repair keys on: it catches three reflective failures, not the module system's refusal. */
 	private static final String STAND_IN = """
-			package net.neoforged.fml.classloading;
+			package cpw.mods.cl;
 
 			import java.lang.invoke.MethodHandle;
 			import java.lang.invoke.MethodHandles;
@@ -113,27 +116,26 @@ class ModuleClassLoaderInitInjectorTest {
 		assertSame(guarded.end, added.end);
 	}
 
+	/**
+	 * The patched carrier still verifies, on the carrier's own bytes.
+	 *
+	 * <p>This case deliberately does NOT initialise the real class. Its {@code <clinit>} installs a JVM-global
+	 * {@code URLStreamHandlerFactory}, and that call succeeds only once per JVM: a case that initialises the real
+	 * carrier here would either die on {@code Error: factory already defined} itself or, running first, take the
+	 * factory and leave {@code FmlTransformerViewTest} unable to build the view at all. So the real bytes are
+	 * checked the way they can be — {@link #theCarriersInitialiserGainsAHandlerOverTheBlockItAlreadyGuards} reads
+	 * the guarded block off them, and this case proves the patched result still passes the verifier — while the
+	 * unpatched-refusal/patched-initialises round trip is proved on the stand-in by
+	 * {@link #aStandInsInitialiserFinishesOnlyAfterTheRepair}, which has the same guarded lookup and no factory call.
+	 */
 	@Test
-	void unpatchedItIsErroneousOnThisJvmAndPatchedItInitialises() throws Exception {
+	void thePatchedCarrierStillVerifies() throws Exception {
 		byte[] in = carrierClass();
-		// The test JVM is build.gradle's, which opens nothing; one that opened java.lang.invoke could not show the
-		// unpatched class failing, so that is a broken harness rather than a missing fixture.
-		assertFalse(Object.class.getModule().isOpen("java.lang.invoke",
-				getClass().getClassLoader().getUnnamedModule()), "this JVM opened java.lang.invoke — nothing to show");
-
-		try (DefiningLoader shipped = new DefiningLoader(in)) {
-			// The ground truth the injector exists for: InaccessibleObjectException escapes the carrier's catch.
-			Throwable failed = assertThrows(ExceptionInInitializerError.class,
-					() -> Class.forName(ModuleClassLoaderInitInjector.TARGET, true, shipped));
-			assertInstanceOf(java.lang.reflect.InaccessibleObjectException.class, failed.getCause());
-		}
-
 		byte[] out = new ModuleClassLoaderInitInjector().transform(ModuleClassLoaderInitInjector.TARGET, in, null);
+		assertNotSame(in, out);
 		try (DefiningLoader patched = new DefiningLoader(out)) {
-			Class<?> type = Class.forName(ModuleClassLoaderInitInjector.TARGET, true, patched);
-			Field bind = type.getDeclaredField("LAYER_BIND_TO_LOADER");
-			bind.setAccessible(true);
-			assertNull(bind.get(null), "the handle only a constructor reads stays null; nothing else changes");
+			assertEquals("", InjectorExecution.verify(out, patched),
+					"the patched carrier must still verify: the handler is appended, the guarded block is untouched");
 		}
 	}
 
@@ -178,7 +180,7 @@ class ModuleClassLoaderInitInjectorTest {
 	void itTouchesNothingElseAndNothingTwice() throws Exception {
 		byte[] in = carrierClass();
 		ModuleClassLoaderInitInjector injector = new ModuleClassLoaderInitInjector();
-		assertSame(in, injector.transform("net.neoforged.fml.classloading.SomethingElse", in, null));
+		assertSame(in, injector.transform("cpw.mods.cl.SomethingElse", in, null));
 		byte[] once = injector.transform(ModuleClassLoaderInitInjector.TARGET, in, null);
 		assertSame(once, injector.transform(ModuleClassLoaderInitInjector.TARGET, once, null),
 				"a class that already tolerates it is left alone");
@@ -200,7 +202,7 @@ class ModuleClassLoaderInitInjectorTest {
 	private static byte[] carrierClass() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(CARRIER), "NeoForge carrier not staged");
 		try (ZipFile zip = new ZipFile(CARRIER.toFile());
-				InputStream in = zip.getInputStream(zip.getEntry("net/neoforged/fml/classloading/ModuleClassLoader.class"))) {
+				InputStream in = zip.getInputStream(zip.getEntry("cpw/mods/cl/ModuleClassLoader.class"))) {
 			return in.readAllBytes();
 		}
 	}

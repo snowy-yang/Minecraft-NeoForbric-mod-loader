@@ -80,9 +80,18 @@ class RegistrationEventStepsTest {
 
 	// --- the plan -----------------------------------------------------------------------------------------------
 
-	/** The real carrier's method, when it is staged: seven calls, and the two the kernel keys on among them. */
+	/**
+	 * The real carrier's method, when it is staged: a straight run of calls, and the two the kernel keys on among
+	 * them.
+	 *
+	 * <p>Was {@code theRealMethodIsAStraightRunOfSevenCalls}. 1.21.1's {@code RegistrationEvents.init} is six
+	 * arg-less static calls (verified against the carrier: CauldronFluidContent, CapabilityHooks,
+	 * ForcedChunkManager, RegistryManager.initDataMaps, this class's own modifyComponents, PoiTypeExtender) —
+	 * 26.x had a seventh. The count is asserted rather than derived because the plan must be all-or-nothing: one
+	 * call the kernel cannot isolate and it returns null, which is what makes the count a shape check.
+	 */
 	@Test
-	void theRealMethodIsAStraightRunOfSevenCalls() throws Exception {
+	void theRealMethodIsAStraightRunOfSixCalls() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEOFORGE_RUNTIME), "neoforge-runtime.jar not staged");
 		byte[] real;
 		try (ZipFile zip = new ZipFile(NEOFORGE_RUNTIME.toFile())) {
@@ -95,7 +104,7 @@ class RegistrationEventStepsTest {
 		List<RegistrationEventSteps.Step> steps = RegistrationEventSteps.plan(real);
 
 		assertNotNull(steps, "NeoForge's init is expected to be isolatable");
-		assertEquals(7, steps.size(), steps.toString());
+		assertEquals(6, steps.size(), steps.toString());
 		assertTrue(steps.indexOf(RegistrationEventSteps.CAPABILITIES) >= 0, steps.toString());
 		assertTrue(steps.indexOf(RegistrationEventSteps.DATA_MAPS) > steps.indexOf(RegistrationEventSteps.CAPABILITIES),
 				"capabilities before data maps, as NeoForge orders them");

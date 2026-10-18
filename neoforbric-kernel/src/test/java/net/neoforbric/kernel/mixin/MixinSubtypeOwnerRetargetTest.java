@@ -25,57 +25,67 @@ import org.objectweb.asm.tree.*;
 import net.neoforbric.kernel.transform.WidenedFieldTwinInjector;
 
 /**
- * lithostitched's Fabric predicate injector, on the real merged loadFromResource; and debugify's MC-121706 fix, on the real
- * merged RangedBowAttackGoal, whose field both carriers widened from Monster to Mob.
+ * debugify's MC-121706 fix on the real merged RangedBowAttackGoal, whose field both carriers widened from Monster
+ * to Mob — the vanilla body and the merged one both read off real game classes.
+ *
+ * <p>This class used to have a second subject: lithostitched's Fabric predicate injector over
+ * {@code net/minecraft/resources/RegistryLoadTask$PendingRegistration}. 1.21.1 has no {@code RegistryLoadTask}, and
+ * the fixture was a 26.x mod jar, so those tests could only skip; the rule they exercised is asserted here on the
+ * archer instead.
  */
 @ResourceLock("system-properties")
 class MixinSubtypeOwnerRetargetTest {
-	private static final Path LITHO = Path.of("run/client-merged-pack/mods/lithostitched-1.7.13-fabric-26.2.jar");
-	private static final String MIXIN = "dev/worldgen/lithostitched/mixin/common/predicate/RegistryLoadTaskMixin";
-	private static final String TARGET = "net/minecraft/resources/RegistryLoadTask$PendingRegistration";
 
 	@AfterEach void reset() {
 		System.clearProperty(MixinSubtypeOwnerRetarget.PROPERTY);
 		System.clearProperty(MixinSubtypeOwnerRetarget.RETYPED_FIELD_PROPERTY);
 	}
 
-	private static ClassNode litho() throws Exception {
-		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(LITHO), "lithostitched's Fabric jar required");
-		try (ZipFile zip = new ZipFile(LITHO.toFile())) {
-			return MixinFit.parse(zip.getInputStream(zip.getEntry(MIXIN + ".class")).readAllBytes());
-		}
+
+	/**
+	 * Used to assert that lithostitched's predicate injector's {@code Decoder.parse} point moves to
+	 * {@code Codec.parse} over {@code net/minecraft/resources/RegistryLoadTask$PendingRegistration} — a 26.x class,
+	 * with a 26.x mod jar: neither exists on this base, so the test could only ever skip. What it asserts now is
+	 * the same rule on the case this base does have: the archer's {@code Monster.lookAt} point moves to the widened
+	 * owner's {@code Mob.lookAt}, exactly once.
+	 */
+	@Test void thePointMovesToTheSameCallThroughAnotherOwner() throws Exception {
+		Function<String, byte[]> merged = game(false);
+		ClassNode mixin = debugifyShaped(null);
+		assertEquals(1, MixinSubtypeOwnerRetarget.adapt(mixin, nodes(merged)));
+		MethodNode handler = StagedFabricMixinFixture.method(mixin, "lookAtTarget");
+		assertEquals(MOB_LOOK, MixinFit.value(MixinFit.atNodes(MixinFit.injectorOf(handler)).getFirst(), "target"));
+		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(mixin, nodes(merged)), "a second pass changes nothing");
 	}
 
-	/** The target as NeoForbricMixinService reads it: with its local variable table (the fixture skips debug info). */
-	private static ClassNode withLocals(boolean vanilla) throws Exception {
-		Path jar = vanilla ? TestFixtures.vanillaJar() : TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-		TestFixtures.require(vanilla ? Fixture.MC_LIBRARIES : Fixture.STAGED, Files.isRegularFile(jar), "actual game required");
-		try (ZipFile zip = new ZipFile(jar.toFile())) {
-			ClassNode node = new ClassNode();
-			new org.objectweb.asm.ClassReader(zip.getInputStream(zip.getEntry(TARGET + ".class")).readAllBytes()).accept(node, 0);
-			return node;
-		}
-	}
-
-	@Test void thePredicateCheckMovesToTheSameCallThroughCodec() throws Exception {
-		ClassNode mixin = litho(), target = withLocals(false);
-		assertEquals(1, MixinSubtypeOwnerRetarget.adapt(mixin, n -> target));
-		MethodNode handler = mixin.methods.stream().filter(m -> m.name.equals("loadFromResource")).findFirst().orElseThrow();
-		assertEquals("Lcom/mojang/serialization/Codec;parse(Lcom/mojang/serialization/DynamicOps;Ljava/lang/Object;)Lcom/mojang/serialization/DataResult;",
-				MixinFit.value(MixinFit.atNodes(MixinFit.injectorOf(handler)).getFirst(), "target"));
-		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(mixin, n -> target), "a second pass changes nothing");
-	}
-
-	@Test void vanillasOwnCallTheSwitchAndAMissingLocalAreLeftAlone() throws Exception {
-		ClassNode vanilla = withLocals(true);
-		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(litho(), n -> vanilla), "vanilla still calls Decoder.parse");
-		ClassNode merged = withLocals(false);
+	/**
+	 * Used to assert the same three things about lithostitched's predicate injector over
+	 * {@code net/minecraft/resources/RegistryLoadTask$PendingRegistration}: that class is 26.x's — 1.21.1 has no
+	 * {@code RegistryLoadTask} at all — and the mod's own jar is a 26.x build, so there was nothing on this base
+	 * to run the rule against. What it asserts now is the same rule on the case this base does have, the archer's
+	 * widened field: vanilla still makes the call itself, the switch leaves the merged body alone, and a body whose
+	 * method the handler selects is not there is left alone too.
+	 */
+	@Test void vanillasOwnCallTheSwitchAndAMissingMethodAreLeftAlone() throws Exception {
+		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(debugifyShaped(null), nodes(game(true))), "vanilla still calls Monster.lookAt");
 		System.setProperty(MixinSubtypeOwnerRetarget.PROPERTY, "off");
-		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(litho(), n -> merged));
-		System.clearProperty(MixinSubtypeOwnerRetarget.PROPERTY);
-		ClassNode renamed = withLocals(false);
-		for (MethodNode m : renamed.methods) if (m.localVariables != null) for (LocalVariableNode l : m.localVariables) if (l.name.equals("json")) l.name = "element";
-		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(litho(), n -> renamed), "the handler's @Local(name=\"json\") must exist at the call");
+		try {
+			assertEquals(0, MixinSubtypeOwnerRetarget.adapt(debugifyShaped(null), nodes(game(false))));
+		} finally {
+			System.clearProperty(MixinSubtypeOwnerRetarget.PROPERTY);
+		}
+		assertEquals(0, MixinSubtypeOwnerRetarget.adapt(debugifyShaped(null), withoutTick(game(false))),
+				"the handler's method selector must exist in the target");
+	}
+
+	/** The merged goal without its {@code tick}: the point has no method to attach to. */
+	private static Function<String, ClassNode> withoutTick(Function<String, byte[]> merged) {
+		Function<String, ClassNode> nodes = nodes(merged);
+		return name -> {
+			ClassNode node = nodes.apply(name);
+			if (node != null && name.equals(GOAL)) node.methods.removeIf(m -> m.name.equals("tick"));
+			return node;
+		};
 	}
 
 	@Test void codecDoesNotRedeclareParse() throws Exception {
@@ -99,14 +109,20 @@ class MixinSubtypeOwnerRetargetTest {
 
 	/** One game's classes as the kernel serves them: the merged goal after the twin injector, which debugify's @Shadow needs. */
 	private static Function<String, byte[]> game(boolean vanilla) throws Exception {
-		Path jar = vanilla ? TestFixtures.vanillaJar() : TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-		TestFixtures.require(vanilla ? Fixture.MC_LIBRARIES : Fixture.STAGED, Files.isRegularFile(jar), "actual game required");
+		// 1.21.1's own client jar is OBFUSCATED — no net/minecraft/<Mojmap>.class entry exists in it — so the
+		// vanilla body is the unpatched client in the base's names, off the intermediary cache of that jar.
+		Path jar = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
+		if (!vanilla) TestFixtures.require(Fixture.STAGED, Files.isRegularFile(jar), "actual game required");
 		Map<String, byte[]> classes = new HashMap<>();
-		try (ZipFile zip = new ZipFile(jar.toFile())) {
-			for (String name : List.of(GOAL, "net/minecraft/world/entity/monster/Monster", "net/minecraft/world/entity/PathfinderMob",
-					"net/minecraft/world/entity/Mob")) {
+		for (String name : List.of(GOAL, "net/minecraft/world/entity/monster/Monster", "net/minecraft/world/entity/PathfinderMob",
+				"net/minecraft/world/entity/Mob")) {
+			if (vanilla) {
+				classes.put(name + ".class", StagedFabricMixinFixture.vanillaBytes(name));
+				continue;
+			}
+			try (ZipFile zip = new ZipFile(jar.toFile())) {
 				byte[] bytes = zip.getInputStream(zip.getEntry(name + ".class")).readAllBytes();
-				if (!vanilla && name.equals(GOAL)) bytes = new WidenedFieldTwinInjector().transform(name.replace('/', '.'), bytes, null);
+				if (name.equals(GOAL)) bytes = new WidenedFieldTwinInjector().transform(name.replace('/', '.'), bytes, null);
 				classes.put(name + ".class", bytes);
 			}
 		}

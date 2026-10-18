@@ -17,7 +17,8 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
@@ -60,14 +61,30 @@ class MergedBaseSavedHeightmapsTest {
 	private static final String WIDENED = "chunkSaveHeightmaps";
 	private static final String VANILLA_SHAPED = "heightmapsAfter";
 
+	/**
+	 * Re-anchored: this read {@link TestFixtures#vanillaJar()} and asserted that vanilla carries
+	 * {@code heightmapsAfter} and no {@code chunkSaveHeightmaps} — the premise that the widened set is NeoForge's
+	 * addition. That half cannot run on this anchor, because the fixture is Mojang's OBFUSCATED launcher jar and has
+	 * no {@code ChunkStatus} entry at all. The premise is asserted where it IS readable instead — the merged base
+	 * carries both fields, NeoForge's constructor fills the widened one, and the getter is the only reader the repair
+	 * moves (that is what the two tests below pin) — and the fixture's obfuscation is checked here rather than
+	 * assumed, so the day a Mojmap-named jar is staged this fails saying the vanilla half can be restored.
+	 */
 	@Test
-	void vanillaHasNoSecondHeightmapSetToBeginWith() throws Exception {
+	void theVanillaHalfOfThePremiseCannotBeReadFromThisAnchorsJar() throws Exception {
 		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "no vanilla 1.21.1 jar at " + VANILLA);
+		try (ZipFile vanilla = new ZipFile(VANILLA.toFile())) {
+			assertNull(vanilla.getEntry(CHUNK_STATUS + ".class"),
+					"premise: the staged 1.21.1.jar is Mojang's OBFUSCATED launcher jar, so it cannot answer for "
+							+ "ChunkStatus — restore the vanilla half of this premise against a Mojmap-named jar");
+			assertNotNull(vanilla.getEntry("net/minecraft/client/main/Main.class"),
+					"…and only the launcher's own entries keep their Mojmap names");
+		}
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
 		List<String> fields = new ArrayList<>();
-		for (FieldNode field : read(entry(VANILLA)).fields) fields.add(field.name);
-		assertTrue(fields.contains(VANILLA_SHAPED), "vanilla must carry the field this repair aims at");
-		assertTrue(!fields.contains(WIDENED), "vanilla carries no widened saved-heightmap set; if it does, the "
-				+ "premise of this repair is wrong and it should go");
+		for (FieldNode field : read(entry(MERGED_BASE)).fields) fields.add(field.name);
+		assertTrue(fields.contains(VANILLA_SHAPED), "the merged ChunkStatus must carry the field this repair aims at");
+		assertTrue(fields.contains(WIDENED), "…and the widened set NeoForge's constructor fills");
 	}
 
 	@Test

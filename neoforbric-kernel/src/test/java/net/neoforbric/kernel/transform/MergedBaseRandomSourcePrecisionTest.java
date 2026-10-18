@@ -27,6 +27,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipFile;
 
@@ -67,20 +68,34 @@ class MergedBaseRandomSourcePrecisionTest {
 	private static final double UNIT = 0x1.0p-53;
 	private static final String FIXTURE = "net/minecraft/world/level/levelgen/NeoForbricRandomUnitFixture";
 
+	/**
+	 * Re-anchored: this asserted the opposite premise — that the merged base carries the float-rounded
+	 * {@code nextDouble()} the repair exists for, and that the repair puts it back in double. 1.21.1's merged base
+	 * already emits vanilla's shape ({@code l2d; ldc2_w 1.1102230246251565E-16; dmul}) in both sources, so the
+	 * pipeline defect the claim was derived from is not in these bytes; the test says so, and pins that the repair
+	 * reports no claim on a class that is already right (a repair that "repairs" the correct shape would be the
+	 * regression). The synthetic fixtures below still prove the repair computes what vanilla computes when the float
+	 * shape IS present, so the repair stays honest for a base built before the pipeline changed.
+	 */
 	@Test
-	void theMergedBaseScalesItsRandomBitsInFloatAndTheRepairPutsItBackInDouble() throws Exception {
+	void theMergedBaseAlreadyScalesItsRandomBitsInDoubleAndTheRepairStandsDown() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "merged base not staged: " + MERGED_BASE);
 		for (String source : SOURCES) {
 			byte[] before = entry(source + ".class");
-			assertTrue(scalesInFloat(read(before)), source + " no longer carries the float-rounded nextDouble() this "
-					+ "repair exists for. If the merge pipeline fixed it, delete the repair — do not leave a claim "
-					+ "asserting a shape that is gone");
+			ClassNode merged = read(before);
+			assertFalse(scalesInFloat(merged), source + " scales its 53 random bits through float — the pipeline "
+					+ "defect this repair exists for is back in the base, so re-arm the repair rather than relaxing "
+					+ "this assertion");
+			assertTrue(scalesInDouble(merged), source + " scales by neither width — the shape this repair reacts to "
+					+ "and the shape it writes are both gone, so re-derive the claim");
 
-			byte[] after = new NeoForbricMergedBaseCompatTransformer().transform(source.replace('/', '.'), before, null);
-			ClassNode repaired = read(after);
-			assertFalse(scalesInFloat(repaired), source + " still rounds through float after the repair");
-			assertTrue(scalesInDouble(repaired), source + " scales by neither width after the repair — the multiply "
-					+ "was removed rather than widened");
+			List<String> claims = new ArrayList<>();
+			byte[] after = new NeoForbricMergedBaseCompatTransformer()
+					.transform(source.replace('/', '.'), before, null, claims::add);
+			assertFalse(claims.contains("neoforbric-merged-base-compat#restoreDoublePrecisionToTheRandomSources"),
+					source + " is already vanilla-shaped, so this repair must not claim it: " + claims);
+			assertFalse(scalesInFloat(read(after)), source + " scales through float after the pass");
+			assertTrue(scalesInDouble(read(after)), source + " scales by neither width after the pass");
 		}
 	}
 

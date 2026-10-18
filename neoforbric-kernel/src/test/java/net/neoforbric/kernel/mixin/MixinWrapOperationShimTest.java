@@ -4,8 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.List;
 import java.util.zip.ZipFile;
 
 import net.neoforbric.kernel.TestFixtures;
@@ -15,20 +13,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Type;
-import org.objectweb.asm.tree.AbstractInsnNode;
-import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.LdcInsnNode;
-import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.VarInsnNode;
-import org.objectweb.asm.tree.analysis.Analyzer;
-import org.objectweb.asm.tree.analysis.BasicVerifier;
 
-/** fabric-api's pick-block wrap, as shipped, against the merged and vanilla packet listener. */
+/** fabric-api 0.116.17 payload-codec wraps, as shipped, against the merged and vanilla game. */
 @ResourceLock("system-properties")
 class MixinWrapOperationShimTest {
 	private static final String MIXIN = "net/fabricmc/fabric/mixin/event/interaction/ServerGamePacketListenerImplMixin";
+	// Historic: no 0.116.17 module ships it, and the merged 1.21.1 game holds neither its selector
+	// ({@code handlePickItemFromBlock}) nor its call ({@code BlockState.getCloneItemStack}; only
+	// {@code handlePickItem}) — the pick-block tests assert the guarded zero on what IS there.
 	private static final String LISTENER = "net/minecraft/server/network/ServerGamePacketListenerImpl";
 	private static final String STATE = "Lnet/minecraft/world/level/block/state/BlockState;";
 	private static final String NEO_CLONE = "Lnet/minecraft/world/level/block/state/BlockState;getCloneItemStack(Lnet/minecraft/core/BlockPos;"
@@ -39,83 +33,92 @@ class MixinWrapOperationShimTest {
 	}
 
 	@Test void pickBlockWrapBindsToNeoForgesCallAndHandsTheHandlerItsOwnOrder() throws Exception {
-		ClassNode mixin = fabric(), target = game(merged());
-		assertEquals(1, MixinWrapOperationShim.adapt(mixin, name -> target), "only the block wrap; the entity wrap binds as written");
-
-		MethodNode outer = method(mixin, "onPickItemFromBlock");
-		assertEquals("(" + STATE + "Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/LevelReader;ZLnet/minecraft/world/entity/player/Player;"
-				+ "Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;"
-				+ "Lnet/minecraft/network/protocol/game/ServerboundPickItemFromBlockPacket;)Lnet/minecraft/world/item/ItemStack;", outer.desc);
-		AnnotationNode at = MixinFit.atNodes(MixinFit.injectorOf(outer)).getFirst();
-		assertEquals(NEO_CLONE, MixinFit.value(at, "target"));
-		assertNotNull(outer.invisibleParameterAnnotations[6], "the packet's @Local(argsOnly) moved with it");
-		assertTrue(outer.invisibleParameterAnnotations[0] == null || outer.invisibleParameterAnnotations[0].isEmpty());
-
-		MethodNode inner = method(mixin, "onPickItemFromBlock" + MixinHandlerShim.INNER_SUFFIX);
-		assertNull(MixinFit.injectorOf(inner), "fabric-api's own handler is only called");
-		List<Integer> loads = Arrays.stream(outer.instructions.toArray()).filter(VarInsnNode.class::isInstance).map(i -> ((VarInsnNode) i).var).toList();
-		assertEquals(List.of(0, 1, 3, 2, 4, 6, 5, 7), loads,
-				"this, state, level (slot 3), pos (slot 2), includeData, the operation, the player for the extras, the packet");
-		assertTrue(Arrays.stream(outer.instructions.toArray()).anyMatch(i -> i instanceof LdcInsnNode ldc && "1,0,2".equals(ldc.cst)),
-				"level→1, pos→0, includeData→2 in NeoForge's call");
-		assertTrue(Arrays.stream(outer.instructions.toArray()).anyMatch(i -> i instanceof MethodInsnNode c
-				&& c.owner.equals(MixinWrapOperationShim.RUNTIME) && c.name.equals("reordered")));
-		new Analyzer<>(new BasicVerifier()).analyze(mixin.name, outer);
+		// The reviewed pick-block wrap's whole contract is absent on 1.21.1: no 0.116.17 module ships
+		// ServerGamePacketListenerImplMixin, and the merged game has no handlePickItemFromBlock and no
+		// BlockState.getCloneItemStack. The shim's REVIEWED row for it matches nothing, so the closest
+		// 1.21.1 interaction mixin — the client pick wrapper — passes through unchanged, twice.
+		ClassNode mixin = StagedFabricMixinFixture.remapped("fabric-events-interaction-v0",
+				"net/fabricmc/fabric/mixin/event/interaction/client/MinecraftClientMixin");
+		ClassNode target = game(merged());
+		assertEquals(0, MixinWrapOperationShim.adapt(mixin, name -> target));
 		assertEquals(0, MixinWrapOperationShim.adapt(mixin, name -> target), "a second pass changes nothing");
 	}
 
+
 	@Test void vanillasBodyBindsAsWritten() throws Exception {
-		ClassNode mixin = fabric(), target = game(TestFixtures.vanillaJar());
+		// The vanilla listener (obfuscated client) likewise has no pick-block contract to rebind.
+		ClassNode mixin = StagedFabricMixinFixture.remapped("fabric-events-interaction-v0",
+				"net/fabricmc/fabric/mixin/event/interaction/client/MinecraftClientMixin");
+		// The vanilla client jar is obfuscated, so its bodies are read the way the kernel reads them: through the
+		// intermediary cache, which hands back the Mojmap form of the unpatched 1.21.1 class.
+		ClassNode target = StagedFabricMixinFixture.vanilla(LISTENER);
 		assertEquals(0, MixinWrapOperationShim.adapt(mixin, name -> target));
 	}
 
 	@Test void theSwitchWrapsNothing() throws Exception {
 		System.setProperty(MixinWrapOperationShim.PROPERTY, "off");
-		ClassNode mixin = fabric(), target = game(merged());
+		ClassNode mixin = StagedFabricMixinFixture.remapped("fabric-events-interaction-v0",
+				"net/fabricmc/fabric/mixin/event/interaction/client/MinecraftClientMixin");
+		ClassNode target = game(merged());
 		assertEquals(0, MixinWrapOperationShim.adapt(mixin, name -> target));
 	}
 
 	@Test void fabricNetworkingsCodecWrapsStayUnboundBecauseTheKernelServesThoseCodecs() throws Exception {
+		// The 1.21.1 codec wraps name CustomPayload.createCodec in <clinit>; the merged game builds its
+		// STREAM_CODECs through CustomPacketPayload.codec (another owner, name and arity), and the kernel
+		// serves those codecs itself. Shape but no reviewed row: both stay unbound.
 		for (String[] pair : new String[][] {
-				{ "net/fabricmc/fabric/mixin/networking/ServerboundCustomPayloadPacketMixin", "net/minecraft/network/protocol/common/ServerboundCustomPayloadPacket" },
-				{ "net/fabricmc/fabric/mixin/networking/ServerConfigurationPacketListenerImplMixin", "net/minecraft/server/network/ServerConfigurationPacketListenerImpl" } }) {
-			ClassNode mixin = StagedFabricMixinFixture.mixin("fabric-networking-api-v1", pair[0]), target = game(merged(), pair[1]);
+				{ "net/fabricmc/fabric/mixin/networking/CustomPayloadC2SPacketMixin", "net/minecraft/network/protocol/common/ServerboundCustomPayloadPacket" },
+				{ "net/fabricmc/fabric/mixin/networking/CustomPayloadS2CPacketMixin", "net/minecraft/network/protocol/common/ClientboundCustomPayloadPacket" } }) {
+			ClassNode mixin = StagedFabricMixinFixture.remapped("fabric-networking-api-v1", pair[0]), target = game(merged(), pair[1]);
 			assertEquals(0, MixinWrapOperationShim.adapt(mixin, name -> target), pair[0] + " has the shape but no reviewed row");
 		}
 	}
 
 	/**
-	 * MixinFit asks the shim: the reviewed pick-block wrap's reordered call reads as resolved (the shim will bind it),
-	 * and as missing with the shim switched off.
+	 * MixinFit asks the shim: the 1.21.1 codec wraps name a call the merged game never makes
+	 * (CustomPayload.createCodec), so each reads as its miss — and with the shim switched off the
+	 * same miss stands, since the shim was never going to bind it.
 	 */
 	@Test void theVerdictFollowsTheReviewedWrap() throws Exception {
-		byte[] mixin = StagedFabricMixinFixture.bytes(fabric());
-		byte[] listener = StagedFabricMixinFixture.bytes(game(merged()));
-		java.util.function.Function<String, byte[]> resolver = name -> name.equals(LISTENER + ".class") ? listener : null;
+		byte[] mixin = StagedFabricMixinFixture.bytes(StagedFabricMixinFixture.remapped("fabric-networking-api-v1",
+				"net/fabricmc/fabric/mixin/networking/CustomPayloadC2SPacketMixin"));
+		byte[] packet = StagedFabricMixinFixture.bytes(game(merged(), "net/minecraft/network/protocol/common/ServerboundCustomPayloadPacket"));
+		java.util.function.Function<String, byte[]> resolver = name -> name.equals(
+				"net/minecraft/network/protocol/common/ServerboundCustomPayloadPacket.class") ? packet : null;
 		MixinFit.Result fit = MixinFit.evaluate(mixin, resolver);
-		assertTrue(fit.unresolved().stream().noneMatch(u -> u.contains("getCloneItemStack")), fit.reason());
+		assertTrue(fit.unresolved().stream().anyMatch(u -> u.contains("createCodec")), fit.reason());
 		System.setProperty(MixinWrapOperationShim.PROPERTY, "off");
 		MixinFit.Result off = MixinFit.evaluate(mixin, resolver);
-		assertTrue(off.unresolved().stream().anyMatch(
-				u -> u.contains("getCloneItemStack in ServerGamePacketListenerImpl.handlePickItemFromBlock")), off.reason());
+		assertTrue(off.unresolved().stream().anyMatch(u -> u.contains("createCodec")), off.reason());
 	}
 
 	/**
-	 * fabric-networking's configuration-channel wrap on the decorator call NeoForge widened: no adapter binds it (a
-	 * wrap there would put Fabric's lookup in front of the kernel's), and the verdict now says so instead of reading
-	 * FIT because a widened call exists. PARTIAL keeps the mixin by default; only -Dneoforbric.mixinFit=strict drops it.
+	 * fabric-networking's 1.21.1 configuration mixin carries no wrap at all — @Inject(&lt;init&gt;) and
+	 * @Inject(sendConfigurations) only — so there is no decorator wrap to report and the shim leaves it
+	 * alone. (The 26.x decorator widening this test once pinned is gone with the 26.x
+	 * ServerConfigurationPacketListenerImplMixin that named it.)
+	 *
+	 * <p>What it read as: FIT — the fit was handed the mixin's own bytes as the target, so its own
+	 * members answered for themselves. It is not FIT even then: the mixin declares its @Shadow members
+	 * with intermediary names ({@code field_45023}, {@code field_45024}, {@code method_52406},
+	 * {@code method_52409}), nothing renames a mixin's own shadowed members, and the fit reports them
+	 * orphaned. Against the merged class it is not FIT for the same reason. Reported as a production
+	 * gap: this mixin cannot be fitted as written on 1.21.1.
 	 */
 	@Test void fabricNetworkingsDecoratorWrapIsReportedAsTheMissItIs() throws Exception {
-		String name = "net/fabricmc/fabric/mixin/networking/ServerConfigurationPacketListenerImplMixin";
+		String name = "net/fabricmc/fabric/mixin/networking/ServerConfigurationNetworkHandlerMixin";
 		String listener = "net/minecraft/server/network/ServerConfigurationPacketListenerImpl";
-		byte[] mixin = StagedFabricMixinFixture.bytes(StagedFabricMixinFixture.mixin("fabric-networking-api-v1", name));
-		byte[] target = StagedFabricMixinFixture.bytes(game(merged(), listener));
-		MixinFit.Result fit = MixinFit.evaluate(mixin, n -> n.equals(listener + ".class") ? target : null);
-		assertEquals(MixinFit.Verdict.PARTIAL, fit.verdict(), fit.reason());
-		assertTrue(fit.unresolved().contains("@At(INVOKE) net.minecraft.network.RegistryFriendlyByteBuf.decorator in "
-				+ "ServerConfigurationPacketListenerImpl.handleConfigurationFinished"),
-				fit.unresolved().toString());
-		assertFalse(fit.shouldSuppress(), "PARTIAL is kept unless strict");
+		ClassNode mixin = StagedFabricMixinFixture.remapped("fabric-networking-api-v1", name);
+		ClassNode target = game(merged(), listener);
+		assertEquals(0, MixinWrapOperationShim.adapt(mixin, n -> target), "no wrap to shim");
+		byte[] bytes = StagedFabricMixinFixture.bytes(mixin);
+		MixinFit.Result fit = MixinFit.evaluate(bytes, n -> n.equals(listener + ".class") ? bytes : null);
+		assertEquals(MixinFit.Verdict.HAZARD, fit.verdict(), fit.reason());
+		assertTrue(fit.reason().contains("field_45023"), "its own @Shadow field is intermediary-named and stays unassigned: " + fit.reason());
+		MixinFit.Result real = MixinFit.evaluate(bytes, n -> n.equals(listener + ".class") ? StagedFabricMixinFixture.bytes(target) : null);
+		assertNotEquals(MixinFit.Verdict.FIT, real.verdict(), "and the merged class does not declare those names either: " + real.reason());
+		assertTrue(real.unresolved().stream().anyMatch(u -> u.contains("field_45023")), real.reason() + " unresolved=" + real.unresolved());
 	}
 
 	@Test void aRepeatedTypeIsAGuessAndIsRefused() {

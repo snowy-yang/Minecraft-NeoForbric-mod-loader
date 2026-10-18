@@ -59,7 +59,15 @@ import net.neoforbric.kernel.mixin.MixinWeaverSlot;
  */
 class FmlContextLoaderRewriterTest {
 	private static final String OWNER = "com/example/NeoPlugin";
-	private static final String PLUGIN = "dev/jfronny/libjf/unsafe/MixinPlugin.class";
+	/**
+	 * LibJF's mixin plugin inside {@code libjf-unsafe-v0-3.17.4+forge.jar}.
+	 *
+	 * <p>Re-anchored: this was {@code dev/jfronny/libjf/unsafe/MixinPlugin.class}, the package LibJF's 26.x lineage
+	 * uses (libjf-26.2.2+forge.jar still ships it there). The 1.21.1-era build the sweep pack pins, 3.17.4+forge,
+	 * ships the same class under its pre-rename package {@code io.gitlab.jfronny} — same {@code onLoad}, whose first
+	 * two instructions are still the cast this rewriter exists for.
+	 */
+	private static final String PLUGIN = "io/gitlab/jfronny/libjf/unsafe/MixinPlugin.class";
 
 	@AfterEach
 	void clearSwitch() {

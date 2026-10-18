@@ -17,6 +17,8 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
@@ -125,6 +127,16 @@ class MergedBasePipelineDriftTest {
 		List<String> repaired = new ArrayList<>();
 		int methodsCompared = 0;
 		try (ZipFile v = new ZipFile(VANILLA.toFile()); ZipFile m = new ZipFile(MERGED_BASE.toFile())) {
+			// The census lines the two jars up BY NAME, so it can only compare what both call the same thing. The
+			// vanilla fixture is Mojang's OBFUSCATED launcher jar: the game's own classes are not in it under
+			// net/minecraft, and the only names the two jars share are the launcher's own. Asserted here rather than
+			// assumed, because the numbers below are only meaningful with it.
+			assertNull(v.getEntry("net/minecraft/world/level/Level.class"),
+					"the vanilla fixture can answer for the game again — restore the full census, 94k methods and the "
+							+ "repaired >= 2 check that goes with it");
+			assertNotNull(m.getEntry("net/minecraft/world/level/Level.class"),
+					"the merged base must still carry the game's classes: " + MERGED_BASE);
+
 			for (ZipEntry entry : v.stream().filter(e -> e.getName().endsWith(".class")).toList()) {
 				ZipEntry mirror = m.getEntry(entry.getName());
 				if (mirror == null) continue;
@@ -162,11 +174,17 @@ class MergedBasePipelineDriftTest {
 				}
 			}
 		}
-		assertTrue(methodsCompared > 50_000, "only " + methodsCompared + " methods were compared — the two jars did "
+		assertTrue(methodsCompared > 100, "only " + methodsCompared + " methods were compared — the two jars did "
 				+ "not line up, and a census that inspected nothing reports nothing");
-		assertTrue(repaired.size() >= 2, "the census found " + repaired.size() + " repaired numeric differences; the "
-				+ "two known ones (nextDouble and the radians-to-degrees constant) must still be found, or this "
-				+ "test has stopped looking at what it was written for");
+		assertTrue(methodsCompared < 5_000, "the census lined up on " + methodsCompared + " methods, far more than the "
+				+ "launcher's own classes can account for — the game's half is readable again, so restore the "
+				+ "repaired >= 2 assertion and the 50k floor that goes with it");
+		// The two differences this census was written for (nextDouble rounding through float, and the
+		// radians-to-degrees constant divided out at run time) are both in net/minecraft methods, so they cannot be
+		// seen while the vanilla fixture is obfuscated. They are asserted against the merged base directly instead,
+		// which is what this anchor can read: MergedBaseRandomSourcePrecisionTest and MergedBaseDegreeConstantTest.
+		assertTrue(repaired.isEmpty(), "a numeric difference was repaired in a class the vanilla fixture does not "
+				+ "expose — the fixture changed, so re-read this census: " + repaired);
 		assertEquals(List.of(), unrepaired, "the merged base computes something vanilla does not, in a method no "
 				+ "repair covers. Either add a repair, or add it to ARGUED with the argument for why "
 				+ "it is not pipeline drift");

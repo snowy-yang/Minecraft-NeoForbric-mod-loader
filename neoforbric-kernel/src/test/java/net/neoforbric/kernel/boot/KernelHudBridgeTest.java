@@ -18,6 +18,8 @@ package net.neoforbric.kernel.boot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,6 +54,21 @@ import org.objectweb.asm.tree.MethodNode;
  * <p>The mapping is the whole risk surface of the HUD bridge. Every failure mode it has is visual and silent —
  * there is no log line for an element drawn twice — so the assertions here stand in for a check a human would
  * otherwise have to make by looking at the screen.
+ *
+ * <p>RE-ANCHORED to 1.21.1, where the Fabric half of that table has no counterpart and the bridge stands down.
+ * The HUD-element API the table is keyed on — {@code VanillaHudElements} and its {@code HudElementRegistry} roots
+ * — is fabric-api's 26.x shape: fabric-api 0.116.17 for 1.21.1's {@code fabric-rendering-v1} module carries
+ * {@code HudRenderCallback} and {@code InGameHudMixin} and no {@code hud} package at all, so there are no roots to
+ * map onto and nothing for the bridge to resolve. The vanilla class the transform gate names is the later shape
+ * too: this base's HUD is {@code net.minecraft.client.gui.Gui} — {@code Hud} does not exist here, and neither does
+ * the {@code extractHotbarAndDecorations} the 26.x mixin resolved its anchors inside. Both are PRODUCTION
+ * leftovers, reported rather than papered over; the tests below keep every claim that is still askable on this
+ * anchor and pin the two that are not.
+ *
+ * <p>What the old tests asserted and cannot be asked here: that every mapped value is a real
+ * {@code VanillaHudElements} constant (there is no such class to read it from), and that the mixin's resolved
+ * anchors are still in dead code (the method holding them is not on this base). Both are pinned to the closest
+ * true thing — the carrier's own layer ids, and the live {@code Gui} dispatching no Fabric root.
  */
 class KernelHudBridgeTest {
 	private static final Path NEOFORGE_RUNTIME =
@@ -62,17 +79,24 @@ class KernelHudBridgeTest {
 			Path.of(System.getProperty("user.dir"), "run", "client-kernel", "mods").normalize();
 
 	/**
-	 * Left out on purpose. Each would be a double render or a mis-pairing:
+	 * Left out on purpose, and the set is now this anchor's own — 1.21.1's {@code VanillaGuiLayers} has neither
+	 * {@code after_camera_decorations} nor {@code contextual_info_bar}, and has four layer ids the 26.x table never
+	 * saw:
 	 * <ul>
-	 *   <li>{@code subtitle_overlay} — Fabric's {@code subtitles} root is already dispatched by
-	 *       {@code SubtitleOverlayMixin} on the untouched vanilla {@code SubtitleOverlay}. Bridging it renders
-	 *       every {@code addLast} element twice.</li>
-	 *   <li>{@code after_camera_decorations} — a stratum separator, no elements.</li>
-	 *   <li>{@code contextual_info_bar} — Fabric's {@code INFO_BAR} pairs with the BACKGROUND layer instead.</li>
+	 *   <li>{@code subtitle_overlay} — the one entry that survived the re-anchor. The 26.x reason (Fabric's
+	 *       {@code subtitles} root is dispatched by {@code SubtitleOverlayMixin} already, so bridging it renders
+	 *       every element twice) is what makes it a permanent tripwire rather than a gap: a double render is the
+	 *       failure this whole file exists for, and nothing in any log would say so.</li>
+	 *   <li>{@code debug_overlay}, {@code jump_meter}, {@code saving_indicator} — 1.21.1 layers with no entry in
+	 *       the table, which is a 26.x one: NeoForge registers them here and Fabric has no root to pair them
+	 *       with (see the class javadoc).</li>
+	 *   <li>{@code experience_bar} — the background bar; the table pairs {@code experience_level} with Fabric's
+	 *       {@code EXPERIENCE_LEVEL} instead, the same split {@code contextual_info_bar_background} makes on the
+	 *       26.x side.</li>
 	 * </ul>
 	 */
-	private static final Set<String> DELIBERATELY_UNMAPPED =
-			Set.of("after_camera_decorations", "contextual_info_bar", "subtitle_overlay");
+	private static final Set<String> DELIBERATELY_UNMAPPED = Set.of("debug_overlay", "experience_bar", "jump_meter",
+			"saving_indicator", "subtitle_overlay");
 
 	@Test
 	void everyEntryIsANamespacedVanillaLayerId() {
@@ -95,10 +119,11 @@ class KernelHudBridgeTest {
 
 	@Test
 	void subtitlesIsNotBridged() {
-		// The single most important assertion in this file. fabric-rendering-v1 dispatches the `subtitles` root
-		// through SubtitleOverlayMixin, which targets vanilla's SubtitleOverlay — a class the merge did not touch,
-		// so that root already works. Adding minecraft:subtitle_overlay here renders every addLast element twice,
-		// and nothing in any log would say so.
+		// The single most important assertion in this file, and the one claim here that no anchor can retire: a
+		// layer mapped to a root some other dispatcher already drives renders every element twice, silently.
+		// (On 26.x that dispatcher was fabric-rendering-v1's SubtitleOverlayMixin over the untouched vanilla
+		// SubtitleOverlay; this anchor has no root dispatcher at all — see the class javadoc — which makes the
+		// tripwire cheaper to keep than to re-derive.)
 		for (String[] roots : KernelHudBridge.mapping().values()) {
 			assertFalse(List.of(roots).contains("SUBTITLES"),
 					"SUBTITLES is dispatched by SubtitleOverlayMixin already — bridging it double-renders");
@@ -106,27 +131,43 @@ class KernelHudBridgeTest {
 		assertFalse(KernelHudBridge.mapping().containsKey("minecraft:subtitle_overlay"));
 	}
 
+	/**
+	 * Every key is a real 1.21.1 NeoForge layer id, bar the one pinned 26.x leftover — and the Fabric half of the
+	 * table has nothing on this anchor to be checked against.
+	 *
+	 * <p>Was {@code everyKeyIsARealNeoForgeLayerAndEveryValueARealFabricConstant}, which checked both sides. The
+	 * value side cannot be asked here: fabric-api 0.116.17 for 1.21.1 ships no {@code VanillaHudElements} to read
+	 * the constants from (see the class javadoc), so the assertion is that it is absent, beside the class this
+	 * anchor's {@code fabric-rendering-v1} carries instead. The key side is still checked, with the one stale key
+	 * named rather than silently tolerated: a new drift fails here.
+	 */
 	@Test
-	void everyKeyIsARealNeoForgeLayerAndEveryValueARealFabricConstant() throws Exception {
+	void everyKeyIsARealNeoForgeLayerAndTheFabricSideHasNoCounterpartOnThisAnchor() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEOFORGE_RUNTIME), "staged neoforge-runtime.jar absent");
 		Path fabricApi = fabricApiJar();
 		TestFixtures.require(Fixture.STAGED, fabricApi != null, "fabric-api jar absent from the client mods dir");
 
 		Set<String> layerIds = idConstants(readFromJar(NEOFORGE_RUNTIME,
 				"net/neoforged/neoforge/client/gui/VanillaGuiLayers.class"));
-		Set<String> elementFields = staticFieldNames(readFromNestedJar(fabricApi, "fabric-rendering-v1",
-				"net/fabricmc/fabric/api/client/rendering/v1/hud/VanillaHudElements.class"));
+		assertFalse(layerIds.isEmpty(), "the carrier still carries VanillaGuiLayers");
 
+		Set<String> notOnThisLine = new TreeSet<>();
 		for (String key : KernelHudBridge.mapping().keySet()) {
 			String path = key.substring(key.indexOf(':') + 1);
-			assertTrue(layerIds.contains(path), key + " is not a VanillaGuiLayers id — the NeoForge side drifted");
+			if (!layerIds.contains(path)) notOnThisLine.add(key);
 		}
-		for (String[] roots : KernelHudBridge.mapping().values()) {
-			for (String field : roots) {
-				assertTrue(elementFields.contains(field),
-						field + " is not a VanillaHudElements constant — the Fabric side drifted");
-			}
-		}
+		assertEquals(Set.of("minecraft:contextual_info_bar_background"), notOnThisLine,
+				"the table keys that are not 1.21.1 VanillaGuiLayers ids. Only the 26.x contextual_info_bar_background "
+						+ "may be one: it is a PRODUCTION leftover with no 1.21.1 counterpart, and re-anchoring it "
+						+ "means deleting it, not renaming it");
+
+		assertNull(readFromNestedJar(fabricApi, "fabric-rendering-v1",
+				"net/fabricmc/fabric/api/client/rendering/v1/hud/VanillaHudElements.class"),
+				"fabric-api for 1.21.1 has no HUD-element registry, so the table's Fabric side names a class this "
+						+ "anchor does not have and the bridge cannot resolve any root");
+		assertNotNull(readFromNestedJar(fabricApi, "fabric-rendering-v1",
+				"net/fabricmc/fabric/api/client/rendering/v1/HudRenderCallback.class"),
+				"what this anchor's fabric-rendering-v1 has instead: one flat per-frame callback, not roots");
 	}
 
 	@Test
@@ -146,40 +187,72 @@ class KernelHudBridgeTest {
 				"the set of unbridged vanilla layers changed — see KernelHudBridge's javadoc before mapping one");
 	}
 
+	/**
+	 * The live HUD class on this anchor dispatches no Fabric root, so the bridge cannot double-render against it.
+	 *
+	 * <p>Was two tests, {@code hudMixinsResolvedAnchorsAreStillInDeadCode} and
+	 * {@code rootsHudMixinDispatchesInLiveCodeAreLeftToIt}, both of which read {@code net/minecraft/client/gui/Hud}
+	 * out of the base and reasoned about {@code Hud.extractHotbarAndDecorations}. Neither exists on 1.21.1: the HUD
+	 * is {@code Gui}, and the method the 26.x mixin resolved its 7 anchors inside has no counterpart there (the
+	 * element calls sit in {@code Gui.renderHotbarAndDecorations} and friends). The claim underneath both — a root
+	 * dispatched from live code is the dispatcher's, not the bridge's — is kept here on the class that does exist,
+	 * and the walk that decides it is covered by {@link #liveRootsCountsOnlyWhatALiveMethodDispatches()}.
+	 */
 	@Test
-	void hudMixinsResolvedAnchorsAreStillInDeadCode() throws Exception {
+	void theBasesHudClassIsGuiAndNoLiveMethodDispatchesAFabricRoot() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
 
-		// HudMixin resolves 7 of its anchors, all inside Hud.extractHotbarAndDecorations. That method is orphaned on
-		// this base — nothing calls it — which is the entire reason the bridge cannot double-render against them.
-		byte[] hud = readFromJar(MERGED_BASE, "net/minecraft/client/gui/Hud.class");
-		ClassNode node = new ClassNode();
-		new ClassReader(hud).accept(node, 0);
+		assertNull(readFromJar(MERGED_BASE, "net/minecraft/client/gui/Hud.class"),
+				"this base has no net.minecraft.client.gui.Hud — that is the later shape, and it is the name "
+						+ "KernelHudBridge's transform gate is still written for");
 
-		for (MethodNode method : node.methods) {
-			for (AbstractInsnNode insn : method.instructions) {
-				if (insn instanceof MethodInsnNode call && "extractHotbarAndDecorations".equals(call.name)) {
-					throw new AssertionError("Hud.extractHotbarAndDecorations is called again (from " + method.name
-							+ ") — HudMixin's 7 resolved anchors are live, so hotbar, vehicle_health, "
-							+ "contextual_info_bar_background, experience_level, selected_item_name and "
-							+ "spectator_tooltip would now render twice. Re-check the bridge table before shipping.");
-				}
-			}
+		ClassNode gui = new ClassNode();
+		new ClassReader(readFromJar(MERGED_BASE, "net/minecraft/client/gui/Gui.class")).accept(gui, 0);
+		assertEquals(Set.of(), KernelHudBridge.liveRoots(gui),
+				"nothing in the live HUD class dispatches a Fabric root, so no layer the bridge maps can render "
+						+ "twice: the walk finds none of the 26.x seed methods here either");
+		for (MethodNode method : gui.methods) {
+			assertFalse("extractHotbarAndDecorations".equals(method.name),
+					"the 26.x host method of HudMixin's anchors is on this base after all — re-check what the "
+							+ "bridge table says is already dispatched");
 		}
 	}
 
+	/**
+	 * The walk itself, on the shape it was written for: a root reachable from one of the seed methods is the
+	 * dispatcher's, one bound in a body nothing calls is the bridge's to serve.
+	 */
 	@Test
-	void rootsHudMixinDispatchesInLiveCodeAreLeftToIt() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
-		ClassNode hud = new ClassNode();
-		new ClassReader(readFromJar(MERGED_BASE, "net/minecraft/client/gui/Hud.class")).accept(hud, 0);
-		assertEquals(Set.of(), KernelHudBridge.liveRoots(hud), "the base before Mixin dispatches no Fabric root");
+	void liveRootsCountsOnlyWhatALiveMethodDispatches() {
+		ClassNode gui = new ClassNode();
+		gui.version = org.objectweb.asm.Opcodes.V21;
+		gui.access = org.objectweb.asm.Opcodes.ACC_PUBLIC;
+		gui.name = "net/minecraft/client/gui/Gui";
+		gui.superName = "java/lang/Object";
 
-		// What Mixin leaves after the renamed-body retarget: a merged handler reading HEALTH_BAR called from NeoForge's
-		// player_health layer body, and one reading HOTBAR bound in orphaned vanilla code nothing calls.
-		boundHandler(hud, "extractHealthLevel", "wrapOperation$neoforbricTest$health", "HEALTH_BAR");
-		boundHandler(hud, "extractHotbarAndDecorations", "wrapOperation$neoforbricTest$hotbar", "HOTBAR");
-		assertEquals(Set.of("HEALTH_BAR"), KernelHudBridge.liveRoots(hud),
+		// A seed method, calling the body that dispatches HEALTH_BAR — the live side.
+		MethodNode seed = new MethodNode(org.objectweb.asm.Opcodes.ACC_PRIVATE, "registerVanillaLayers", "()V",
+				null, null);
+		seed.instructions.add(new MethodInsnNode(org.objectweb.asm.Opcodes.INVOKESTATIC, gui.name,
+				"extractHealthLevel", "()V", false));
+		seed.instructions.add(new org.objectweb.asm.tree.InsnNode(org.objectweb.asm.Opcodes.RETURN));
+		gui.methods.add(seed);
+
+		// The body that seed calls: where a merged handler reading HEALTH_BAR gets bound.
+		MethodNode live = new MethodNode(org.objectweb.asm.Opcodes.ACC_PRIVATE, "extractHealthLevel", "()V",
+				null, null);
+		live.instructions.add(new org.objectweb.asm.tree.InsnNode(org.objectweb.asm.Opcodes.RETURN));
+		gui.methods.add(live);
+
+		// The orphaned body: nothing calls it, so its HOTBAR read is not a live dispatch and stays the bridge's.
+		MethodNode orphan = new MethodNode(org.objectweb.asm.Opcodes.ACC_PRIVATE, "extractHotbarAndDecorations",
+				"()V", null, null);
+		orphan.instructions.add(new org.objectweb.asm.tree.InsnNode(org.objectweb.asm.Opcodes.RETURN));
+		gui.methods.add(orphan);
+
+		boundHandler(gui, "extractHealthLevel", "wrapOperation$neoforbricTest$health", "HEALTH_BAR");
+		boundHandler(gui, "extractHotbarAndDecorations", "wrapOperation$neoforbricTest$hotbar", "HOTBAR");
+		assertEquals(Set.of("HEALTH_BAR"), KernelHudBridge.liveRoots(gui),
 				"only the root dispatched from a registered layer is the mixin's; the orphaned one stays the bridge's");
 	}
 
@@ -240,19 +313,6 @@ class KernelHudBridgeTest {
 			}
 		}
 		return ids;
-	}
-
-	private static Set<String> staticFieldNames(byte[] classBytes) {
-		ClassNode node = new ClassNode();
-		new ClassReader(classBytes).accept(node, 0);
-		Set<String> names = new HashSet<>();
-		for (MethodNode m : node.methods) {
-			if (!"<clinit>".equals(m.name)) continue;
-			for (AbstractInsnNode insn : m.instructions) {
-				if (insn instanceof FieldInsnNode field && field.owner.equals(node.name)) names.add(field.name);
-			}
-		}
-		return names;
 	}
 
 	private static Path fabricApiJar() throws Exception {

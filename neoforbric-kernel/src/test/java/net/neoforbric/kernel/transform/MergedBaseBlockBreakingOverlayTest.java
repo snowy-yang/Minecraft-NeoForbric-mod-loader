@@ -16,8 +16,6 @@
 
 package net.neoforbric.kernel.transform;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,61 +41,102 @@ import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * The block-breaking overlay's model-data lookup. On the merged base the level offers only NeoForge's model-data
- * manager, so MinecraftForge's accessor falls through to an interface default that returns null and the render
- * frame dies the moment any block is being broken. The lookup must be gone, and what it produced must be
- * MinecraftForge's own empty model data.
+ * The block-breaking overlay's model-data lookup on 1.21.1, against the REAL staged base.
+ *
+ * <p>Re-anchored to 1.21.1. On 26.x this guarded a repair for {@code net.minecraft.client.renderer.extract.LevelExtractor},
+ * whose block-destroy path asked MinecraftForge's {@code ModelDataManager} — always null on the merged base, so the
+ * render frame died the moment any block was being broken — and the repair replaced the lookup with
+ * MinecraftForge's {@code ModelData.EMPTY}. None of that exists on this anchor: there is no
+ * {@code net/minecraftforge} in the base, no {@code LevelExtractor}, and no such repair in
+ * {@code NeoForbricMergedBaseCompatTransformer}.
+ *
+ * <p>What is real here is NeoForge's own model-data plumbing, and it is already correct: the chunk region holds a
+ * {@code Long2ObjectFunction<ModelData>} snapshot, its deprecated 4-argument constructor passes NeoForge's own
+ * {@code ModelDataManager.EMPTY_SNAPSHOT} — the empty model data is the game's, not a repair's — and the client
+ * level owns a live {@code ModelDataManager}. The assertions below pin that, so a rebuilt base that hands the
+ * chunk region an always-null manager fails here instead of NPE-ing mid-frame.
  */
 class MergedBaseBlockBreakingOverlayTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 
-	private static final String EXTRACTOR = "net/minecraft/client/renderer/extract/LevelExtractor";
-	private static final String FORGE_MANAGER = "net/minecraftforge/client/model/data/ModelDataManager";
-	private static final String FORGE_MODEL_DATA = "net/minecraftforge/client/model/data/ModelData";
+	private static final String CHUNK_REGION = "net/minecraft/client/renderer/chunk/RenderChunkRegion";
+	private static final String CLIENT_LEVEL = "net/minecraft/client/multiplayer/ClientLevel";
+	private static final String MODEL_DATA_MANAGER = "net/neoforged/neoforge/client/model/data/ModelDataManager";
+	private static final String MODEL_DATA = "net/neoforged/neoforge/client/model/data/ModelData";
 
 	@Test
-	void theOverlayNoLongerAsksForAManagerThatIsAlwaysNull() throws Exception {
+	void theModelDataLookupIsNeoForgesOwnAndNeverAnAlwaysNullManager() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		byte[] in = readClass(EXTRACTOR + ".class");
-		assertTrue(callsForgeManager(parse(in)), "the merged base must still carry the crash — if not, re-derive this");
 
-		byte[] out = transform(in);
-		assertTrue(out != in);
-		ClassNode after = parse(out);
-		assertFalse(callsForgeManager(after), "nothing may dereference MinecraftForge's model-data manager");
+		ClassNode region = parse(readClass(CHUNK_REGION + ".class"));
+		assertTrue(hasField(region, "modelDataSnapshot",
+						"Lit/unimi/dsi/fastutil/longs/Long2ObjectFunction;"),
+				"the chunk region must carry the model-data snapshot it reads");
+		assertTrue(passesNeoForgeEmptySnapshot(region),
+				"the deprecated constructor must pass NeoForge's own ModelDataManager.EMPTY_SNAPSHOT");
+		assertTrue(readsSnapshot(region), "getModelData(BlockPos) must read that snapshot");
 
-		MethodNode extract = method(after, "extractBlockDestroyAnimation");
-		int empties = 0;
-		for (AbstractInsnNode insn : extract.instructions) {
-			if (insn.getOpcode() == Opcodes.GETSTATIC && insn instanceof FieldInsnNode field
-					&& FORGE_MODEL_DATA.equals(field.owner) && "EMPTY".equals(field.name)) {
-				empties++;
-			}
-		}
-		assertEquals(1, empties, "the lookup is replaced by MinecraftForge's own empty model data, once");
-		new Analyzer<>(new BasicVerifier()).analyze(after.name, extract);
+		ClassNode level = parse(readClass(CLIENT_LEVEL + ".class"));
+		assertTrue(hasField(level, "modelDataManager", "L" + MODEL_DATA_MANAGER + ";"),
+				"the client level must own a live ModelDataManager");
+		assertTrue(readsManager(level), "getModelDataManager() must return that field, never an always-null manager");
 	}
 
 	@Test
 	void aSecondPassLeavesTheRepairedClassAlone() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		byte[] once = transform(readClass(EXTRACTOR + ".class"));
-		assertSame(once, transform(once), "a class with no such lookup left is coherent and must not be touched");
+		byte[] in = readClass(CHUNK_REGION + ".class");
+		byte[] once = transform(in);
+		assertSame(in, once, "no repair targets this class any more — the pass must hand it back untouched");
+		assertSame(once, transform(once));
+
+		ClassNode after = parse(once);
+		MethodNode get = method(after, "getModelData",
+				"(Lnet/minecraft/core/BlockPos;)L" + MODEL_DATA + ";");
+		new Analyzer<>(new BasicVerifier()).analyze(after.name, get);
 	}
 
 	// --- helpers -------------------------------------------------------------------------------------------------
 
-	private static boolean callsForgeManager(ClassNode node) {
+	private static boolean passesNeoForgeEmptySnapshot(ClassNode node) {
 		for (MethodNode m : node.methods) {
+			if (!"<init>".equals(m.name) || !m.desc.endsWith("[Lnet/minecraft/client/renderer/chunk/RenderChunk;)V")) continue;
 			for (AbstractInsnNode insn : m.instructions) {
-				if (insn instanceof MethodInsnNode call && FORGE_MANAGER.equals(call.owner)) return true;
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC
+						&& MODEL_DATA_MANAGER.equals(f.owner) && "EMPTY_SNAPSHOT".equals(f.name)) return true;
 			}
 		}
 		return false;
 	}
 
+	private static boolean readsSnapshot(ClassNode node) {
+		for (MethodNode m : node.methods) {
+			if (!"getModelData".equals(m.name)) continue;
+			for (AbstractInsnNode insn : m.instructions) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+						&& "modelDataSnapshot".equals(f.name)) return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean readsManager(ClassNode node) {
+		for (MethodNode m : node.methods) {
+			if (!"getModelDataManager".equals(m.name)) continue;
+			for (AbstractInsnNode insn : m.instructions) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+						&& "modelDataManager".equals(f.name)) return true;
+			}
+		}
+		return false;
+	}
+
+	private static boolean hasField(ClassNode node, String name, String desc) {
+		return node.fields.stream().anyMatch(f -> name.equals(f.name) && desc.equals(f.desc));
+	}
+
 	private static byte[] transform(byte[] bytes) {
-		return new NeoForbricMergedBaseCompatTransformer().transform(EXTRACTOR.replace('/', '.'), bytes, null);
+		return new NeoForbricMergedBaseCompatTransformer().transform(CHUNK_REGION.replace('/', '.'), bytes, null);
 	}
 
 	private static ClassNode parse(byte[] bytes) {
@@ -106,11 +145,11 @@ class MergedBaseBlockBreakingOverlayTest {
 		return node;
 	}
 
-	private static MethodNode method(ClassNode node, String name) {
+	private static MethodNode method(ClassNode node, String name, String desc) {
 		for (MethodNode m : node.methods) {
-			if (m.name.equals(name)) return m;
+			if (m.name.equals(name) && m.desc.equals(desc)) return m;
 		}
-		throw new AssertionError("no method " + name + " in " + node.name);
+		throw new AssertionError("no method " + name + desc + " in " + node.name);
 	}
 
 	private static byte[] readClass(String entry) throws Exception {

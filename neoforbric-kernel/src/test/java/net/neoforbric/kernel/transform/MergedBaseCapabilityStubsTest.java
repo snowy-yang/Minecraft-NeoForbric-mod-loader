@@ -16,6 +16,7 @@
 
 package net.neoforbric.kernel.transform;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -25,7 +26,6 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodInsnNode;
@@ -37,17 +37,23 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 /**
  * The capability lifecycle methods the merged game's own code calls, against the REAL staged base.
  *
- * <p>The merge put each root type under NeoForge's attachment holder, dropping MinecraftForge's capability
- * superclass and the two lifecycle methods with it — while keeping MinecraftForge's method bodies further down.
- * {@code BlockEntity.onChunkUnloaded()} is one of those bodies, and its single instruction calls a method that
- * resolves nowhere: not on the class, not up its superclass chain, not as an interface default.
+ * <p>Re-anchored to 1.21.1. On 26.x this guarded a repair that put MinecraftForge's capability lifecycle stubs
+ * ({@code invalidateCaps}/{@code reviveCaps}) back on the root types: the merge had kept MinecraftForge's
+ * {@code BlockEntity.onChunkUnloaded()} body, whose only instruction called an {@code invalidateCaps} that
+ * resolved nowhere, and a MinecraftForge mod's block entity overriding it and calling {@code super} linked
+ * against something that was not there. None of that exists on this anchor: there is no
+ * {@code net/minecraftforge} in the base, no {@code invalidateCaps}/{@code reviveCaps} anywhere, no
+ * {@code onChunkUnloaded}, and no capability-stub repair in {@code NeoForbricMergedBaseCompatTransformer}.
  *
- * <p>Nothing in the merged base reaches that today, so it is a trap rather than a crash — a MinecraftForge mod's
- * block entity overriding the method and calling {@code super}, which storage and machinery mods routinely do,
- * links against something that is not there.
+ * <p>What is real here is NeoForge's own holder: all three root types extend
+ * {@code net.neoforged.neoforge.attachment.AttachmentHolder}, which is where NeoForge's capabilities live, and
+ * none of them declares a MinecraftForge capability method. That is what this test pins — a rebuilt base that
+ * reintroduces a dangling {@code invalidateCaps} call, or a stray stub, fails here.
  */
 class MergedBaseCapabilityStubsTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
+
+	private static final String ATTACHMENT_HOLDER = "net/neoforged/neoforge/attachment/AttachmentHolder";
 
 	private static final List<String> ROOTS = List.of(
 			"net/minecraft/world/entity/Entity",
@@ -55,50 +61,44 @@ class MergedBaseCapabilityStubsTest {
 			"net/minecraft/world/level/Level");
 
 	@Test
-	void theRootTypesAreMissingThemInTheBase() throws Exception {
-		// The premise. If a rebuilt base ever carries them, this repair is redundant and this is where that shows.
+	void theRootTypesCarryNeoForgesHolderAndNoCapabilityStubs() throws Exception {
+		// The premise. If a rebuilt base ever reintroduces the MinecraftForge shape, this is where it shows.
 		for (String root : ROOTS) {
 			ClassNode node = parse(bytesOf(root));
+			assertTrue(ATTACHMENT_HOLDER.equals(node.superName),
+					root + " must extend NeoForge's attachment holder, found " + node.superName);
 			assertTrue(declared(node, "invalidateCaps") == null,
-					root + " already declares invalidateCaps — the capability stubs may be redundant now");
+					root + " declares invalidateCaps — the MinecraftForge shape came back");
+			assertTrue(declared(node, "reviveCaps") == null,
+					root + " declares reviveCaps — the MinecraftForge shape came back");
 		}
 	}
 
 	@Test
-	void theCallInsideOnChunkUnloadedNowResolves() throws Exception {
+	void theMergedBaseHasNoDanglingCapabilityLifecycleCall() throws Exception {
 		String owner = "net/minecraft/world/level/block/entity/BlockEntity";
 		ClassNode before = parse(bytesOf(owner));
 
-		MethodNode unload = declared(before, "onChunkUnloaded");
-		assertTrue(unload != null, "content drift: this base's BlockEntity has no onChunkUnloaded");
-		assertTrue(callsOwn(unload, owner, "invalidateCaps"),
-				"the premise: BlockEntity.onChunkUnloaded calls its own invalidateCaps");
+		assertTrue(declared(before, "onChunkUnloaded") == null,
+				"content drift: BlockEntity.onChunkUnloaded came back — re-derive whether it calls a missing method");
+		for (MethodNode method : before.methods) {
+			assertFalse(calls(method, "invalidateCaps") || calls(method, "reviveCaps"),
+					method.name + " calls a capability lifecycle method this base does not declare");
+		}
 
-		ClassNode after = parse(new NeoForbricMergedBaseCompatTransformer()
-				.transform(owner.replace('/', '.'), bytesOf(owner), null));
-
-		MethodNode added = declared(after, "invalidateCaps");
-		assertTrue(added != null, "the method the class calls on itself must exist after the repair");
-		assertTrue("()V".equals(added.desc), "it has to match the call's descriptor, or nothing changes");
-		assertTrue((added.access & Opcodes.ACC_PUBLIC) != 0,
-				"a mod subclass overrides this, so it cannot be package-private");
+		byte[] in = bytesOf(owner);
+		byte[] out = new NeoForbricMergedBaseCompatTransformer().transform(owner.replace('/', '.'), in, null);
+		assertSame(in, out, "there is no dangling call to stub, so the pass must decline");
 	}
 
 	@Test
-	void theStubsDoNothing() throws Exception {
-		// Not a capability system: there is nothing on these classes to invalidate or revive. A stub that did
-		// something would be inventing behaviour the merged base has no state for.
+	void theTransformerAddsNoCapabilityStubs() throws Exception {
 		ClassNode after = parse(new NeoForbricMergedBaseCompatTransformer().transform(
 				"net.minecraft.world.entity.Entity", bytesOf("net/minecraft/world/entity/Entity"), null));
 
 		for (String name : List.of("invalidateCaps", "reviveCaps")) {
-			MethodNode stub = declared(after, name);
-			assertTrue(stub != null, name + " was not added");
-			int real = 0;
-			for (AbstractInsnNode insn : stub.instructions) {
-				if (insn.getOpcode() >= 0) real++;
-			}
-			assertTrue(real == 1, name + " should be a bare return, found " + real + " instructions");
+			assertTrue(declared(after, name) == null,
+					name + " was added — NeoForge's capability system does not use a MinecraftForge lifecycle method");
 		}
 	}
 
@@ -108,7 +108,7 @@ class MergedBaseCapabilityStubsTest {
 
 		assertSame(other, new NeoForbricMergedBaseCompatTransformer().transform(
 				"net.minecraft.world.level.block.entity.ChestBlockEntity", other, null),
-				"only the three root types get stubs; a subclass inherits them");
+				"a subclass inherits whatever the root has; the pass must not rewrite it");
 	}
 
 	@Test
@@ -118,14 +118,12 @@ class MergedBaseCapabilityStubsTest {
 		byte[] twice = new NeoForbricMergedBaseCompatTransformer().transform(
 				"net.minecraft.world.entity.Entity", once, null);
 
-		assertSame(once, twice, "the repair must stand down once the methods are there");
+		assertSame(once, twice, "the pass must be idempotent");
 	}
 
-	private static boolean callsOwn(MethodNode method, String owner, String name) {
+	private static boolean calls(MethodNode method, String name) {
 		for (AbstractInsnNode insn : method.instructions) {
-			if (insn instanceof MethodInsnNode call && owner.equals(call.owner) && name.equals(call.name)) {
-				return true;
-			}
+			if (insn instanceof MethodInsnNode call && name.equals(call.name)) return true;
 		}
 		return false;
 	}

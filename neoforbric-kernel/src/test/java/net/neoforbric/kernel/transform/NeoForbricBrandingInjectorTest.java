@@ -59,8 +59,8 @@ class NeoForbricBrandingInjectorTest {
 						}
 					}
 					""",
-			"net.neoforged.neoforge.common.NeoForgeVersion", """
-					package net.neoforged.neoforge.common;
+			"net.neoforged.neoforge.internal.versions.neoforge.NeoForgeVersion", """
+					package net.neoforged.neoforge.internal.versions.neoforge;
 
 					public class NeoForgeVersion {
 						public static String getVersion() {
@@ -73,7 +73,7 @@ class NeoForbricBrandingInjectorTest {
 
 					import java.util.List;
 					import net.neoforged.fml.ModList;
-					import net.neoforged.neoforge.common.NeoForgeVersion;
+					import net.neoforged.neoforge.internal.versions.neoforge.NeoForgeVersion;
 
 					public final class BrandingControl {
 						private static String minecraft = "1.21.1";
@@ -203,20 +203,43 @@ class NeoForbricBrandingInjectorTest {
 		assertSame(original, new NeoForbricBrandingInjector().transform(NeoForbricBrandingInjector.BRANDING_CONTROL, original, null));
 	}
 
-	@Test void f3ShowsNeoForbricsReleaseAndBrand() throws Exception {
+	/**
+	 * What this test used to assert: that the merged base's F3 version line — {@code DebugEntryVersion.display}'s
+	 * {@code SharedConstants.getCurrentVersion} / {@code Minecraft.getInstance().getLaunchedVersion} /
+	 * {@code ClientBrandRetriever.getClientModName} sequence, ending in
+	 * {@code DebugScreenDisplayer.addPriorityLine} — was rewritten to NeoForbric's release and brand.
+	 *
+	 * <p>That class is not on this anchor, and neither is anything else the edit keys on. 1.21.1 has no
+	 * {@code net/minecraft/client/gui/components/debug/} package and no {@code DebugScreenDisplayer}; its F3 version
+	 * line is built inside {@code DebugScreenOverlay.getGameInformation()}, which makes the same three calls but
+	 * differs from the reviewed shape in three ways at once — a different class, a method named
+	 * {@code getGameInformation} returning {@code List<String>} instead of {@code display(List<String>)}, and
+	 * {@code this.minecraft}'s {@code getLaunchedVersion()} read off the field rather than through
+	 * {@code Minecraft.getInstance()}. Moving the anchor there is a change to what the injector accepts, not to a
+	 * constant, so the shape is recorded here rather than guessed at; F3 keeps showing the launcher's profile id
+	 * and NeoForge's brand until that change lands.
+	 */
+	@Test void theF3VersionLineTheInjectorRepairsIsNotInThisBase() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED), "merged base not staged: " + MERGED);
 		String internal = NeoForbricBrandingInjector.DEBUG_VERSION.replace('.', '/');
-		byte[] original = NativeCoremodParityTest.read(MERGED, internal);
-		byte[] out = new NeoForbricBrandingInjector().transform(NeoForbricBrandingInjector.DEBUG_VERSION, original, null);
-		assertNotSame(original, out);
-		MethodNode display = method(out, "display");
-		List<String> calls = calls(display);
-		assertEquals(List.of("net/minecraft/SharedConstants.getCurrentVersion", "net/minecraft/WorldVersion.name",
-				NeoForbricBrandingInjector.BRANDING + ".display", NeoForbricBrandingInjector.BRANDING + ".brand",
-				"net/minecraft/client/gui/components/debug/DebugScreenDisplayer.addPriorityLine"), calls);
-		new Analyzer<>(new BasicVerifier()).analyze(internal, display);
-		assertSame(out, new NeoForbricBrandingInjector().transform(NeoForbricBrandingInjector.DEBUG_VERSION, out, null));
-		assertSame(original, new NeoForbricBrandingInjector().transform("net.minecraft.client.gui.screens.TitleScreen", original, null));
+		try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(MERGED.toFile())) {
+			assertNull(zip.getEntry(internal + ".class"), "1.21.1 has no " + internal + " — a 26.x class");
+		}
+
+		byte[] overlay = NativeCoremodParityTest.read(MERGED, "net/minecraft/client/gui/components/DebugScreenOverlay");
+		MethodNode information = method(overlay, "getGameInformation");
+		List<String> calls = calls(information);
+		assertTrue(calls.contains("net/minecraft/SharedConstants.getCurrentVersion"), calls::toString);
+		int launched = calls.indexOf("net/minecraft/client/Minecraft.getLaunchedVersion");
+		int brand = calls.indexOf("net/minecraft/client/ClientBrandRetriever.getClientModName");
+		assertTrue(launched > 0 && brand == launched + 1,
+				"the three calls the injector keys on are here, in its order, with WorldVersion.getName() between the "
+						+ "first two: " + calls);
+
+		assertSame(overlay, new NeoForbricBrandingInjector().transform(
+						"net.minecraft.client.gui.components.DebugScreenOverlay", overlay, null),
+				"the injector names a class this anchor does not have, so it stands down");
+		assertSame(overlay, new NeoForbricBrandingInjector().transform("net.minecraft.client.gui.screens.TitleScreen", overlay, null));
 	}
 
 	private static MethodNode method(byte[] bytes, String name) {

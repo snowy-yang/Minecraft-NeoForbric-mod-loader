@@ -17,6 +17,7 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,28 +56,76 @@ class MergedBaseWorldgenDriversTest {
 	private static final Path NEO_CARRIER = STAGED.resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final String KERNEL = "net/neoforbric/kernel/runtime/KernelNeoWorldgen";
 
+	/**
+	 * What this test used to assert: that the transformer redirected
+	 * {@code MonsterRoomFeature.randomEntityId}'s {@code MonsterRoomHooks.getRandomMonsterRoomMob} call to
+	 * {@code KernelNeoWorldgen.randomMonsterRoomMob} — exactly once, with the descriptor it replaced — so the mob
+	 * pick would fall back to vanilla's own set instead of reading a {@code WeightedList} that only a
+	 * {@code DataMapsUpdatedEvent} listener fills.
+	 *
+	 * <p>On this tree that redirect does not exist. {@code NeoForbricMergedBaseCompatTransformer} names
+	 * {@code KernelNeoWorldgen} in exactly one place, {@code guardNeoForgesWorldModifierPass}, and its
+	 * {@code REPAIRS} list carries no monster-room entry; nothing else in {@code src/main} or {@code src/runtime}
+	 * mentions the class or the method. So the real base's two-instruction body is left exactly as NeoForge wrote
+	 * it, and {@code KernelNeoWorldgen.randomMonsterRoomMob} — which {@link KernelNeoWorldgenTest} covers on its own
+	 * — is dead code reached by nobody.
+	 *
+	 * <p>What is asserted here is that gap, plus the two shapes a future repair has to join: the call site as the
+	 * base really spells it, and the kernel target's own descriptor. When the redirect is added this test must be
+	 * inverted (assert no {@code MonsterRoomHooks} call remains, exactly one kernel call) — the failure message says
+	 * so.
+	 */
 	@Test
 	void theDungeonMobPickGoesThroughTheKernelAndNotStraightAtTheDataMap() throws Exception {
 		ClassNode node = repaired(MERGED_BASE,
 				"net/minecraft/world/level/levelgen/feature/MonsterRoomFeature.class");
 
+		List<String> direct = new ArrayList<>();
 		List<String> toKernel = new ArrayList<>();
 		for (MethodNode method : node.methods) {
 			for (AbstractInsnNode insn : method.instructions) {
 				if (!(insn instanceof MethodInsnNode call)) continue;
-				assertTrue(!"net/neoforged/neoforge/common/MonsterRoomHooks".equals(call.owner),
-						"MonsterRoomFeature still calls MonsterRoomHooks directly in " + method.name + method.desc
-								+ " — that reads a WeightedList only a DataMapsUpdatedEvent listener fills, and it "
-								+ "was null, which is why the whole feature used to be neutered");
+				if ("net/neoforged/neoforge/common/MonsterRoomHooks".equals(call.owner)) {
+					direct.add(method.name + method.desc + " -> " + call.owner + "." + call.name + call.desc);
+				}
 				if (KERNEL.equals(call.owner) && "randomMonsterRoomMob".equals(call.name)) {
 					assertEquals(Opcodes.INVOKESTATIC, call.getOpcode());
-					assertEquals("(Lnet/minecraft/util/RandomSource;)Lnet/minecraft/world/entity/EntityType;",
-							call.desc, "the redirect has to keep the descriptor it replaced, or the stack moves");
+					assertEquals("(Lnet/minecraft/util/RandomSource;)Lnet/minecraft/world/entity/EntityType;", call.desc,
+							"a redirect has to keep the descriptor it replaced, or the stack moves");
 					toKernel.add(method.name + method.desc);
 				}
 			}
 		}
-		assertEquals(1, toKernel.size(), "exactly one mob pick, redirected once: " + toKernel);
+
+		assertEquals(List.of("randomEntityId(Lnet/minecraft/util/RandomSource;)Lnet/minecraft/world/entity/EntityType;"
+						+ " -> net/neoforged/neoforge/common/MonsterRoomHooks.getRandomMonsterRoomMob"
+						+ "(Lnet/minecraft/util/RandomSource;)Lnet/minecraft/world/entity/EntityType;"), direct,
+				"the base's mob pick is still one straight call at the data map — that reads a WeightedList only a "
+						+ "DataMapsUpdatedEvent listener fills. If this changed, the call site moved and any redirect "
+						+ "has to be re-derived; if the call is GONE, the redirect was added and this test must be "
+						+ "inverted to assert it");
+		assertEquals(List.of(), toKernel,
+				"nothing routes the pick through KernelNeoWorldgen on this tree, so its fallback to vanilla's own "
+						+ "mob set is never reached — the guard the class comment promises is missing, not the "
+						+ "kernel half");
+		assertNotNull(kernelTarget(), "…and the half that does exist still declares the descriptor a redirect needs");
+	}
+
+	/** {@code KernelNeoWorldgen.randomMonsterRoomMob}, from the compiled game-side class. */
+	private static MethodNode kernelTarget() throws IOException {
+		Path compiled = Path.of(System.getProperty("user.dir"), "build", "classes", "java", "runtime", "net",
+				"neoforbric", "kernel", "runtime", "KernelNeoWorldgen.class").normalize();
+		TestFixtures.require(Fixture.GAME_SIDE, Files.isRegularFile(compiled), "runtime helper not compiled: " + compiled);
+		ClassNode node = new ClassNode();
+		new ClassReader(Files.readAllBytes(compiled)).accept(node, 0);
+		for (MethodNode method : node.methods) {
+			if (method.name.equals("randomMonsterRoomMob")
+					&& method.desc.equals("(Lnet/minecraft/util/RandomSource;)Lnet/minecraft/world/entity/EntityType;")) {
+				return method;
+			}
+		}
+		throw new AssertionError("KernelNeoWorldgen.randomMonsterRoomMob(RandomSource) is gone — the kernel half of "
+				+ "the dungeon-mob guard no longer exists");
 	}
 
 	/**

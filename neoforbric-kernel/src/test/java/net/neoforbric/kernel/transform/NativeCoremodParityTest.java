@@ -16,6 +16,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 import org.objectweb.asm.tree.analysis.Analyzer;
@@ -26,8 +28,6 @@ import org.objectweb.asm.tree.analysis.BasicVerifier;
 class NativeCoremodParityTest {
 	private static final Path STAGED = TestFixtures.stagedRoot();
 	private static final Path MERGED = STAGED.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path FORGE = STAGED.resolve("merged-base/forge-runtime-interop.jar");
-	private static final Path VANILLA = TestFixtures.vanillaJar();
 	/** tools/dev.py prepare downloads NeoForge's universal jar here; its coremods jar is nested inside. */
 	private static final Path NEO_DOWNLOADS = TestFixtures.minecraftDir().resolve(".neoforbric-build/dl");
 	/** A native NeoForge instance's extracted nested jars, on a machine that ran one. */
@@ -44,7 +44,9 @@ class NativeCoremodParityTest {
 	@Test void everyFlowerPotReadGoesThroughTheGetterExceptTheGetter() throws Exception {
 		ClassNode after = rewritten(POT);
 		assertEquals(0, reads(after, POT, "potted", m -> !m.desc.equals("()Lnet/minecraft/world/level/block/Block;") && !m.name.equals("<init>")));
-		assertEquals(5, calls(after, POT, "getPotted"), "useWithoutItem, getCloneItemStack, isEmpty, randomTick and the codec");
+		// 4 on 1.21.1, not the 5 the 26.x base had: FlowerPotBlock lost randomTick there, and its codec reaches the
+		// plant through one lambda rather than two. useWithoutItem, getCloneItemStack, isEmpty and the codec.
+		assertEquals(4, calls(after, POT, "getPotted"), "useWithoutItem, getCloneItemStack, isEmpty and the codec");
 		verify(after);
 		byte[] once = NativeCoremodParity.apply(POT, read(MERGED, POT));
 		assertSame(once, NativeCoremodParity.apply(POT, once), "a second pass changes nothing");
@@ -54,8 +56,10 @@ class NativeCoremodParityTest {
 		ClassNode biome = rewritten(BIOME);
 		assertEquals(0, reads(biome, BIOME, "climateSettings", m -> !m.desc.equals("()Lnet/minecraft/world/level/biome/Biome$ClimateSettings;") && !m.name.equals("<init>")));
 		assertEquals(0, reads(biome, BIOME, "specialEffects", m -> !m.desc.equals("()Lnet/minecraft/world/level/biome/BiomeSpecialEffects;") && !m.name.equals("<init>")));
-		assertEquals(10, calls(biome, BIOME, "getModifiedClimateSettings") - calls(node(read(MERGED, BIOME)), BIOME, "getModifiedClimateSettings"));
-		assertEquals(6, calls(biome, BIOME, "getModifiedSpecialEffects") - calls(node(read(MERGED, BIOME)), BIOME, "getModifiedSpecialEffects"));
+		// 1.21.1's Biome reads climateSettings 8 times and specialEffects 13 times outside their own accessors (the
+		// 26.x base read them 10 and 6 times); every one of those reads is what the rewrite moves onto the view.
+		assertEquals(8, calls(biome, BIOME, "getModifiedClimateSettings") - calls(node(read(MERGED, BIOME)), BIOME, "getModifiedClimateSettings"));
+		assertEquals(13, calls(biome, BIOME, "getModifiedSpecialEffects") - calls(node(read(MERGED, BIOME)), BIOME, "getModifiedSpecialEffects"));
 		assertEquals(1, reads(biome, BIOME, "specialEffects", m -> m.name.equals("getSpecialEffects")), "getSpecialEffects stays raw, as NeoForge leaves it");
 		verify(biome);
 		ClassNode structure = rewritten(STRUCTURE);
@@ -98,20 +102,23 @@ class NativeCoremodParityTest {
 		verify(rewritten);
 	}
 
-	@Test void theTargetListIsNeoForgesAndMinecraftForgesLessTheTrialSpawner() throws Exception {
-		TestFixtures.requireFiles(Fixture.STAGED, "staged MinecraftForge carrier", FORGE);
-		try (ZipFile zip = new ZipFile(FORGE.toFile())) {
-			Set<String> forge = new TreeSet<>();
-			String json = new String(zip.getInputStream(zip.getEntry("coremods/finalize_spawn_targets.json")).readAllBytes());
-			var match = java.util.regex.Pattern.compile("\"class\"\\s*:\\s*\"([^\"]+)\"").matcher(json);
-			while (match.find()) forge.add(match.group(1));
-			Set<String> expected = new TreeSet<>(NativeCoremodParity.FINALIZE_TARGETS);
-			expected.add(NativeCoremodParity.TRIAL_SPAWNER);
-			assertEquals(expected, forge);
-		}
+	/**
+	 * The list is NeoForge's own, character for character.
+	 *
+	 * <p>It used to be NeoForge's list plus TrialSpawner, compared against the {@code finalize_spawn_targets.json}
+	 * in the staged {@code merged-base/forge-runtime-interop.jar} — the MinecraftForge half of the two-family
+	 * model. On 1.21.1 there is no such artifact and no {@code net/minecraftforge} anywhere in the base, so that
+	 * half is gone rather than re-anchored: what is left, and what this asserts, is that the list the kernel
+	 * rewrites by is exactly the one NeoForge 21.1.256 ships.
+	 *
+	 * <p>The json is a bare array of internal names ({@code ["net/minecraft/..."]}), not the {@code {"class": ...}}
+	 * objects the MinecraftForge one was, so it is read as such: the dotted-name pattern the two-family version
+	 * used matched nothing here, which is how a green test would have been asserting against an empty set.
+	 */
+	@Test void theTargetListIsExactlyNeoForgesOwn() throws Exception {
 		String json = neoForgeFinalizeTargets();
 		Set<String> listed = new TreeSet<>();
-		var match = java.util.regex.Pattern.compile("\"([a-zA-Z0-9_.$]+)\"").matcher(json);
+		var match = java.util.regex.Pattern.compile("\"([^\"]+)\"").matcher(json);
 		while (match.find()) listed.add(match.group(1).replace('.', '/'));
 		assertEquals(new TreeSet<>(NativeCoremodParity.FINALIZE_TARGETS), listed);
 	}
@@ -145,9 +152,20 @@ class NativeCoremodParityTest {
 		}
 	}
 
+	/**
+	 * Vanilla's shape is left raw, and both switches stand every rule down.
+	 *
+	 * <p>The vanilla half used to read {@code net/minecraft/world/level/block/FlowerPotBlock} out of
+	 * {@link TestFixtures#vanillaJar()}. That cannot be done on 1.21.1: the file there is the launcher's own
+	 * client jar, whose classes are still OBFUSCATED (it holds every class, under names like {@code guu}, and
+	 * exactly 26 {@code net/minecraft/**} entries — the bootstrap mains and the JFR events), so no vanilla class
+	 * can be named in it at all. What this half guards is {@link NativeCoremodParity}'s rule that a getter which
+	 * IS vanilla's {@code return this.field} means there is nothing to route; that rule is about a SHAPE, so the
+	 * shape is built here and handed to the same entry point the game hands the real class to. It fails the same
+	 * way if the rule regresses: the second method's raw read would become a {@code getPotted()} call.
+	 */
 	@Test void vanillasShapeAndTheSwitchesLeaveClassesAlone() throws Exception {
-		TestFixtures.require(Fixture.MC_LIBRARIES, Files.isRegularFile(VANILLA), "vanilla 1.21.1 absent");
-		byte[] vanillaPot = read(VANILLA, POT);
+		byte[] vanillaPot = vanillaFlowerPot();
 		assertSame(vanillaPot, NativeCoremodParity.apply(POT, vanillaPot), "vanilla's getter reads the field; nothing to route");
 		for (String property : List.of(NativeCoremodParity.PROPERTY, NativeCoremodParity.FLOWER_POT)) {
 			System.setProperty(property, "off");
@@ -156,10 +174,37 @@ class NativeCoremodParityTest {
 			System.clearProperty(property);
 		}
 		System.setProperty(NativeCoremodParity.FINALIZE, "off");
-		byte[] zombie = read(MERGED, "net/minecraft/world/entity/monster/zombie/Zombie");
-		assertSame(zombie, NativeCoremodParity.apply("net.minecraft.world.entity.monster.zombie.Zombie", zombie));
+		String zombie = "net/minecraft/world/entity/monster/Zombie";
+		byte[] zombieBytes = read(MERGED, zombie);
+		assertSame(zombieBytes, NativeCoremodParity.apply(zombie.replace('/', '.'), zombieBytes));
 		byte[] other = read(MERGED, "net/minecraft/world/level/block/Blocks");
 		assertSame(other, NativeCoremodParity.apply("net.minecraft.world.level.block.Blocks", other));
+	}
+
+	/**
+	 * Vanilla 1.21.1's {@code FlowerPotBlock}: {@code private final Block potted},
+	 * {@code public Block getPotted() { return this.potted; }} — three real instructions, which is exactly what
+	 * {@code returnsField} recognises — and one more method that reads the field raw, as vanilla's
+	 * {@code useWithoutItem} and {@code getCloneItemStack} do.
+	 */
+	private static byte[] vanillaFlowerPot() {
+		ClassWriter writer = new ClassWriter(0);
+		writer.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, POT, null, "java/lang/Object", null);
+		writer.visitField(Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL, "potted", "Lnet/minecraft/world/level/block/Block;", null, null).visitEnd();
+		returnsPotted(writer.visitMethod(Opcodes.ACC_PUBLIC, "getPotted", "()Lnet/minecraft/world/level/block/Block;", null, null));
+		// A caller that reads the field itself, as vanilla's useWithoutItem and getCloneItemStack do.
+		returnsPotted(writer.visitMethod(Opcodes.ACC_PUBLIC, "content", "()Lnet/minecraft/world/level/block/Block;", null, null));
+		writer.visitEnd();
+		return writer.toByteArray();
+	}
+
+	private static void returnsPotted(MethodVisitor method) {
+		method.visitCode();
+		method.visitVarInsn(Opcodes.ALOAD, 0);
+		method.visitFieldInsn(Opcodes.GETFIELD, POT, "potted", "Lnet/minecraft/world/level/block/Block;");
+		method.visitInsn(Opcodes.ARETURN);
+		method.visitMaxs(1, 1);
+		method.visitEnd();
 	}
 
 	private static ClassNode rewritten(String internalName) throws Exception {

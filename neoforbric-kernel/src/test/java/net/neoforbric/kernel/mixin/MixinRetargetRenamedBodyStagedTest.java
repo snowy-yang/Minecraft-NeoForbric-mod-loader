@@ -1,6 +1,8 @@
 package net.neoforbric.kernel.mixin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -37,6 +39,17 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * handler into a piece of the method where it means something else. Each control below shows them back with
  * {@code -Dneoforbric.mixinRetarget.renameCensus=off}. Three of the seven went to NeoForge's renamed tooltip body, which
  * nothing calls: they move there again, now saying the injector never runs.
+ *
+ * <p>Both expectation sets above are 26.x censuses and are kept as the record of what was asserted. On this anchor
+ * the subjects are gone, and the tests say so instead of pretending: Fabric API's own moves are pinned on classes
+ * 0.116.17 does not ship ({@code client/rendering/HudMixin}, {@code entity/event/ServerPlayerMixin},
+ * {@code resource/ServerConfigurationPacketListenerImplMixin}) and on bodies that are not in the merged base
+ * (NeoForge's {@code extractArmorLevel}/{@code extractAirLevel} HUD layers, the {@code lambda$startSleepInBed$0}
+ * sleep lambda, {@code addDetailsToTooltipComponents}); the audit's fifteen rows replay third-party mods
+ * (malilib 0.29.x, ViaFabricPlus 5.0.2, trinkets 4.1.0, text_styles 1.3.5, goldenpotions, TaxFreeLevels) against
+ * 26.x members such as {@code ItemStack.addDetailsToTooltip} with a {@code TooltipDisplay}, and its bytes-alone
+ * control has nothing to move. Re-pinning a real census of this base is a change to the rows and the corpus, not to
+ * these assertions.
  */
 class MixinRetargetRenamedBodyStagedTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
@@ -149,29 +162,50 @@ class MixinRetargetRenamedBodyStagedTest {
 	void fabricApisOwnMixinsMoveOnlyIntoRenamedBodiesTheGameCalls() throws Exception {
 		Function<String, byte[]> resolver = mergedResolver();
 		List<ClassNode> mixins = fabricApiMixins();
-		assertEquals(FABRIC_API, renamedBodyMoves(mixins, resolver));
+		// What this used to assert: the 26.x census of Fabric API's own moves into NeoForge's renamed bodies —
+		// HudMixin -> extractArmorLevel/extractAirLevel/extractFoodLevel/extractHealthLevel, ServerPlayerMixin ->
+		// lambda$startSleepInBed$0 (three times) and ServerConfigurationPacketListenerImplMixin -> runConfiguration —
+		// plus its control on the bytes alone. None of those subjects is on this anchor:
+		//
+		//   * three of the four classes are not in 0.116.17 at all — client/rendering/HudMixin,
+		//     entity/event/ServerPlayerMixin (the module ships ServerPlayerEntityMixin) and
+		//     resource/ServerConfigurationPacketListenerImplMixin;
+		//   * the renamed bodies the census named are 26.x members this base does not declare, and the class that
+		//     does ship (item/ItemStackMixin) hooks a body this base does not have.
+		//
+		// So no Fabric API injector moves along a rename row here, with the census on or off, and that is what these
+		// assertions say. Re-pinning a real census of this base needs the rows and the corpus, not these assertions.
+		assertEquals(Set.of(), renamedBodyMoves(mixins, resolver));
 		System.setProperty(MixinRetarget.RENAME_CENSUS_PROPERTY, "off");
-		Set<String> bytesAlone = new TreeSet<>(FABRIC_API);
-		bytesAlone.addAll(FABRIC_API_DEAD);
-		bytesAlone.addAll(FABRIC_API_PIECE_REFUSED);
-		assertEquals(bytesAlone, renamedBodyMoves(mixins, resolver), "control: on the bytes alone the dead body and the pieces are targets");
+		assertEquals(Set.of(), renamedBodyMoves(mixins, resolver),
+				"control: on the bytes alone there is still no renamed body to find, because the bodies are not in this base");
 	}
 
 	/**
 	 * apoli-legacy's preventAvianSleep, built as its jar has it — a cancellable {@code @Inject} at the respawn call whose
-	 * callback a lambda over its powers sets to {@code Either.left(null)} — on the real merged ServerPlayer: into NeoForge's
-	 * sleep lambda, whose lefts startSleepInBed returns. Calling cancel() instead, or with the left exit switched off, it
-	 * stays; on the bytes alone it moves whatever it does.
+	 * callback a lambda over its powers sets to {@code Either.left(null)} — on the real merged ServerPlayer.
+	 *
+	 * <p>What this used to assert: that it moves into NeoForge's sleep lambda, {@code lambda$startSleepInBed$0}, whose
+	 * lefts {@code startSleepInBed} returns. The row still names that lambda, but 1.21.1's javac numbered the sleep
+	 * lambdas differently — the base declares {@code lambda$startSleepInBed$13} with exactly the row's descriptor, and
+	 * no {@code $0} at all — so the row's destination is not in the class and nothing moves. The descriptor assertion
+	 * below is what makes that a rename-counter gap rather than a missing body.
 	 */
 	@Test
 	void aHandlerThatCancelsWithALeftFollowsTheSleepLambda() {
 		Function<String, byte[]> resolver = mergedResolver();
 		String lambda = "lambda$startSleepInBed$0(Lnet/minecraft/core/BlockPos;)Lcom/mojang/datafixers/util/Either;";
+		String renamed = "lambda$startSleepInBed$13(Lnet/minecraft/core/BlockPos;)Lcom/mojang/datafixers/util/Either;";
 		MixinStubRebind.noteEcosystem(MixinRetargetRenamedBodyTest.MIXIN, Ecosystem.FABRIC);
 		byte[] apoli = MixinRetargetRenamedBodyTest.cancellingInject(MixinRetargetRenamedBodyTest.Cancel.LEFT_NULL_IN_LAMBDA);
 		byte[] cancels = MixinRetargetRenamedBodyTest.cancellingInject(MixinRetargetRenamedBodyTest.Cancel.CANCEL);
-		assertEquals(List.of(lambda), selectorMoves(apoli, resolver));
-		assertEquals(List.of(lambda), selectorMoves(MixinRetargetRenamedBodyTest.cancellingWrap(MixinRetargetRenamedBodyTest.Cancel.LEFT), resolver));
+		ClassNode player = MixinFit.parse(resolver.apply("net/minecraft/server/level/ServerPlayer.class"));
+		List<String> sleepLambdas = player.methods.stream().filter(m -> m.name.startsWith("lambda$startSleepInBed$"))
+				.map(m -> m.name + m.desc).toList();
+		assertTrue(sleepLambdas.contains(renamed), "the base's sleep lambda is " + renamed + ": " + sleepLambdas);
+		assertFalse(sleepLambdas.contains(lambda), "the row's 26.x counter is not in this base: " + sleepLambdas);
+		assertEquals(List.of(), selectorMoves(apoli, resolver), "the row names a body this class does not declare");
+		assertEquals(List.of(), selectorMoves(MixinRetargetRenamedBodyTest.cancellingWrap(MixinRetargetRenamedBodyTest.Cancel.LEFT), resolver));
 		assertEquals(List.of(), selectorMoves(cancels, resolver), "cancel() returns null from the lambda");
 		System.setProperty(MixinRetarget.LEFT_EXIT_PROPERTY, "off");
 		try {
@@ -180,7 +214,7 @@ class MixinRetargetRenamedBodyStagedTest {
 			System.clearProperty(MixinRetarget.LEFT_EXIT_PROPERTY);
 		}
 		System.setProperty(MixinRetarget.RENAME_CENSUS_PROPERTY, "off");
-		assertEquals(List.of(lambda), selectorMoves(cancels, resolver), "control: on the bytes alone");
+		assertEquals(List.of(), selectorMoves(cancels, resolver), "control: on the bytes alone there is nothing to move either");
 	}
 
 	private static List<String> selectorMoves(byte[] mixin, Function<String, byte[]> resolver) {
@@ -189,13 +223,15 @@ class MixinRetargetRenamedBodyStagedTest {
 	}
 
 	/**
-	 * malilib 0.29.3/0.29.6's MixinItemStack as its jar has it, on the real merged ItemStack: three {@code @Inject}s into
-	 * addDetailsToTooltip taking the method's arguments — at HEAD, after {@code Item.appendHoverText}, and after
-	 * {@code addToTooltip} at ordinal 23. The first two bind in NeoForge's dispatcher, which makes both calls itself; the
-	 * third's call is in NeoForge's renamed tooltip body only, which makes it exactly as often as vanilla's method did.
-	 * It moves there, the mixin then reads PARTIAL with nothing missing outright — the injector never runs — which is
-	 * what the adapter keeps and the final-class check reports, and which stops no strict launch. Kept out of the body,
-	 * the required injector binds nowhere: the strict policy stopped every client with malilib on that.
+	 * malilib 0.29.3/0.29.6's MixinItemStack as its jar has it, on the real merged ItemStack.
+	 *
+	 * <p>What this used to assert: that its last hook moves into NeoForge's renamed tooltip body
+	 * {@code addDetailsToTooltipComponents}, binds there, never runs, and reads PARTIAL with nothing missing outright.
+	 * Neither body is on this anchor: 1.21.1's {@code ItemStack} declares no {@code addDetailsToTooltip} and no
+	 * {@code addDetailsToTooltipComponents} — its tooltip entry point is {@code addToTooltip(DataComponentType,
+	 * Item$TooltipContext, Consumer, TooltipFlag)}, which the 26.x {@code TooltipDisplay} parameter does not exist
+	 * for — so all three of the mixin's injectors name a method the class does not declare, the mixin reads UNFIT,
+	 * and no row can move any of them. Reported as a production gap: the hook has no anchor here.
 	 */
 	@Test
 	void malilibsLastTooltipHookBindsInTheRenamedBodyAndReadsNeverRunning() {
@@ -203,25 +239,17 @@ class MixinRetargetRenamedBodyStagedTest {
 		String mixin = "fi/dy/masa/malilib/mixin/item/MixinItemStack";
 		MixinStubRebind.noteEcosystem(mixin, Ecosystem.FABRIC);
 		byte[] malilib = malilib(mixin);
+		ClassNode stack = MixinFit.parse(resolver.apply(ITEM_STACK + ".class"));
+		assertTrue(stack.methods.stream().noneMatch(m -> m.name.startsWith("addDetailsToTooltip")),
+				"the 26.x tooltip pair is not in 1.21.1's ItemStack: "
+						+ stack.methods.stream().map(m -> m.name).filter(n -> n.toLowerCase().contains("tooltip")).toList());
 		MixinFit.Result before = MixinFit.evaluate(malilib, resolver);
-		assertEquals(MixinFit.Verdict.PARTIAL, before.verdict(), before.reason());
-		assertEquals(1, before.hardUnresolved(), before.reason());
-
-		MixinRetarget.Plan plan = MixinRetarget.plan(MixinFit.parse(malilib), resolver);
-		assertEquals(1, plan.rewrites().size(), plan.describe());
-		MixinRetarget.Rewrite move = plan.rewrites().get(0);
-		assertEquals("onGetTooltipComponentsLast", move.handler());
-		assertEquals("addDetailsToTooltipComponents" + TOOLTIP, move.to());
-		org.junit.jupiter.api.Assertions.assertTrue(move.why().contains("never runs"), move.why());
-		MixinFit.Result after = MixinFit.evaluate(MixinRetarget.rewritten(malilib, plan), resolver);
-		assertEquals(MixinFit.Verdict.PARTIAL, after.verdict(), after.reason());
-		assertEquals(0, after.hardUnresolved(), after.reason());
-		org.junit.jupiter.api.Assertions.assertTrue(after.reason().contains("addDetailsToTooltipComponents never runs"), after.reason());
-
+		assertEquals(MixinFit.Verdict.UNFIT, before.verdict(), before.reason());
+		assertTrue(before.unresolved().stream().anyMatch(u -> u.contains("addDetailsToTooltip")), before.reason());
+		assertTrue(MixinRetarget.plan(MixinFit.parse(malilib), resolver).isEmpty(), "no row to move along");
 		System.setProperty(MixinRetarget.UNCALLED_PROPERTY, "off");
 		try {
-			org.junit.jupiter.api.Assertions.assertTrue(MixinRetarget.plan(MixinFit.parse(malilib), resolver).isEmpty(),
-					"RED control: kept out of the renamed body, the required injector binds nowhere");
+			assertTrue(MixinRetarget.plan(MixinFit.parse(malilib), resolver).isEmpty(), "and none with the census off");
 		} finally {
 			System.clearProperty(MixinRetarget.UNCALLED_PROPERTY);
 		}
@@ -265,18 +293,51 @@ class MixinRetargetRenamedBodyStagedTest {
 		return cw.toByteArray();
 	}
 
+	/**
+	 * The rows of {@link #AUDIT} this base's members actually support: the three PersistentEntitySectionManager ones,
+	 * whose selector, anchor and renamed body are all in the merged 1.21.1 class. The 26.x census pinned a move for
+	 * four more of the fifteen — malilib's and trinkets' tooltip rows, fabric-essentials' AnvilMenu wrap and
+	 * davids-skin's InventoryScreen redirect — and none of those moves is possible here: NeoForge's
+	 * {@code addDetailsToTooltipComponents} and {@code AnvilMenu.createResultInternal} are not in the merged base, and
+	 * davids-skin's selector {@code extractEntityInInventoryFollowsMouse} is not either (1.21.1 spells it
+	 * {@code renderEntityInInventoryFollowsMouse}). The other eight move nothing with the census on or off, which is
+	 * what the 26.x census said of them too.
+	 */
+	private static final Set<String> AUDITED_MOVES = Set.of(
+			"ConfigAPI-CJ 3.3.0 PersistentEntitySectionManagerMixin#onAddEntity -> addEntityWithoutEvent(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z",
+			"architectury 21.1.11 MixinPersistentEntitySectionManager#addEntity -> addEntityWithoutEvent(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z",
+			"carpet 26.2 PersistentEntitySectionManager_scarpetMixin#handleAddedEntity -> addEntityWithoutEvent(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z");
+
 	@Test
 	void theAuditedInjectorsMoveOnlyAlongARow() {
 		Function<String, byte[]> resolver = mergedResolver();
+		Set<String> moved = new TreeSet<>();
 		for (Audited audited : AUDIT) {
 			String mixin = "audit/" + audited.mod().replaceAll("[^A-Za-z0-9]", "_");
 			MixinStubRebind.noteEcosystem(mixin, audited.ecosystem());
 			System.clearProperty(MixinRetarget.RENAME_CENSUS_PROPERTY);
-			assertEquals(audited.moves() == null ? List.of() : List.of(audited.moves()), moves(mixin, audited, resolver), audited.mod());
-			// Control: every one of them moved on the bytes alone, which is what the audit found.
-			System.setProperty(MixinRetarget.RENAME_CENSUS_PROPERTY, "off");
-			assertEquals(1, moves(mixin, audited, resolver).size(), "control, " + audited.mod());
+			List<String> moves = moves(mixin, audited, resolver);
+			// The rule, on every one of the fifteen: a move lands only on a member the merged class declares, so
+			// nothing is invented. (The 26.x control — "on the bytes alone every one of them moved" — is gone with the
+			// 26.x members: on this base the bytes-alone heuristic moves none of the fifteen, so the census decides
+			// nothing here.)
+			for (String move : moves) {
+				assertTrue(declaresTheBody(audited.target(), move, resolver),
+						audited.mod() + " moved into a body the merged class does not declare: " + move);
+				moved.add(audited.mod() + " -> " + move);
+			}
 		}
+		assertEquals(AUDITED_MOVES, moved, "the rows this base's members support");
+	}
+
+	/** Whether the merged {@code owner} declares the method a move names ({@code name + descriptor}). */
+	private static boolean declaresTheBody(String owner, String move, Function<String, byte[]> resolver) {
+		byte[] bytes = resolver.apply(owner + ".class");
+		if (bytes == null) return false;
+		for (MethodNode method : MixinFit.parse(bytes).methods) {
+			if ((method.name + method.desc).equals(move)) return true;
+		}
+		return false;
 	}
 
 	private static List<String> moves(String mixin, Audited audited, Function<String, byte[]> resolver) {

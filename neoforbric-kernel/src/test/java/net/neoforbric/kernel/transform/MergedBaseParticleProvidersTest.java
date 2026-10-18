@@ -16,6 +16,8 @@
 
 package net.neoforbric.kernel.transform;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,102 +36,104 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.TypeInsnNode;
 
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * Covers the repair of {@code ParticleResources}' split {@code providers} field, against the REAL staged base.
+ * Covers the particle-provider map of {@code ParticleEngine}, the 1.21.1 counterpart of 26.x
+ * {@code ParticleResources}, against the REAL staged base.
+ *
+ * <p>Re-anchored to 1.21.1. On 26.x this guarded a repair for a class that carried TWO {@code providers}
+ * declarations under the same name: vanilla's {@code Int2ObjectMap} keyed by particle id and NeoForge's
+ * {@code Map<Identifier, ?>}, with only the NeoForge one ever written, so the vanilla-typed map fabric-api reads
+ * directly stayed null and a particle registered the vanilla way never rendered. On this anchor the class is
+ * {@code net.minecraft.client.particle.ParticleEngine}, it declares ONE {@code providers} field
+ * ({@code java.util.Map}, keyed by {@code ResourceLocation}), there is no second {@code providers} declaration and
+ * no {@code providersByName} twin, and {@code NeoForbricMergedBaseCompatTransformer} carries no particle repair
+ * that fires here. The repair is therefore unnecessary because the base already has the coherent shape.
  *
  * <p>A synthetic fixture would be the wrong subject twice over: what can drift is what the other repository's
- * merge emits, and the exact instruction the repair has to land BEFORE is in that emitted {@code <init>}.
+ * merge emits. So the base is checked directly, and the surviving assertions are the ones with teeth — one map,
+ * filled by {@code register}, read by {@code makeParticle}.
  */
 class MergedBaseParticleProvidersTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final String ENTRY = "net/minecraft/client/particle/ParticleResources.class";
+	private static final String ENTRY = "net/minecraft/client/particle/ParticleEngine.class";
+	private static final String OWNER = "net/minecraft/client/particle/ParticleEngine";
 	private static final String ID_KEYED = "Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;";
 	private static final String NAME_KEYED = "Ljava/util/Map;";
 
 	@Test
-	void theVanillaTypedMapIsGivenAViewBeforeRegisterProvidersRuns() throws Exception {
-		ClassNode node = repaired();
-		MethodNode init = method(node, "<init>", "()V");
+	void thereIsOneProviderMapAndItIsTheNameKeyedOne() throws Exception {
+		ClassNode node = parse(original());
 
-		int put = -1;
-		int register = -1;
-		AbstractInsnNode[] body = init.instructions.toArray();
-		for (int i = 0; i < body.length; i++) {
-			if (body[i] instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
-					&& "providers".equals(f.name) && ID_KEYED.equals(f.desc) && put < 0) {
-				put = i;
-			} else if (body[i] instanceof MethodInsnNode m && "registerProviders".equals(m.name) && register < 0) {
-				register = i;
-			}
-		}
-
-		assertTrue(put >= 0, "<init> must write the vanilla-typed providers field — fabric-api reads it directly, "
-				+ "and the merged <init> writes only the NeoForge-typed one");
-		assertTrue(register >= 0, "<init> no longer calls registerProviders — the anchor this repair depends on");
-		assertTrue(put < register,
-				"the write must land BEFORE registerProviders. fabric-api's ParticleResourcesMixin injects at that "
-						+ "method's RETURN, so a repair placed at the end of <init> — where the merge tool puts its "
-						+ "own synthetic field inits — is still too late and reproduces the crash exactly");
+		long providers = node.fields.stream().filter(f -> "providers".equals(f.name)).count();
+		assertEquals(1, providers, "content drift: a second `providers` declaration came back — re-derive the repair");
+		assertTrue(hasField(node, "providers", NAME_KEYED),
+				"the one map must be the name-keyed java.util.Map the vanilla registry reads");
+		assertFalse(hasField(node, "providers", ID_KEYED),
+				"and there must be no int-keyed `providers` twin for the repair to give a view of");
 	}
 
 	/**
-	 * The one assertion that rejects "just give it an empty map". An empty {@code Int2ObjectOpenHashMap} satisfies
-	 * every other check here and in the game: nothing NPEs, the mod registers happily, and the particle never
-	 * renders because the registration went into a map nothing reads.
+	 * The assertion that rejects "an empty map is enough". The field must be the one {@code register} fills AND the
+	 * one {@code makeParticle} reads; a map nothing writes, or that nothing reads, satisfies the shape and still
+	 * loses every registration.
 	 */
 	@Test
-	void theStoredValueIsAViewOfTheLiveMapNotAFreshOne() throws Exception {
-		MethodNode init = method(repaired(), "<init>", "()V");
+	void registerFillsTheMapThatMakeParticleReads() throws Exception {
+		ClassNode node = parse(original());
 
-		boolean viewed = false;
-		AbstractInsnNode[] body = init.instructions.toArray();
-		for (int i = 0; i < body.length; i++) {
-			if (!(body[i] instanceof MethodInsnNode call) || call.getOpcode() != Opcodes.INVOKESTATIC
-					|| !"net/neoforbric/kernel/runtime/KernelParticleProviders".equals(call.owner)
-					|| !"intKeyedView".equals(call.name)) {
-				continue;
+		assertEquals(1, writers(node), "the map is initialised once, in <init>");
+		MethodNode register = method(node, "register",
+				"(Lnet/minecraft/core/particles/ParticleType;Lnet/minecraft/client/particle/ParticleProvider;)V");
+		boolean puts = false;
+		for (AbstractInsnNode insn : register.instructions) {
+			if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+					&& OWNER.equals(f.owner) && "providers".equals(f.name)) {
+				puts = true;
 			}
-			assertTrue(i >= 1 && body[i - 1] instanceof FieldInsnNode src
-							&& src.getOpcode() == Opcodes.GETFIELD && "providers".equals(src.name)
-							&& NAME_KEYED.equals(src.desc),
-					"the view must be built over the LIVE map — reading the field that <init> just wrote");
-			assertTrue(body[i + 1] instanceof TypeInsnNode cast && cast.getOpcode() == Opcodes.CHECKCAST,
-					"and cast to the field's own type, since the seam is declared in JDK types");
-			viewed = true;
 		}
-		assertTrue(viewed, "the stored value must come from KernelParticleProviders.intKeyedView");
+		assertTrue(puts, "register(ParticleType, ParticleProvider) must read the providers map it registers into");
+
+		MethodNode make = method(node, "makeParticle",
+				"(Lnet/minecraft/core/particles/ParticleOptions;DDDDDD)Lnet/minecraft/client/particle/Particle;");
+		boolean reads = false;
+		for (AbstractInsnNode insn : make.instructions) {
+			if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+					&& OWNER.equals(f.owner) && "providers".equals(f.name)) {
+				reads = true;
+			}
+		}
+		assertTrue(reads, "makeParticle must read the same map — otherwise a registration is never rendered");
 	}
 
 	/**
-	 * MinecraftForge's {@code providersByName} lost its only producer in the merge, and the synthetic replacement
-	 * init runs AFTER {@code registerProviders} — so it is empty during the exact window that matters, and stays
-	 * empty afterwards.
+	 * 26.x carried a {@code providersByName} twin that lost its only producer in the merge. Nothing may read such a
+	 * field here, because this base does not declare one.
 	 */
 	@Test
-	void getProviderReadsTheMapThatHasSomethingInIt() throws Exception {
-		MethodNode getProvider = method(repaired(), "getProvider",
-				"(Lnet/minecraft/core/particles/ParticleType;)Lnet/minecraft/client/particle/ParticleProvider;");
-		for (AbstractInsnNode insn : getProvider.instructions) {
-			if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD) {
-				assertTrue(!"providersByName".equals(f.name),
-						"getProvider still reads providersByName, which nothing ever writes");
+	void nothingReadsAProvidersByNameField() throws Exception {
+		ClassNode node = parse(original());
+		for (MethodNode method : node.methods) {
+			for (AbstractInsnNode insn : method.instructions) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD) {
+					assertFalse("providersByName".equals(f.name),
+							method.name + " reads providersByName, which this base does not declare");
+				}
 			}
 		}
 	}
 
 	@Test
-	void aSecondPassLeavesTheRepairedClassAlone() throws Exception {
+	void aSecondPassLeavesTheClassAlone() throws Exception {
+		byte[] in = original();
 		byte[] once = new NeoForbricMergedBaseCompatTransformer().transform(
-				"net.minecraft.client.particle.ParticleResources", original(), null);
-		byte[] twice = new NeoForbricMergedBaseCompatTransformer().transform(
-				"net.minecraft.client.particle.ParticleResources", once, null);
-		assertSame(once, twice, "the repair must stand down once the field is written — otherwise every reload of "
-				+ "the class stacks another view on top of the last");
+				"net.minecraft.client.particle.ParticleEngine", in, null);
+		assertSame(in, once, "no repair targets this class any more — the pass must hand it back untouched");
+		assertSame(once, new NeoForbricMergedBaseCompatTransformer().transform(
+				"net.minecraft.client.particle.ParticleEngine", once, null));
 	}
 
 	@Test
@@ -141,24 +145,32 @@ class MergedBaseParticleProvidersTest {
 				.transform("net.minecraft.client.particle.ParticleProvider", other, null));
 	}
 
-	private static ClassNode repaired() throws Exception {
-		byte[] out = new NeoForbricMergedBaseCompatTransformer().transform(
-				"net.minecraft.client.particle.ParticleResources", original(), null);
-		ClassNode node = new ClassNode();
-		new ClassReader(out).accept(node, 0);
-		return node;
+	private static boolean hasField(ClassNode node, String name, String desc) {
+		return node.fields.stream().anyMatch(f -> name.equals(f.name) && desc.equals(f.desc));
+	}
+
+	private static int writers(ClassNode node) {
+		int n = 0;
+		for (MethodNode method : node.methods) {
+			for (AbstractInsnNode insn : method.instructions) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
+						&& OWNER.equals(f.owner) && "providers".equals(f.name)) n++;
+			}
+		}
+		return n;
 	}
 
 	private static byte[] original() throws IOException {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
 		byte[] in = readClass(ENTRY);
-		assertNotNull(in, "content drift: ParticleResources absent from this base");
-		ClassNode node = new ClassNode();
-		new ClassReader(in).accept(node, 0);
-		boolean split = node.fields.stream().anyMatch(f -> "providers".equals(f.name) && ID_KEYED.equals(f.desc))
-				&& node.fields.stream().anyMatch(f -> "providers".equals(f.name) && NAME_KEYED.equals(f.desc));
-		assertTrue(split, "content drift: this base no longer splits ParticleResources.providers — nothing to repair");
+		assertNotNull(in, "content drift: ParticleEngine absent from this base");
 		return in;
+	}
+
+	private static ClassNode parse(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
+		return node;
 	}
 
 	private static MethodNode method(ClassNode node, String name, String desc) {

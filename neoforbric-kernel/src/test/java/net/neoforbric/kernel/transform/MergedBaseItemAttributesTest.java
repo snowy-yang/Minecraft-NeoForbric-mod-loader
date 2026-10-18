@@ -45,97 +45,97 @@ import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * Covers the item-attribute repair, whose visible symptom was that elytra flight did not work.
+ * Covers the item-attribute path of {@code ItemStack}, against the REAL staged base.
  *
- * <p>The merge split one mechanism in half: it took NeoForge's {@code LivingEntity.canGlide}, which decides
- * gliding from the {@code neoforge:gliding_flight} attribute and never looks at the item, and vanilla's
- * {@code ItemStack.forEachModifier}, which reads the raw component. NeoForge's version of that method calls
- * {@code getAttributeModifiers()}, which posts {@code ItemAttributeModifierEvent} — and NeoForge's own listener
- * on that event is the only thing anywhere that raises the gliding attribute. Producer on one side, consumer on
- * the other, and the attribute sat at its {@code false} default forever.
+ * <p>Re-anchored to 1.21.1. On 26.x this guarded a repair whose visible symptom was that elytra flight did not
+ * work: the merge kept vanilla's {@code ItemStack.forEachModifier}, which read the raw
+ * {@code DataComponents.ATTRIBUTE_MODIFIERS} component, while NeoForge's own gliding support listens on
+ * {@code ItemAttributeModifierEvent} — posted only by {@code getAttributeModifiers()} — so the attribute that
+ * decides gliding was never raised. The repair rewrote the two {@code forEachModifier} reads to call NeoForge.
+ *
+ * <p>On this anchor the base already has that shape: both overloads call {@code getAttributeModifiers()} and
+ * neither reads the raw component, and {@code NeoForbricMergedBaseCompatTransformer} carries no attribute repair
+ * at all. The repair is therefore unnecessary. The one raw read left in the class is the tooltip's, in
+ * {@code addAttributeTooltips}, which must stay raw — routing a tooltip through the event would change what a
+ * tooltip says, not what an entity can do.
  */
 class MergedBaseItemAttributesTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path NEO_BASE = TestFixtures.stagedRoot().resolve("neoforge-patched/patched-mc-neoforge-1.21.1.jar");
 
 	private static final String ITEM_STACK = "net/minecraft/world/item/ItemStack";
 
 	@Test
-	void theStagedBaseStillReadsTheRawComponent() throws Exception {
+	void theStagedBaseAlreadyAsksNeoForge() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
 		ClassNode node = parse(readClass(MERGED_BASE));
 		List<MethodNode> each = overloads(node);
 		assertEquals(2, each.size(), "both forEachModifier overloads must still be there");
 		for (MethodNode m : each) {
-			assertTrue(readsRawComponent(m), "the base must still need the repair in " + m.desc
-					+ " — if upstream changed it, re-derive this test");
-			assertTrue(!callsNeoForge(m), "and must not already ask NeoForge");
+			assertTrue(callsNeoForge(m), "the base must already call getAttributeModifiers in " + m.desc);
+			assertFalse(readsRawComponent(m), "and must not read the raw component in " + m.desc);
 		}
 	}
 
-	/** What the repair produces has to be what the family that owns the consumer actually does. */
+	/** The repair is unnecessary on this anchor, so the pass must hand the class back untouched. */
 	@Test
-	void theNeoForgeBaseIsWhatTheRepairReproduces() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEO_BASE), "staged NeoForge base absent");
-		for (MethodNode m : overloads(parse(readClass(NEO_BASE)))) {
-			assertTrue(callsNeoForge(m), "NeoForge's own base must call getAttributeModifiers in " + m.desc);
-			assertTrue(!readsRawComponent(m), "and must not read the raw component");
-		}
-	}
-
-	@Test
-	void bothOverloadsAskNeoForgeAfterTheRepair() throws Exception {
+	void theRepairIsUnnecessaryBecauseTheBaseAlreadyHasTheShape() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
 		byte[] in = readClass(MERGED_BASE);
 		byte[] out = transform(in);
-		assertTrue(out != in, "the staged base must still need the repair");
+		assertSame(in, out, "the staged base already has the repaired shape — the pass must not rewrite it");
+	}
 
-		ClassNode node = parse(out);
+	@Test
+	void bothOverloadsAskNeoForgeInTheBase() throws Exception {
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
+		ClassNode node = parse(transform(readClass(MERGED_BASE)));
 		List<MethodNode> each = overloads(node);
 		assertEquals(2, each.size());
 		for (MethodNode m : each) {
 			assertTrue(callsNeoForge(m), "every overload must ask NeoForge, not just the first: " + m.desc);
-			assertTrue(!readsRawComponent(m), "the raw read must be gone from " + m.desc);
+			assertFalse(readsRawComponent(m), "the raw read must be gone from " + m.desc);
 			new Analyzer<>(new BasicVerifier()).analyze(node.name, m);
 		}
 	}
 
 	/**
-	 * Nothing else in the class is touched.
+	 * Nothing but the tooltip reads the raw component.
 	 *
-	 * <p>{@code ATTRIBUTE_MODIFIERS} is read in several places in {@code ItemStack}, and only the two inside
-	 * {@code forEachModifier} are the ones NeoForge routes through its event — rewriting a tooltip's read would
-	 * change what a tooltip says, not what an entity can do.
+	 * <p>The 26.x repair rewrote the two reads inside {@code forEachModifier}. On this anchor those two reads are
+	 * already gone and exactly one raw read remains, in {@code addAttributeTooltips}. Pinning it here keeps a
+	 * future repair from "finishing the job" and changing what a tooltip says.
 	 */
 	@Test
-	void readsOutsideForEachModifierAreLeftAlone() throws Exception {
+	void theOnlyRawReadIsTheTooltipOne() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
 		ClassNode before = parse(readClass(MERGED_BASE));
 		ClassNode after = parse(transform(readClass(MERGED_BASE)));
-		int removed = rawReads(before) - rawReads(after);
-		assertEquals(2, removed, "exactly the two reads in forEachModifier, and no others");
+		assertEquals(1, rawReads(before), "exactly one raw read is left, and it is the tooltip's");
+		assertEquals(1, rawReads(after), "and the pass must not touch it");
+		assertTrue(rawReadsIn(before, "addAttributeTooltips"),
+				"the surviving raw read must be addAttributeTooltips'");
 	}
 
 	@Test
-	void aSecondPassLeavesTheRepairedClassAlone() throws Exception {
+	void aSecondPassLeavesTheClassAlone() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
 		byte[] once = transform(readClass(MERGED_BASE));
-		assertSame(once, transform(once), "a body that already asks NeoForge must not be rewritten");
+		assertSame(once, transform(once));
 	}
 
 	@Test
-	void anyOtherClassIsHandedBackUntouchedByTHISRepair() throws Exception {
+	void noAttributeRepairIsClaimedOnAnotherClass() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
-		byte[] other = readEntry(MERGED_BASE, "net/minecraft/world/entity/LivingEntity.class");
+		byte[] other = readEntry(MERGED_BASE, "net/minecraft/world/item/Item.class");
 		// Byte identity used to be the assertion here, and it stopped being available the moment a LATER repair
-		// found something of its own in LivingEntity (the radians-to-degrees constant, in
-		// lambda$stopSleeping$0). "No repair touches this class" was never what this test meant; "this repair
-		// does not" is, and the claim reporter says exactly that without depending on what else the pass does.
+		// found something of its own in a class this test picked (the radians-to-degrees constant, in
+		// LivingEntity). "No repair touches this class" was never what this test meant; "no ATTRIBUTE repair
+		// does" is, and the claim reporter says exactly that without depending on what else the pass does.
 		List<String> hits = new ArrayList<>();
 		new NeoForbricMergedBaseCompatTransformer()
-				.transform("net.minecraft.world.entity.LivingEntity", other, null, hits::add);
-		assertFalse(hits.contains("neoforbric-merged-base-compat#askNeoForgeWhatAnItemsAttributesAre"),
-				"this repair is pinned to ItemStack; it claimed LivingEntity instead. Claims seen: " + hits);
+				.transform("net.minecraft.world.item.Item", other, null, hits::add);
+		assertFalse(hits.stream().anyMatch(h -> h.toLowerCase().contains("attribute")),
+				"the attribute repair is pinned to ItemStack; it claimed another class. Claims seen: " + hits);
 	}
 
 	// --- helpers ---------------------------------------------------------------------------------------------
@@ -178,6 +178,20 @@ class MergedBaseItemAttributesTest {
 			}
 		}
 		return n;
+	}
+
+	private static boolean rawReadsIn(ClassNode node, String methodName) {
+		for (MethodNode m : node.methods) {
+			if (!methodName.equals(m.name)) continue;
+			for (AbstractInsnNode insn : m.instructions) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC
+						&& "net/minecraft/core/component/DataComponents".equals(f.owner)
+						&& "ATTRIBUTE_MODIFIERS".equals(f.name)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private static byte[] transform(byte[] bytes) {

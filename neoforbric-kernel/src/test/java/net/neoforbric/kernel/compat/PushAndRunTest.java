@@ -32,8 +32,13 @@ class PushAndRunTest {
         assertEquals(0, result.exit(), result.output());
     }
 
+    /**
+     * Was {@code dryRunStagesExactlyFourArtifactsAndKeepsLauncherFiles}: MinecraftForge's runtime and the
+     * three-way merged base are gone from the project, so push-and-run.py stages three artifacts — the kernel, the
+     * NeoForge-patched base and the NeoForge carrier — and refuses a profile that still names the old coordinates.
+     */
     @Test
-    void dryRunStagesExactlyFourArtifactsAndKeepsLauncherFiles() throws Exception {
+    void dryRunStagesExactlyThreeArtifactsAndKeepsLauncherFiles() throws Exception {
         Path mods = Files.createDirectory(temp.resolve("mods"));
         Files.writeString(mods.resolve("a?b.jar"), "fixture");
         Path profile = profile();
@@ -41,7 +46,8 @@ class PushAndRunTest {
                 "--mc", "D:\\FixtureMC", "--version", "test-profile", "--mods", mods.toString(),
                 "--version-json", profile.toString(), "--output", temp.resolve("unused-output").toString());
         assertEquals(0, result.exit(), result.output());
-        assertEquals(4, result.output().lines().filter(line -> line.startsWith("PUT_ARTIFACT ")).count());
+        assertEquals(3, result.output().lines().filter(line -> line.startsWith("PUT_ARTIFACT ")).count());
+        assertTrue(result.output().contains("PUT_ARTIFACT net.neoforbric:patched-mc-neoforge "), result.output());
         String clean = result.output().lines().filter(line -> line.startsWith("CLEAN ")).findFirst().orElseThrow();
         assertTrue(clean.contains("\"config\"") && clean.contains("\"saves\"") && clean.contains("\"mods\""));
         assertTrue(clean.contains("\"replay_recordings\""), clean);
@@ -139,7 +145,7 @@ class PushAndRunTest {
                 mods = output / 'mods'; mods.mkdir(); (mods / 'a.jar').write_bytes(b'PK')
                 profile = output / 'profile.json'
                 profile.write_text(json.dumps(dict(libraries=[dict(name=f'net.neoforbric:{n}:1', downloads=dict(artifact=dict(path=f'x/{n}.jar')))
-                    for n in ('neoforbric-kernel', 'patched-mc-merged', 'forge-runtime', 'neoforge-runtime')])))
+                    for n in ('neoforbric-kernel', 'patched-mc-neoforge', 'neoforge-runtime')])))
                 subset = output / 'subset.txt'; subset.write_text('a.jar\\n')
                 def main(label, *arguments, environment={}):
                     os.environ.pop('NEOFORBRIC_LANG', None); os.environ.update(environment)
@@ -272,7 +278,7 @@ class PushAndRunTest {
                 mods = output / 'mods'; mods.mkdir(); (mods / 'a.jar').write_bytes(b'PK')
                 profile = output / 'profile.json'
                 profile.write_text(json.dumps(dict(libraries=[dict(name=f'net.neoforbric:{n}:1', downloads=dict(artifact=dict(path=f'x/{n}.jar')))
-                    for n in ('neoforbric-kernel', 'patched-mc-merged', 'forge-runtime', 'neoforge-runtime')])))
+                    for n in ('neoforbric-kernel', 'patched-mc-neoforge', 'neoforge-runtime')])))
                 sys.argv = ['push-and-run.py', '--label', 'built', '--mc', 'D:\\\\fixture-mc', '--version', 'fixture',
                             '--mods', str(mods), '--version-json', str(profile), '--output', str(output / 'run')]
                 try:
@@ -571,11 +577,12 @@ class PushAndRunTest {
     }
 
     private Path profile() throws Exception {
+        // The three coordinates push-and-run.py stages on this anchor — the same set the script's ARTIFACTS holds
+        // — plus one unrelated library, which the profile must tolerate and never stage.
         return Files.writeString(temp.resolve("profile.json"), """
                 {"libraries":[
                   {"name":"net.neoforbric:neoforbric-kernel:1","downloads":{"artifact":{"path":"net/neoforbric/kernel/1/kernel.jar"}}},
-                  {"name":"net.neoforbric:patched-mc-merged:1","downloads":{"artifact":{"path":"net/neoforbric/merged/1/merged.jar"}}},
-                  {"name":"net.neoforbric:forge-runtime:1","downloads":{"artifact":{"path":"net/neoforbric/forge/1/forge.jar"}}},
+                  {"name":"net.neoforbric:patched-mc-neoforge:1","downloads":{"artifact":{"path":"net/neoforbric/neoforge-base/1/patched.jar"}}},
                   {"name":"net.neoforbric:neoforge-runtime:1","downloads":{"artifact":{"path":"net/neoforbric/neo/1/neo.jar"}}},
                   {"name":"fixture:unchanged:1","downloads":{"artifact":{"path":"fixture/unchanged.jar"}}}
                 ]}

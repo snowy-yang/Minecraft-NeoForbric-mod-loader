@@ -36,13 +36,22 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 /**
- * The premise of the NeoForge ItemTooltipEvent row, pinned on the staged merged base: getTooltipLines posts
- * MinecraftForge's event and none of NeoForge's. If a merge or a repair ever brings NeoForge's back, this goes
- * red in the over-report-safe direction and the row is deleted.
+ * Whether the audit may call NeoForge's ItemTooltipEvent dead, pinned on the staged merged base.
+ *
+ * <p>What this was written for: on the 26.x merged base {@code ItemStack.getTooltipLines} posted MinecraftForge's
+ * {@code ForgeEventFactory.onItemTooltip} and none of NeoForge's, so NeoForge's event had no call site at all and
+ * every mod subscribing to it was listed by {@code DeadHookWorklist} as waiting on a dead event. The test pinned
+ * that premise: if a merge or a repair brought NeoForge's event back, it went red in the over-report-safe
+ * direction and the row was deleted.
+ *
+ * <p>RE-ANCHORED to the NeoForge-only base, where the premise is inverted: there is no {@code net/minecraftforge}
+ * anywhere, and {@code getTooltipLines} posts NeoForge's {@code EventHooks.onItemTooltip}. The event is therefore
+ * LIVE, the audit must not report it, and the same assertion now guards the opposite mistake — a row claiming a
+ * dead event that a mod's tooltip listener does actually receive.
  */
 class DeadEventAuditStagedTest {
 	@Test
-	void theMergedItemStackPostsOnlyMinecraftForgesTooltipEvent() throws Exception {
+	void theMergedItemStackPostsNeoForgesTooltipEventAndMinecraftForgeIsGone() throws Exception {
 		Path merged = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(merged), "staged merged base absent");
 		ClassNode node = new ClassNode();
@@ -55,16 +64,17 @@ class DeadEventAuditStagedTest {
 		}
 		boolean forge = false, neo = false, found = false;
 		for (MethodNode m : node.methods) {
-			if (!m.name.equals("getTooltipLines")) continue;
-			found = true;
 			for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
 				if (!(insn instanceof MethodInsnNode call)) continue;
-				if ("net/minecraftforge/event/ForgeEventFactory".equals(call.owner) && "onItemTooltip".equals(call.name)) forge = true;
-				if (call.owner.startsWith("net/neoforged/")) neo = true;
+				if (call.owner.startsWith("net/minecraftforge/")) forge = true;
+				if (!m.name.equals("getTooltipLines")) continue;
+				if ("net/neoforged/neoforge/event/EventHooks".equals(call.owner) && "onItemTooltip".equals(call.name)) neo = true;
 			}
+			if (m.name.equals("getTooltipLines")) found = true;
 		}
 		assertTrue(found, "ItemStack.getTooltipLines is gone");
-		assertTrue(forge, "MinecraftForge's onItemTooltip is the one the merge kept");
-		assertFalse(neo, "NeoForge's ItemTooltipEvent is posted after all — delete the DeadEventAudit row");
+		assertTrue(neo, "NeoForge's EventHooks.onItemTooltip is the poster on this base, so the audit must not list "
+				+ "NeoForge's ItemTooltipEvent as dead — a mod's tooltip listener does receive it");
+		assertFalse(forge, "a net/minecraftforge reference survived into this base — MinecraftForge is not part of it");
 	}
 }

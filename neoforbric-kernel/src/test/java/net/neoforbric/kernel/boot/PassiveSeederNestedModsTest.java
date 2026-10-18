@@ -205,6 +205,6 @@ class PassiveSeederNestedModsTest {
 				"staged neoforge-runtime.jar absent");
 		Path stubs = PassiveSeederLoadingModListTest.loggingStubs(tmp.resolve("stubs"));
 		return new URLClassLoader(new URL[] {stubs.toUri().toURL(), PassiveSeederLoadingModListTest.NEO_RUNTIME.toUri()
-				.toURL()}, ClassLoader.getPlatformClassLoader());
+				.toURL(), PassiveSeederLoadingModListTest.commonsLang3()}, ClassLoader.getPlatformClassLoader());
 	}
 }

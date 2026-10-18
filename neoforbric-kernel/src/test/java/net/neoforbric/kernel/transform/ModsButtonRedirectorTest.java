@@ -66,6 +66,12 @@ class ModsButtonRedirectorTest {
 
 	private static final String PAUSE = "net/minecraft/client/gui/screens/PauseScreen";
 	private static final String NEO = ForeignType.MOD_LIST_SCREEN.internal(Ecosystem.NEOFORGE);
+	/**
+	 * The name NeoForge 21.1 actually has: {@code client.gui.ModListScreen}, which 26.2.0.88 moved to
+	 * {@code client.gui.modlist.ModListScreen}. The redirector re-points both spellings (a mod compiled against
+	 * either one must not die on a NoClassDefFoundError), so the search below has to recognise both.
+	 */
+	private static final String NEO_PRE_88 = "net/neoforged/neoforge/client/gui/ModListScreen";
 
 	@Test
 	void theStagedGameStillOpensAFamilysOwnModListSomewhere() throws Exception {
@@ -76,7 +82,7 @@ class ModsButtonRedirectorTest {
 			List<String> families = opensAFamilysList(parse(e.getValue()));
 			if (!families.isEmpty()) opened.put(e.getKey(), families);
 		}
-		assertTrue(opened.values().stream().flatMap(List::stream).anyMatch(NEO::equals),
+		assertTrue(opened.values().stream().flatMap(List::stream).anyMatch(name -> NEO.equals(name) || NEO_PRE_88.equals(name)),
 				"something in the staged jars must still open NeoForge's own ModListScreen — if nothing does, the "
 						+ "button moved again and this redirect needs re-deriving. Carriers found: " + opened);
 		// MinecraftForge's own site is NOT required. On the merged base NeoForge's createPauseMenu is the body
@@ -171,33 +177,49 @@ class ModsButtonRedirectorTest {
 	}
 
 	/**
-	 * The icon moves with the label.
+	 * The icon moves with the label — where the staged game names one.
 	 *
 	 * <p>A button wearing NeoForge's logo while opening a list of every ecosystem's mods is a picture that is
 	 * wrong about what the button does, and the picture is the first thing a player reads.
+	 *
+	 * <p>On 1.21.1 nothing names one: NeoForge 21.1's mods button is label-only, its {@code assets/neoforge} ships
+	 * {@code textures/gui/icons.png} and {@code version_check_icons.png} and no {@code icon/neo_logo} sprite, and
+	 * {@link #noStagedClassNamesTheNeoForgeSprite} asserts that. So the pair below is carried by a stand-in built
+	 * to name it, which is where the guard belongs: the rewrite is what must not regress, and half of it would
+	 * leave an identifier for a texture nobody ships, rendering as magenta rather than failing.
 	 */
 	@Test
-	void theButtonWearsTheKernelsOwnIcon() throws Exception {
-		Map.Entry<String, byte[]> carrier = carrierCarrying(ModsButtonRedirector.FML_SPRITE_PATH);
+	void theButtonWearsTheKernelsOwnIcon() {
+		List<String> after = constants(parse(transform("neoforbric/test/Sprite", spriteCarrier())));
 
-		List<String> after = constants(parse(transform(carrier.getKey(), carrier.getValue())));
 		assertTrue(after.contains(ModsButtonRedirector.NEOFORBRIC_SPRITE_NAMESPACE)
 				&& after.contains(ModsButtonRedirector.NEOFORBRIC_SPRITE_PATH), "ours must be there");
 		assertTrue(!after.contains(ModsButtonRedirector.FML_SPRITE_PATH),
 				"and theirs gone — a half-rewrite names a texture nobody ships, which renders as magenta");
 	}
 
+	/** And nothing in the staged game does name it, which is why the pair above is a stand-in. */
+	@Test
+	void noStagedClassNamesTheNeoForgeSprite() throws Exception {
+		List<String> named = new ArrayList<>();
+		for (Map.Entry<String, byte[]> e : carriers().entrySet()) {
+			if (constants(parse(e.getValue())).contains(ModsButtonRedirector.FML_SPRITE_PATH)) named.add(e.getKey());
+		}
+		assertEquals(List.of(), named, "NeoForge 21.1's mods button carries no sprite: no staged class names "
+				+ ModsButtonRedirector.FML_SPRITE_PATH + ", and the runtime jar ships no asset at neoforge:"
+				+ ModsButtonRedirector.FML_SPRITE_PATH);
+	}
+
 	/**
 	 * Both halves of the identifier move, or neither does.
 	 *
-	 * <p>{@code Identifier.fromNamespaceAndPath} takes two adjacent constants. Swapping one leaves
+	 * <p>{@code ResourceLocation.fromNamespaceAndPath} takes two adjacent constants. Swapping one leaves
 	 * {@code neoforbric:icon/neo_logo} or {@code neoforge:icon/neoforbric_logo}, and a GUI sprite that resolves to
 	 * nothing is a magenta square rather than an error — so nothing downstream would report it.
 	 */
 	@Test
-	void theNamespaceAndThePathMoveTogether() throws Exception {
-		Map.Entry<String, byte[]> carrier = carrierCarrying(ModsButtonRedirector.FML_SPRITE_PATH);
-		ClassNode node = parse(transform(carrier.getKey(), carrier.getValue()));
+	void theNamespaceAndThePathMoveTogether() {
+		ClassNode node = parse(transform("neoforbric/test/Sprite", spriteCarrier()));
 		for (MethodNode method : node.methods) {
 			if (method.instructions == null) continue;
 			AbstractInsnNode prev = null;
@@ -211,6 +233,24 @@ class ModsButtonRedirectorTest {
 				if (insn.getOpcode() >= 0) prev = insn;
 			}
 		}
+	}
+
+	/** A class naming the Forge family's sprite, the way their own screens build the identifier. */
+	private static byte[] spriteCarrier() {
+		org.objectweb.asm.ClassWriter cw = new org.objectweb.asm.ClassWriter(0);
+		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "neoforbric/test/Sprite", null, "java/lang/Object", null);
+		org.objectweb.asm.MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, "icon",
+				"()Lnet/minecraft/resources/ResourceLocation;", null, null);
+		mv.visitCode();
+		mv.visitLdcInsn(ModsButtonRedirector.FML_SPRITE_NAMESPACE);
+		mv.visitLdcInsn(ModsButtonRedirector.FML_SPRITE_PATH);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, "net/minecraft/resources/ResourceLocation", "fromNamespaceAndPath",
+				"(Ljava/lang/String;Ljava/lang/String;)Lnet/minecraft/resources/ResourceLocation;", false);
+		mv.visitInsn(Opcodes.ARETURN);
+		mv.visitMaxs(2, 0);
+		mv.visitEnd();
+		cw.visitEnd();
+		return cw.toByteArray();
 	}
 
 	/** The texture the rewritten identifier names has to be a file the kernel actually ships. */
@@ -240,7 +280,10 @@ class ModsButtonRedirectorTest {
 
 	@Test
 	void theScreenIsNamedThroughForeignType() {
-		assertEquals("net/neoforged/neoforge/client/gui/modlist/ModListScreen", NEO);
+		// Re-anchored: 26.x moved this screen to client.gui.modlist, and 1.21.1 has it back at client.gui —
+		// ForeignType carries the name the staged carrier actually ships (ForeignTypeCarrierTest checks it against
+		// the jar). The literal is what makes a silent re-spelling here visible.
+		assertEquals("net/neoforged/neoforge/client/gui/ModListScreen", NEO);
 	}
 
 	// --- helpers ---------------------------------------------------------------------------------------------
@@ -259,8 +302,9 @@ class ModsButtonRedirectorTest {
 	}
 
 	/**
-	 * Which families' own mod list this class opens, by either shape: {@code new ModListScreen(screen)} or the
-	 * static {@code ModListScreen.create(screen)} NeoForge moved to at 26.2.0.88.
+	 * Which families' own mod list this class opens, by either shape: {@code new ModListScreen(screen)}, under
+	 * either of NeoForge's two spellings, or the static {@code ModListScreen.create(screen)} NeoForge moved to at
+	 * 26.2.0.88.
 	 */
 	private static List<String> opensAFamilysList(ClassNode node) {
 		List<String> out = new ArrayList<>();
@@ -268,7 +312,7 @@ class ModsButtonRedirectorTest {
 			if (method.instructions == null) continue;
 			for (AbstractInsnNode insn : method.instructions) {
 				if (insn instanceof TypeInsnNode type && type.getOpcode() == Opcodes.NEW
-						&& NEO.equals(type.desc)) {
+						&& (NEO.equals(type.desc) || NEO_PRE_88.equals(type.desc))) {
 					out.add(type.desc);
 				} else if (insn instanceof MethodInsnNode call && call.getOpcode() == Opcodes.INVOKESTATIC
 						&& NEO.equals(call.owner)

@@ -25,7 +25,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Enumeration;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -49,10 +48,13 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * with it — while the fields the loser ADDED are kept as declarations. Such a field is null for the life of the
  * process and nothing says so: the class links, loads and works until something reads it.
  *
- * <p>This is a census rather than a single case, because the value of knowing the list is that it cannot grow
- * quietly. Eight fields are in this state today; one has an obvious correct value and is repaired, and the other
- * seven carry codecs and callbacks that cannot be invented by a transformer and need the merge itself to stop
- * dropping them.
+ * <p>Re-anchored to 1.21.1. On 26.x this census had EIGHT entries, one of which
+ * ({@code net/minecraft/resources/ResourceManagerRegistryLoadTask.LOGGER}) was repaired by the merged-base
+ * transformer and seven of which were left to the merge. On this anchor the census is EMPTY: the merge leaves no
+ * static object field unassigned, {@code ResourceManagerRegistryLoadTask} does not exist (the registry loader is
+ * {@code net.minecraft.resources.RegistryDataLoader}, and its {@code LOGGER} is assigned by the base itself), and
+ * no transformer repairs a logger. The census is still the guard: a NEW entry means the merge dropped something
+ * and nobody noticed, so re-read the list rather than updating it.
  */
 class MergedBaseUnwrittenStaticsTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
@@ -63,18 +65,7 @@ class MergedBaseUnwrittenStaticsTest {
 	 * <p>A NEW entry here means the merge dropped something else and nobody noticed; a MISSING one means it was
 	 * repaired or the base stopped splitting that class. Either way the list has to be re-read, not re-blessed.
 	 */
-	private static final Set<String> KNOWN = new LinkedHashSet<>(List.of(
-			// Repaired by NeoForbricMergedBaseCompatTransformer — see theLoggerIsRepaired below.
-			"net/minecraft/resources/ResourceManagerRegistryLoadTask.LOGGER",
-			// A datapack entry's condition being false lands in a branch that reads this; needs the merge fixed.
-			"net/minecraft/world/item/crafting/Ingredient.VANILLA_CODEC",
-			"net/minecraft/world/item/crafting/Ingredient.VANILLA_MAP_CODEC",
-			"net/minecraft/world/item/crafting/Ingredient.VANILLA_CONTENTS_STREAM_CODEC",
-			// Read by a mod calling Ingredient.serializer() directly.
-			"net/minecraft/world/item/crafting/Ingredient.VANILLA_SERIALIZER",
-			"net/minecraft/client/particle/ParticleEngine.factories",
-			"net/minecraft/server/network/ServerConfigurationPacketListenerImpl.VANILLA_START",
-			"net/minecraft/world/item/ItemDisplayContext.ADD_CALLBACK"));
+	private static final Set<String> KNOWN = new LinkedHashSet<>();
 
 	@Test
 	void theCensusHasNotChanged() throws Exception {
@@ -89,26 +80,29 @@ class MergedBaseUnwrittenStaticsTest {
 	}
 
 	@Test
-	void theLoggerIsRepaired() throws Exception {
+	void theRegistryLoadersLoggerIsAssignedByTheBaseItself() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
-		String owner = "net/minecraft/resources/ResourceManagerRegistryLoadTask";
+
+		// The 26.x repair targeted ResourceManagerRegistryLoadTask.LOGGER. That class is gone on this anchor, and
+		// with it the repair; the 1.21.1 registry loader assigns its own logger in <clinit>, which is what the
+		// census above proves is true of every static object field in the base.
+		assertTrue(readClass("net/minecraft/resources/ResourceManagerRegistryLoadTask.class") == null,
+				"content drift: ResourceManagerRegistryLoadTask is back — re-derive the logger repair");
+
+		String owner = "net/minecraft/resources/RegistryDataLoader";
 		byte[] in = readClass(owner + ".class");
 		assertTrue(in != null, "content drift: that class is absent from this base");
 
 		ClassNode before = parse(in);
 		assertTrue(before.fields.stream().anyMatch(f -> "LOGGER".equals(f.name)),
-				"content drift: no LOGGER field here any more — nothing to repair");
-		assertTrue(!writesStatic(before, "LOGGER"), "the premise: nothing assigns it in the base");
-
-		ClassNode after = parse(new NeoForbricMergedBaseCompatTransformer().transform(
-				owner.replace('/', '.'), in, null));
-
-		assertTrue(writesStatic(after, "LOGGER"), "the repair must assign it");
-		assertEquals("<clinit>", firstAssigningMethod(after, "LOGGER"),
+				"content drift: no LOGGER field here any more — nothing to check");
+		assertTrue(writesStatic(before, "LOGGER"), "the base must assign its own logger");
+		assertEquals("<clinit>", firstAssigningMethod(before, "LOGGER"),
 				"it has to be assigned by the class initialiser, not lazily by whoever reads it first");
-		assertTrue(assignedAtTheTopOfClinit(after),
-				"and at the TOP of the initialiser: anything else it does may log, and a repair that lands last "
-						+ "leaves exactly the window this closes");
+
+		assertTrue(new NeoForbricMergedBaseCompatTransformer()
+				.transform(owner.replace('/', '.'), in, null) == in,
+				"a class with nothing to repair must be returned untouched");
 	}
 
 	@Test
@@ -165,22 +159,6 @@ class MergedBaseUnwrittenStaticsTest {
 			}
 		}
 		return null;
-	}
-
-	private static boolean assignedAtTheTopOfClinit(ClassNode node) {
-		for (MethodNode method : node.methods) {
-			if (!"<clinit>".equals(method.name)) continue;
-			int seen = 0;
-			for (AbstractInsnNode insn : method.instructions) {
-				if (insn.getOpcode() < 0) continue; // labels, line numbers, frames
-				seen++;
-				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTSTATIC
-						&& "LOGGER".equals(f.name)) {
-					return seen <= 3; // ldc, invokestatic, putstatic
-				}
-			}
-		}
-		return false;
 	}
 
 	private static ClassNode parse(byte[] bytes) {

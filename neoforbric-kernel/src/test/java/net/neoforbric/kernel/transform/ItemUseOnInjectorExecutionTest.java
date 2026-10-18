@@ -3,29 +3,50 @@ package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipFile;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 
 import net.fabricmc.api.EnvType;
+import net.neoforbric.kernel.TestFixtures;
+import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * {@link ItemUseOnInjector}'s output, run: MinecraftForge's {@code ItemStack.useOn} posts NeoForge's
- * {@code UseItemOnBlockEvent} in its {@code ITEM_AFTER_BLOCK} phase again (and returns a cancelling listener's result),
- * and on the server, on the client and from MinecraftForge's own hook, {@code Item.useOn} is reached through the one
- * relay {@code neoforbric$useOnItem}, the method fabric-api's {@code ItemEvents.USE_ON} wrap is pointed at.
+ * {@link ItemUseOnInjector}'s output, run: {@code ItemStack.useOn} posts NeoForge's {@code UseItemOnBlockEvent} in its
+ * {@code ITEM_AFTER_BLOCK} phase (and returns a cancelling listener's result), and {@code Item.useOn} is reached
+ * through the one relay {@code neoforbric$useOnItem}, the method fabric-api's {@code ItemEvents.USE_ON} wrap is
+ * pointed at.
  *
- * <p>The stand-ins keep the reviewed shapes: {@code useOn} returns {@code onPlaceItemIntoWorld} on a server and runs a
- * lambda {@code c -> getItem().useOn(c)} on a client; each hook makes one {@code Item.useOn} call. The stand-in item
- * records which method called its {@code useOn}, which is how the relay is seen to be the caller.
+ * <p>The stand-ins keep the reviewed shapes — {@code useOn} returns {@code onPlaceItemIntoWorld} on a server and runs
+ * a lambda {@code c -> getItem().useOn(c)} on a client; each hook makes one {@code Item.useOn} call — with one
+ * 1.21.1 change: the client's call goes through {@code onItemUse(UseOnContext, Function)}, which is the helper the
+ * merged base itself kept (and the method its own {@code useOn} delegates to), instead of the removed
+ * {@code net.minecraftforge.common.ForgeHooks.onItemUse}. There is no {@code net/minecraftforge} on this anchor at
+ * all, so nothing the injector emits could have been compiled against that type.
+ *
+ * <p>{@link #onTheRealBaseBothHalvesRunAndTheBridgeExists} is the other half of the picture, on the real staged
+ * classes: the merged base's {@code useOn} already posts {@code ITEM_AFTER_BLOCK}, but it still delegates its
+ * {@code Item.useOn} call, so the injector has to add the relay and the bridge there without posting the phase a
+ * second time. It used to decline the stack half on the strength of the event alone while still rewriting the hook,
+ * which left {@code CommonHooks} calling a method nothing had added — a {@code NoSuchMethodError} on the first
+ * server-side item use.
  */
 @ExecutesInjector(ItemUseOnInjector.class)
 class ItemUseOnInjectorExecutionTest {
+	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
+	private static final Path NEO_RUNTIME = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar");
 	private static final String STACK = ItemUseOnInjector.STACK;
 	private static final String CONTEXT = "net.minecraft.world.item.context.UseOnContext";
 	private static final String EVENT = "net.neoforged.neoforge.event.entity.player.UseItemOnBlockEvent";
@@ -75,9 +96,9 @@ class ItemUseOnInjectorExecutionTest {
 			Map.entry(STACK, """
 					package net.minecraft.world.item;
 
+					import java.util.function.Function;
 					import net.minecraft.world.InteractionResult;
 					import net.minecraft.world.item.context.UseOnContext;
-					import net.minecraftforge.common.ForgeHooks;
 					import net.neoforged.neoforge.common.CommonHooks;
 
 					public class ItemStack {
@@ -93,7 +114,12 @@ class ItemUseOnInjectorExecutionTest {
 
 						public InteractionResult useOn(UseOnContext context) {
 							if (!context.clientSide) return CommonHooks.onPlaceItemIntoWorld(context);
-							return ForgeHooks.onItemUse(context, c -> getItem().useOn(c));
+							return onItemUse(context, c -> getItem().useOn(c));
+						}
+
+						private InteractionResult onItemUse(UseOnContext context,
+								Function<UseOnContext, InteractionResult> use) {
+							return use.apply(context);
 						}
 					}
 					"""),
@@ -221,7 +247,7 @@ class ItemUseOnInjectorExecutionTest {
 				loader.loadClass("net.neoforged.neoforge.common.NeoForge"), "LISTENERS");
 	}
 
-	@Test void bothSidesPostTheAfterBlockPhaseAndReachTheItemThroughTheRelay(@TempDir Path work) throws Throwable {
+	@Test void theRepairPostsThePhaseAndRunsBothCallsThroughTheRelay(@TempDir Path work) throws Throwable {
 		Map<String, byte[]> original = InjectorExecution.compile(work, STAND_INS);
 		ClassLoader loader = transformed(original);
 		List<String> phases = new ArrayList<>();
@@ -239,7 +265,7 @@ class ItemUseOnInjectorExecutionTest {
 		listeners(merged).add(event -> unposted.add("posted"));
 		use(merged, false);
 		use(merged, true);
-		assertEquals(List.of(), unposted, "premise: as merged, NeoForge's ITEM_AFTER_BLOCK phase is never posted");
+		assertEquals(List.of(), unposted, "premise: the body the injector repairs does not post the phase itself");
 		assertEquals(List.of("onPlaceItemIntoWorld", "lambda$useOn$0"), callers(merged),
 				"premise: as merged, the calls Fabric's wrap targets are in two other places");
 	}
@@ -263,11 +289,84 @@ class ItemUseOnInjectorExecutionTest {
 		assertSame(item, InjectorExecution.transform(new ItemUseOnInjector(), "net.minecraft.world.item.Item", item, EnvType.SERVER));
 	}
 
+	/**
+	 * Both halves, on the real staged classes.
+	 *
+	 * <p>1.21.1's merged {@code ItemStack.useOn} is NeoForge's own body — it posts {@code UseItemOnBlockEvent}
+	 * ({@code ITEM_AFTER_BLOCK}) and returns a cancelling listener's result before it delegates — so no second post may
+	 * be added. But it still delegates its {@code Item.useOn} call to {@code CommonHooks.onPlaceItemIntoWorld} on a
+	 * server and to a lambda on a client, which is exactly the shape the relay exists for: fabric-api's
+	 * {@code ItemEvents.USE_ON} is a {@code @WrapOperation} on the {@code Item.useOn} call in {@code useOn}, and there
+	 * is no such call there to wrap.
+	 *
+	 * <p>{@code adaptStack} used to read any {@code UseItemOnBlockEvent} in {@code useOn} as "this is NeoForge's whole
+	 * body, leave it alone" and decline, while {@code relayServerCall} rewrote the hook anyway — so the hook named
+	 * {@code ItemStack.neoforbric$useOnItemFor}, a method nothing had added, and the first server-side item use was a
+	 * {@code NoSuchMethodError}. This asserts the two halves now agree.
+	 */
+	@Test void onTheRealBaseBothHalvesRunAndTheBridgeExists() throws Exception {
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEO_RUNTIME), "staged NeoForge carrier absent");
+		byte[] stack = entry(MERGED_BASE, ItemUseOnInjector.STACK_INTERNAL + ".class");
+		byte[] hooks = entry(NEO_RUNTIME, ItemUseOnInjector.NEO_HOOKS.replace('.', '/') + ".class");
+		ItemUseOnInjector injector = new ItemUseOnInjector();
+
+		byte[] adapted = injector.transform(STACK, stack, null);
+		assertNotSame(stack, adapted, "the merged body delegates its Item.useOn call, so the stack half runs too");
+		ClassNode node = node(adapted);
+		assertTrue(node.methods.stream().anyMatch(m -> m.name.equals(ItemUseOnInjector.BRIDGE)
+						&& m.desc.equals(ItemUseOnInjector.RELAY_DESC)),
+				"the bridge CommonHooks calls now exists — this is the NoSuchMethodError the old code left");
+		assertTrue(node.methods.stream().anyMatch(m -> m.name.equals(ItemUseOnInjector.RELAY)
+						&& m.desc.equals(ItemUseOnInjector.RELAY_DESC)),
+				"and the relay Fabric's wrap is pointed at");
+
+		int posts = 0;
+		for (AbstractInsnNode insn : node.methods.stream()
+				.filter(m -> m.name.equals("useOn")).findFirst().orElseThrow().instructions) {
+			if (insn instanceof org.objectweb.asm.tree.TypeInsnNode type
+					&& type.getOpcode() == org.objectweb.asm.Opcodes.NEW && EVENT.replace('.', '/').equals(type.desc)) posts++;
+		}
+		assertEquals(1, posts, "the phase is posted exactly once — the merged body already had it");
+
+		byte[] rewritten = injector.transform(ItemUseOnInjector.NEO_HOOKS, hooks, null);
+		assertNotSame(hooks, rewritten, "the hook half is rewritten too");
+
+		MethodNode place = node(rewritten).methods.stream()
+				.filter(m -> m.name.equals("onPlaceItemIntoWorld")).findFirst().orElseThrow();
+		MethodInsnNode bridge = null;
+		int direct = 0;
+		for (AbstractInsnNode insn : place.instructions) {
+			if (!(insn instanceof MethodInsnNode call)) continue;
+			if (ItemUseOnInjector.STACK_INTERNAL.equals(call.owner) && ItemUseOnInjector.BRIDGE.equals(call.name)) bridge = call;
+			if (ItemUseOnInjector.ITEM.equals(call.owner) && "useOn".equals(call.name)) direct++;
+		}
+		assertEquals(0, direct, "the direct Item.useOn call is gone from the hook");
+		assertNotNull(bridge, "the hook calls through ItemStack");
+		assertEquals(ItemUseOnInjector.RELAY_DESC, bridge.desc, "and it names the bridge with the relay's descriptor");
+	}
+
 	private static Object call(Object receiver, String method, Object... args) {
 		try {
 			return InjectorExecution.invoke(receiver, method, args);
 		} catch (Throwable failed) {
 			throw new AssertionError(failed);
 		}
+	}
+
+	private static byte[] entry(Path jar, String name) throws Exception {
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			var found = zip.getEntry(name);
+			assertNotNull(found, name + " in " + jar);
+			try (var in = zip.getInputStream(found)) {
+				return in.readAllBytes();
+			}
+		}
+	}
+
+	private static ClassNode node(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
+		return node;
 	}
 }

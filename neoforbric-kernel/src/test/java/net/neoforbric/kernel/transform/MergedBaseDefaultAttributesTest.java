@@ -17,6 +17,7 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,47 +40,48 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 /**
  * {@code DefaultAttributes} is the single consumer both ecosystems patch, and the merge kept one of them.
  *
- * <p>The assertion that matters is that BOTH of its call sites move: {@code getSupplier} is what an entity needs
- * to exist at all, and {@code hasSupplier} is what decides whether the game even asks. Redirecting one and not
- * the other would give a MinecraftForge mod's entity attributes that the game never looks for.
+ * <p>Re-anchored: the assertion used to be that BOTH of its call sites moved to the kernel's composition of the two
+ * families' maps — {@code getSupplier}, which is what an entity needs to exist at all, and {@code hasSupplier},
+ * which decides whether the game even asks. The merged base still carries the 26.x seam (both methods call
+ * {@code CommonHooks.getAttributesView()}), but on this anchor there is no MinecraftForge family to compose with and
+ * no {@code KernelForgeAttributes} in the runtime, so nothing is redirected: the lookups read NeoForge's own view,
+ * and that is what is asserted — with the seam's presence pinned, since that is what would have to change for the
+ * composition to be needed again.
  */
 class MergedBaseDefaultAttributesTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String ENTRY = "net/minecraft/world/entity/ai/attributes/DefaultAttributes.class";
 	private static final String BINARY = "net.minecraft.world.entity.ai.attributes.DefaultAttributes";
+	private static final String NEO_HOOKS = "net/neoforged/neoforge/common/CommonHooks";
 	private static final String KERNEL = "net/neoforbric/kernel/runtime/KernelForgeAttributes";
 
 	@Test
-	void bothLookupsGoThroughTheKernelsCompositionOfTheTwoMaps() throws Exception {
+	void bothLookupsReadNeoForgesOwnViewAndTheKernelIsNotInThePipeline() throws Exception {
 		ClassNode node = repaired();
+		List<String> seams = new ArrayList<>();
 		List<String> redirected = new ArrayList<>();
 		for (MethodNode method : node.methods) {
 			for (AbstractInsnNode insn : method.instructions) {
 				if (!(insn instanceof MethodInsnNode call)) continue;
-				assertTrue(!("net/neoforged/neoforge/common/CommonHooks".equals(call.owner)
-								&& "getAttributesView".equals(call.name)),
-						"DefaultAttributes." + method.name + " still reads only NeoForge's attribute map — a "
-								+ "traditional MinecraftForge mod's entities then have no attributes and are refused");
-				if (KERNEL.equals(call.owner) && "attributesView".equals(call.name)) {
-					assertEquals(Opcodes.INVOKESTATIC, call.getOpcode());
-					assertEquals("()Ljava/util/Map;", call.desc,
-							"same descriptor as the call it replaced, or the stack moves");
-					redirected.add(method.name);
-				}
+				if (NEO_HOOKS.equals(call.owner) && "getAttributesView".equals(call.name)) seams.add(method.name);
+				if (KERNEL.equals(call.owner)) redirected.add(method.name + "." + call.name);
 			}
 		}
-		assertTrue(redirected.contains("getSupplier"),
-				"getSupplier must consult both maps — it is what gives the entity its attributes: " + redirected);
-		assertTrue(redirected.contains("hasSupplier"),
-				"hasSupplier must consult both maps too — it is what decides whether the game asks at all: "
-						+ redirected);
+		assertTrue(seams.contains("getSupplier"),
+				"getSupplier no longer reads the merged view — re-derive this claim, the seam moved: " + seams);
+		assertTrue(seams.contains("hasSupplier"),
+				"hasSupplier no longer reads the merged view — it is what decides whether the game asks at all: " + seams);
+		assertEquals(List.of(), redirected, "there is no second family's map to compose, so the kernel must not be "
+				+ "called from here: " + redirected);
+		assertFalse(net.neoforbric.kernel.boot.KernelRuntimeClasses.all().containsKey(KERNEL.replace('/', '.')),
+				"KernelForgeAttributes is back in the runtime — re-derive the composition this claim used to pin");
 	}
 
 	@Test
 	void aSecondPassChangesNothingFurther() throws Exception {
 		byte[] once = new NeoForbricMergedBaseCompatTransformer().transform(BINARY, original(), null);
 		byte[] twice = new NeoForbricMergedBaseCompatTransformer().transform(BINARY, once, null);
-		assertSame(once, twice, "no CommonHooks call is left, so the second pass must find nothing");
+		assertSame(once, twice, "nothing is redirected, so the second pass must find nothing");
 	}
 
 	private static ClassNode repaired() throws Exception {

@@ -2,6 +2,7 @@ package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
@@ -9,136 +10,207 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
-import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * The seven "exclusive-added field … left null" entries of merge-conflicts.txt, and why six of them are left
- * alone: nothing in the base reads them. That is pinned here as reader COUNTS over every class in the merged jar,
- * so a rebuilt base that turns one of those traps live (a new reader) fails this test instead of NPE-ing in a
- * player's world — re-read the field, do not re-bless the count.
+ * The fields this base declares, reads and never writes — the "left null" traps, pinned as a census over every
+ * class in the merged jar.
+ *
+ * <p>Re-anchored to 1.21.1. On 26.x this listed the seven "exclusive-added field … left null" entries of
+ * merge-conflicts.txt: {@code TitleScreen.modUpdateNotification}, {@code ServerData.forgeData},
+ * {@code AbstractArrow.ignoredEntities}, {@code WeightedVariants.first},
+ * {@code Slot.background}, and the two {@code ModelProvider} collectors' {@code known}. Every one of those is a
+ * MinecraftForge-only or 26.x-only member: there is no {@code net/minecraftforge} on this anchor, no
+ * {@code WeightedVariants} (the class is {@code WeightedBakedModel}) and no {@code client/data/models/ModelProvider}.
+ *
+ * <p>What replaces the list is the same defect measured directly: a field DECLARED in the base that something
+ * GETFIELDs and nothing anywhere PUTFIELDs. On this anchor exactly one qualifies,
+ * {@code net/minecraft/world/entity/LivingEntity.deathScore}, read three times and written never — so a death
+ * message scores zero. The kernel does not repair it (that needs the merge), which the second test records. A
+ * rebuilt base that adds another such field, or a reader for an existing one, fails here instead of answering a
+ * wrong value in a player's world. Re-read the field, do not re-bless the count.
  */
 class MergedBaseLeftNullFieldsTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path FORGE_RUNTIME = TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar");
-
-	/** owner#field → expected GETFIELD readers anywhere in the merged base. */
-	private static final Map<String, Integer> PINNED = Map.ofEntries(
-			Map.entry("net/minecraft/client/gui/screens/TitleScreen#modUpdateNotification", 0),
-			Map.entry("net/minecraft/client/multiplayer/ServerData#forgeData", 0),
-			Map.entry("net/minecraft/world/entity/projectile/AbstractArrow#ignoredEntities", 0),
-			Map.entry("net/minecraft/client/renderer/block/dispatch/WeightedVariants#first", 1),
-			Map.entry("net/minecraft/world/inventory/Slot#background", 0),
-			Map.entry("net/minecraft/client/data/models/ModelProvider$BlockStateGeneratorCollector#known", 0),
-			Map.entry("net/minecraft/client/data/models/ModelProvider$ItemInfoCollector#known", 0));
 
 	@Test
-	void theReaderCountsOverTheWholeBaseAreExactlyThePinnedOnes() throws Exception {
+	void theLeftNullCensusIsExactlyThis() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
-		Map<String, Integer> counts = new LinkedHashMap<>();
-		for (String key : PINNED.keySet()) counts.put(key, 0);
+
+		Map<String, Integer> found = leftNullFields();
+
+		assertEquals(Map.of("net/minecraft/world/entity/LivingEntity#deathScore", 3), found,
+				"the set of fields this base reads and never writes changed. A new entry is a live wrong-value "
+						+ "trap (give it its own repair); a missing one means it was repaired. Re-read the field, "
+						+ "do not just update the count.");
+	}
+
+	@Test
+	void theTransformerDoesNotQuietlyWriteALeftNullField() throws Exception {
+		// The 26.x transformer repaired the one entry with a reader (WeightedVariants.first). On this anchor the
+		// one entry with readers (LivingEntity.deathScore) has no repair, and this records that gap: if a future
+		// repair writes it, this fails and the census above has to be re-read.
+		for (String key : leftNullFields().keySet()) {
+			String owner = key.substring(0, key.indexOf('#'));
+			String field = key.substring(key.indexOf('#') + 1);
+			byte[] after = new NeoForbricMergedBaseCompatTransformer()
+					.transform(owner.replace('/', '.'), bytesOf(owner), null);
+			assertTrue(!writtenBy(after, owner, field),
+					key + " is written after the transformer ran — the census above must be re-read, and this test "
+							+ "re-anchored onto whatever now guards the repair");
+		}
+	}
+
+	/** {@code ServerData.neoForgeData} is NeoForge's own added field, and the base leaves it null deliberately. */
+	@Test
+	void theNeoForgeAddedFieldIsNullByDesignAndUnreadInTheBase() throws Exception {
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent");
+
+		// 26.x's forgeData lived in the forge-runtime carrier and was written by ForgeHooksClient's ping hook.
+		// That artifact does not exist here; NeoForge 1.21.1's field is `neoForgeData`, declared and nulled by
+		// NeoForge's own ServerData patch.
+		String owner = "net/minecraft/client/multiplayer/ServerData";
+		byte[] in = bytesOf(owner);
+		ClassNode node = parse(in);
+
+		FieldNode field = null;
+		for (FieldNode f : node.fields) {
+			if ("neoForgeData".equals(f.name)) field = f;
+		}
+		assertNotNull(field, "content drift: NeoForge's ServerData.neoForgeData is gone — find the new reader");
+		assertTrue(field.desc.startsWith("L"), "it holds a reference, so a null is the state to reason about");
+
+		boolean nulled = false;
+		for (MethodNode method : node.methods) {
+			AbstractInsnNode previous = null;
+			for (AbstractInsnNode insn = method.instructions.getFirst(); insn != null; insn = insn.getNext()) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
+						&& owner.equals(f.owner) && "neoForgeData".equals(f.name)
+						&& previous != null && previous.getOpcode() == Opcodes.ACONST_NULL) {
+					nulled = true;
+				}
+				if (insn.getOpcode() >= 0) previous = insn;
+			}
+		}
+		assertTrue(nulled, "the constructor must set it to null explicitly — that is the field's declared state");
+
+		// No reader in the base means no trap here: a reader would be the first place a null is observed.
+		int reads = readers(in, owner, "neoForgeData");
+		assertEquals(0, reads, "the base must not read neoForgeData; NeoForge's own client code owns that");
+
+		assertSame(in, new NeoForbricMergedBaseCompatTransformer().transform(owner.replace('/', '.'), in, null),
+				"nothing to repair in this class, so the pass must hand it back untouched");
+	}
+
+	// --- the census -------------------------------------------------------------------------------------------
+
+	/**
+	 * owner#field → GETFIELD reader count, for every field this base DECLARES that no PUTFIELD or PUTSTATIC
+	 * anywhere writes.
+	 *
+	 * <p>Resolved to the declaring class: a field instruction's owner is the receiver's type, so a subclass
+	 * writing an inherited field names itself, not the class that declares the field.
+	 */
+	private static Map<String, Integer> leftNullFields() throws Exception {
+		Map<String, ClassNode> nodes = new LinkedHashMap<>();
 		try (ZipFile zip = new ZipFile(MERGED_BASE.toFile())) {
-			Enumeration<? extends ZipEntry> entries = zip.entries();
-			while (entries.hasMoreElements()) {
-				ZipEntry entry = entries.nextElement();
+			for (Enumeration<? extends ZipEntry> e = zip.entries(); e.hasMoreElements();) {
+				ZipEntry entry = e.nextElement();
 				if (!entry.getName().endsWith(".class")) continue;
-				try (InputStream in = zip.getInputStream(entry)) {
-					new ClassReader(in).accept(new ClassVisitor(Opcodes.ASM9) {
-						@Override
-						public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
-							return new MethodVisitor(Opcodes.ASM9) {
-								@Override
-								public void visitFieldInsn(int opcode, String owner, String field, String fdesc) {
-									if (opcode != Opcodes.GETFIELD) return;
-									String key = owner + "#" + field;
-									if (counts.containsKey(key)) counts.merge(key, 1, Integer::sum);
-								}
-							};
-						}
-					}, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-				}
+				ClassNode node = parse(read(zip, entry));
+				nodes.put(node.name, node);
 			}
 		}
-		assertEquals(new LinkedHashMap<>(PINNED), counts,
-				"a reader count changed: a left-null field grew a reader (a live NPE trap — give it its own repair) or "
-						+ "lost one (re-examine whether its repair is still needed)");
-	}
 
-	@Test
-	void everyFieldWithAReaderIsWrittenByItsOwnerAfterTheTransformer() throws Exception {
-		for (Map.Entry<String, Integer> pin : PINNED.entrySet()) {
-			if (pin.getValue() == 0) continue;
-			String owner = pin.getKey().substring(0, pin.getKey().indexOf('#'));
-			String field = pin.getKey().substring(pin.getKey().indexOf('#') + 1);
-			byte[] after = new NeoForbricMergedBaseCompatTransformer().transform(owner.replace('/', '.'), bytesOf(MERGED_BASE, owner), null);
-			ClassNode node = new ClassNode();
-			new ClassReader(after).accept(node, 0);
-			boolean written = false;
+		Map<String, Integer> reads = new TreeMap<>();
+		java.util.Set<String> writes = new java.util.HashSet<>();
+		for (ClassNode node : nodes.values()) {
 			for (MethodNode method : node.methods) {
+				if (method.instructions == null) continue;
 				for (AbstractInsnNode insn : method.instructions) {
-					if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD && owner.equals(f.owner) && field.equals(f.name)) written = true;
+					if (!(insn instanceof FieldInsnNode f)) continue;
+					String declaring = declaringClass(nodes, f.owner, f.name);
+					if (declaring == null) continue;
+					String key = declaring + "#" + f.name;
+					if (f.getOpcode() == Opcodes.GETFIELD) reads.merge(key, 1, Integer::sum);
+					else if (f.getOpcode() == Opcodes.PUTFIELD || f.getOpcode() == Opcodes.PUTSTATIC) writes.add(key);
 				}
 			}
-			assertTrue(written, pin.getKey() + " has a reader in the base and no writer after the transformer ran");
 		}
+		reads.keySet().removeIf(writes::contains);
+		return reads;
 	}
 
-	/** forgeData is left alone for a reason that lives in the carrier, so the reason is pinned in bytecode too. */
-	@Test
-	void forgeDataIsWrittenByForgesOwnPingHookAndNullGuardedByItsOnlyReader() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(FORGE_RUNTIME), "staged Forge carrier absent: " + FORGE_RUNTIME);
-		ClassNode hooks = new ClassNode();
-		new ClassReader(bytesOf(FORGE_RUNTIME, "net/minecraftforge/client/ForgeHooksClient")).accept(hooks, 0);
-		int writes = 0;
-		MethodNode draw = null;
-		for (MethodNode method : hooks.methods) {
-			if ("drawForgePingInfo".equals(method.name)) draw = method;
+	/** The class in {@code owner}'s superclass chain that declares {@code field}, or null. */
+	private static String declaringClass(Map<String, ClassNode> nodes, String owner, String field) {
+		java.util.Set<String> seen = new java.util.HashSet<>();
+		String current = owner;
+		while (current != null && seen.add(current)) {
+			ClassNode node = nodes.get(current);
+			if (node == null) return null;
+			for (FieldNode f : node.fields) {
+				if (f.name.equals(field)) return current;
+			}
+			current = node.superName;
+		}
+		return null;
+	}
+
+	private static boolean writtenBy(byte[] bytes, String owner, String field) {
+		ClassNode node = parse(bytes);
+		for (MethodNode method : node.methods) {
 			for (AbstractInsnNode insn : method.instructions) {
 				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
-						&& "net/minecraft/client/multiplayer/ServerData".equals(f.owner) && "forgeData".equals(f.name)) writes++;
+						&& owner.equals(f.owner) && field.equals(f.name)) return true;
 			}
 		}
-		assertTrue(writes >= 1, "ForgeHooksClient no longer writes ServerData.forgeData — the field would stay null for good");
-		assertNotNull(draw, "drawForgePingInfo is gone — find the new reader and re-check its guard");
-		AbstractInsnNode first = draw.instructions.getFirst();
-		while (first != null && first.getOpcode() < 0) first = first.getNext();
-		AbstractInsnNode load = first, get = nextReal(load), guard = nextReal(get);
-		assertTrue(get instanceof FieldInsnNode f && "forgeData".equals(f.name) && f.getOpcode() == Opcodes.GETFIELD,
-				"the reader's first real instructions must be the field read");
-		assertTrue(guard instanceof JumpInsnNode jump && jump.getOpcode() == Opcodes.IFNONNULL,
-				"the reader must null-guard the field — that guard is why the kernel leaves it alone");
+		return false;
 	}
 
-	private static AbstractInsnNode nextReal(AbstractInsnNode insn) {
-		AbstractInsnNode next = insn.getNext();
-		while (next != null && next.getOpcode() < 0) next = next.getNext();
-		return next;
+	private static int readers(byte[] bytes, String owner, String field) {
+		int n = 0;
+		ClassNode node = parse(bytes);
+		for (MethodNode method : node.methods) {
+			for (AbstractInsnNode insn : method.instructions) {
+				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETFIELD
+						&& owner.equals(f.owner) && field.equals(f.name)) n++;
+			}
+		}
+		return n;
 	}
 
-	private static byte[] bytesOf(Path jar, String internal) throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(jar), "staged artifact absent: " + jar);
-		try (ZipFile zip = new ZipFile(jar.toFile())) {
+	private static byte[] bytesOf(String internal) throws Exception {
+		try (ZipFile zip = new ZipFile(MERGED_BASE.toFile())) {
 			ZipEntry entry = zip.getEntry(internal + ".class");
-			assertNotNull(entry, internal + " not in " + jar.getFileName());
-			try (InputStream in = zip.getInputStream(entry)) {
-				return in.readAllBytes();
-			}
+			assertNotNull(entry, internal + " not in " + MERGED_BASE.getFileName());
+			return read(zip, entry);
 		}
+	}
+
+	private static byte[] read(ZipFile zip, ZipEntry entry) throws Exception {
+		try (InputStream in = zip.getInputStream(entry)) {
+			return in.readAllBytes();
+		}
+	}
+
+	private static ClassNode parse(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
+		return node;
 	}
 }

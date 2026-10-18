@@ -46,16 +46,31 @@ class CompatibilityPromptTickInjectorTest {
 		assertTrue(net.neoforbric.kernel.boot.KernelRuntimeClasses.all().containsKey(OWNER.replace('/', '.')));
 	}
 
-	@Test void gameUiCallsExistOnTheActualMinecraft262Base() throws Exception {
+	/**
+	 * Re-anchored: this was {@code gameUiCallsExistOnTheActualMinecraft262Base} and read the 26.x member set out of
+	 * the base — {@code Minecraft.disconnectWithSavingScreen()}, and {@code Gui.setScreen(Screen)}. Neither exists on
+	 * 1.21.1: the saving-screen disconnect is gone (1.21.1's vanilla path saves server-side before the client drops,
+	 * so {@code KernelCompatibilityPrompts} calls plain {@code disconnect()}), and {@code setScreen} is on
+	 * {@code Minecraft}, not {@code Gui}. What the test is for is unchanged — that every member the prompt drives
+	 * exists on the base it is loaded into — so it asserts that set, each one by descriptor, and the 26.x name the
+	 * runtime's comment says is gone.
+	 */
+	@Test void gameUiCallsExistOnTheActual1211Base() throws Exception {
 		Path game = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(game), "staged game absent");
 		try (ZipFile zip = new ZipFile(game.toFile())) {
 			ClassNode minecraft = parse(zip.getInputStream(zip.getEntry("net/minecraft/client/Minecraft.class")).readAllBytes());
-			for (String method : java.util.List.of("disconnectWithSavingScreen", "stop", "tick")) {
-				assertTrue(minecraft.methods.stream().anyMatch(m -> m.name.equals(method) && m.desc.equals("()V")), method);
+			for (String member : java.util.List.of("tick()V", "stop()V", "disconnect()V", "isRunning()Z",
+					"getOverlay()Lnet/minecraft/client/gui/screens/Overlay;",
+					"setScreen(Lnet/minecraft/client/gui/screens/Screen;)V")) {
+				assertTrue(minecraft.methods.stream().anyMatch(m -> member.equals(m.name + m.desc)), member);
 			}
-			ClassNode gui = parse(zip.getInputStream(zip.getEntry("net/minecraft/client/gui/Gui.class")).readAllBytes());
-			assertTrue(gui.methods.stream().anyMatch(m -> m.name.equals("setScreen") && m.desc.equals("(Lnet/minecraft/client/gui/screens/Screen;)V")));
+			assertTrue(minecraft.fields.stream().anyMatch(f -> "screen".equals(f.name)
+					&& "Lnet/minecraft/client/gui/screens/Screen;".equals(f.desc)), "Minecraft.screen");
+			assertFalse(minecraft.methods.stream().anyMatch(m -> m.name.equals("disconnectWithSavingScreen")),
+					"26.x's saving-screen disconnect is not on this base — the runtime's comment on that rename is "
+							+ "load-bearing, and if the method comes back the prompt must be re-derived");
+			parse(zip.getInputStream(zip.getEntry("net/minecraft/client/gui/screens/Overlay.class")).readAllBytes());
 			ClassNode confirm = parse(zip.getInputStream(zip.getEntry("net/minecraft/client/gui/screens/ConfirmScreen.class")).readAllBytes());
 			assertTrue(confirm.methods.stream().anyMatch(m -> m.name.equals("<init>") && m.desc.equals(
 					"(Lit/unimi/dsi/fastutil/booleans/BooleanConsumer;Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/Component;)V")));

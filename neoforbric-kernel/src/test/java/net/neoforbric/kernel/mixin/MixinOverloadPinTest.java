@@ -352,7 +352,7 @@ class MixinOverloadPinTest {
 	}
 
 	@Test
-	void theRealMergedServerIsPinnedToVanillasOverload() throws Exception {
+	void theRealMergedServerDeclaresNoOverloadPairToPin() throws Exception {
 		java.nio.file.Path merged = net.neoforbric.kernel.TestFixtures.stagedRoot()
 				.resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 		net.neoforbric.kernel.TestFixtures.requireFiles(net.neoforbric.kernel.TestFixtures.Fixture.STAGED, "the merged base", merged);
@@ -362,11 +362,17 @@ class MixinOverloadPinTest {
 					.accept(server, org.objectweb.asm.ClassReader.SKIP_CODE);
 		}
 		List<String> order = server.methods.stream().filter(m -> m.name.equals(CLICK)).map(m -> m.desc).toList();
-		assertEquals(List.of(CARRIER_CLICK, VANILLA_CLICK), order, "the shape issue #56 was reported on");
+		// What this used to assert: that the real merged MinecraftServer declares
+		// handleCustomClickAction(Identifier, Optional, ServerPlayer, GameProfile)V first and (Identifier, Optional)V
+		// second — the shape issue #56 was reported on — and that a name-only @Inject on that name is pinned to
+		// vanilla's overload. The dialog click-action API is 26.x: 1.21.1's MinecraftServer declares no method of
+		// that name at all, so this base has no such pair and nothing can be pinned on it. The synthetic pair above
+		// is the whole subject, and the two assertions below say that this base adds nothing real to it.
+		assertEquals(List.of(), order, "the 26.x dialog click-action overload pair is not in the 1.21.1 base");
 
 		ClassNode mixin = carpetMixin("(" + ID + OPTIONAL + CI + ")V", CLICK);
-		assertEquals(1, MixinOverloadPin.pin(mixin, targets(server)));
-		assertEquals(List.of(CLICK + VANILLA_CLICK), selectorsOf(mixin));
+		assertEquals(0, MixinOverloadPin.pin(mixin, targets(server)), "no overload pair: nothing is pinned");
+		assertEquals(List.of(CLICK), selectorsOf(mixin), "and no descriptor is invented for a name the class lacks");
 	}
 
 	/** The merged {@code MinecraftServer}'s two overloads, in the order the merge left them. */

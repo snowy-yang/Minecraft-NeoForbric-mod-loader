@@ -1,6 +1,7 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,17 +29,18 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
  * {@code CompoundTag.builder()} — the static every {@code IForgeBlockPos.toCompoundTag()} and
- * {@code ForgeHooks.createEmptyStructure} links against, and which the merged base does not declare.
+ * {@code ForgeHooks.createEmptyStructure} used to link against, and which the merged base does not declare.
  *
- * <p>Genuine Forge's body {@code new}s {@code CompoundTag$1}, an anonymous class the byte merge could not carry
- * (the merged {@code CompoundTag$1} is a different class). The repair therefore emits {@code INBTBuilder.nbt()}'s
- * own four instructions instead. What is pinned here: the premise (the base still lacks it), the exact body, that
- * every carrier call site now resolves, that the carrier type the body {@code new}s still has its public no-arg
- * constructor, and idempotence.
+ * <p>Re-anchored, and the subject has gone with MinecraftForge: this tree merges NeoForge only, the base carries no
+ * {@code net/minecraftforge} entry at all and there is no {@code forge-runtime} artifact, so nothing links against
+ * {@code CompoundTag.builder()} any more and the repair that used to synthesise it (emitting
+ * {@code INBTBuilder.nbt()}'s own four instructions, because the byte merge could not carry the anonymous class the
+ * genuine body {@code new}s) is no longer one of the transformer's repairs. What is pinned here is that state: the
+ * base still lacks the method, the carrier type is absent from the tree, and the transformer adds nothing — which is
+ * what fails, loudly, if the Forge family ever comes back.
  */
 class MergedBaseNbtBuilderTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path FORGE_RUNTIME = TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar");
 	private static final String COMPOUND_TAG = "net/minecraft/nbt/CompoundTag";
 	private static final String BUILDER = "net/minecraftforge/common/util/INBTBuilder$Builder";
 	private static final String DESC = "()L" + BUILDER + ";";
@@ -51,56 +53,25 @@ class MergedBaseNbtBuilderTest {
 	}
 
 	@Test
-	void builderIsPublicStaticWithTheDescriptorTheCarrierCallsAndTheCarriersOwnBody() throws Exception {
-		ClassNode after = parse(transform(COMPOUND_TAG));
-		MethodNode builder = declared(after, "builder", DESC);
-		assertNotNull(builder, "builder() was not added");
-		assertEquals(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, builder.access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC),
-				"the carrier's call sites are invokestatic on a public method");
-
-		List<String> body = new ArrayList<>();
-		for (AbstractInsnNode insn : builder.instructions) {
-			if (insn.getOpcode() < 0) continue;
-			if (insn instanceof TypeInsnNode type) body.add("NEW " + type.desc);
-			else if (insn instanceof MethodInsnNode call) body.add("INVOKESPECIAL " + call.owner + "." + call.name + call.desc);
-			else if (insn instanceof InsnNode plain) body.add(plain.getOpcode() == Opcodes.DUP ? "DUP"
-					: plain.getOpcode() == Opcodes.ARETURN ? "ARETURN" : "OP" + plain.getOpcode());
-			else body.add("?" + insn.getOpcode());
-		}
-		assertEquals(List.of("NEW " + BUILDER, "DUP", "INVOKESPECIAL " + BUILDER + ".<init>()V", "ARETURN"), body,
-				"the body must be exactly INBTBuilder.nbt()'s own instructions — nothing invented");
-	}
-
-	@Test
-	void everyCarrierCallSiteNowResolves() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(FORGE_RUNTIME), "staged Forge carrier absent: " + FORGE_RUNTIME);
-		ClassNode after = parse(transform(COMPOUND_TAG));
-		List<String> unresolved = new ArrayList<>();
-		int sites = 0;
-		for (String caller : List.of("net/minecraftforge/common/extensions/IForgeBlockPos", "net/minecraftforge/common/ForgeHooks")) {
-			ClassNode node = parse(bytesOf(FORGE_RUNTIME, caller));
-			for (MethodNode method : node.methods) {
-				for (AbstractInsnNode insn : method.instructions) {
-					if (!(insn instanceof MethodInsnNode call) || !COMPOUND_TAG.equals(call.owner)) continue;
-					sites++;
-					MethodNode target = declared(after, call.name, call.desc);
-					boolean ok = target != null
-							&& ((call.getOpcode() == Opcodes.INVOKESTATIC) == ((target.access & Opcodes.ACC_STATIC) != 0));
-					if (!ok) unresolved.add(caller + "." + method.name + " -> " + call.name + call.desc);
-				}
+	void nothingInTheTreeCarriesForgeSoTheTransformerAddsNothing() throws Exception {
+		// The premise of the re-anchor, read off the artifacts: no Forge class anywhere in the base, and no
+		// forge-runtime carrier beside it. Both are what the repair and its two carrier call-site tests were for.
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged artifact absent: " + MERGED_BASE);
+		int forgeEntries = 0;
+		try (ZipFile zip = new ZipFile(MERGED_BASE.toFile())) {
+			for (ZipEntry entry : java.util.Collections.list(zip.entries())) {
+				if (entry.getName().startsWith("net/minecraftforge/")) forgeEntries++;
 			}
 		}
-		assertTrue(sites >= 3, "the premise: the carrier calls CompoundTag.builder() from at least three sites, saw " + sites);
-		assertEquals(List.of(), unresolved, "carrier call sites on CompoundTag that still do not link");
-	}
+		assertEquals(0, forgeEntries, "the Forge family is back in the merged base — the repair for CompoundTag.builder()"
+				+ " and its carrier call-site tests have to come back with it");
+		assertFalse(Files.exists(TestFixtures.stagedRoot().resolve("forge-runtime/forge-runtime.jar")),
+				"a forge-runtime carrier is staged — re-derive the two call-site tests this class used to carry");
 
-	@Test
-	void theCarrierTypeItNewsStillHasAPublicNoArgConstructor() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(FORGE_RUNTIME), "staged Forge carrier absent: " + FORGE_RUNTIME);
-		ClassNode builder = parse(bytesOf(FORGE_RUNTIME, BUILDER));
-		MethodNode ctor = declared(builder, "<init>", "()V");
-		assertNotNull(ctor, BUILDER + " lost its no-arg constructor — the emitted body would NoSuchMethodError");
-		assertTrue((ctor.access & Opcodes.ACC_PUBLIC) != 0, "the constructor must be public for another class to new it");
+		byte[] before = bytesOf(MERGED_BASE, COMPOUND_TAG);
+		byte[] after = new NeoForbricMergedBaseCompatTransformer().transform(COMPOUND_TAG.replace('/', '.'), before, null);
+		assertSame(before, after, "there is no carrier to link and no repair in the pipeline, so nothing may change");
+		assertTrue(declared(parse(after), "builder", DESC) == null, "nothing may be synthesised here");
 	}
 
 	@Test

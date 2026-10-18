@@ -25,8 +25,12 @@ final class StagedFabricMixinFixture {
   return game("net/minecraft/world/entity/LivingEntity",vanilla);
  }
  static ClassNode game(String name,boolean vanilla)throws Exception{
-  Path p=vanilla?TestFixtures.vanillaJar():TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-  TestFixtures.require(vanilla?Fixture.MC_LIBRARIES:Fixture.STAGED,Files.isRegularFile(p),"actual game required");
+  // 1.21.1's own client jar is OBFUSCATED: it holds no net/minecraft/<Mojmap>.class entry at all, so reading one
+  // straight out of it NPEs on the entry. The vanilla body of a named class is that unpatched client in the
+  // base's Mojmap names — vanilla(name), off the intermediary cache of the same jar.
+  if(vanilla)return vanilla(name);
+  Path p=TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
+  TestFixtures.require(Fixture.STAGED,Files.isRegularFile(p),"actual game required");
   try(ZipFile z=new ZipFile(p.toFile())){return MixinFit.parse(z.getInputStream(z.getEntry(name+".class")).readAllBytes());}
  }
  static MethodNode method(ClassNode c,String name){return c.methods.stream().filter(m->m.name.equals(name)).findFirst().orElseThrow();}
@@ -50,10 +54,49 @@ final class StagedFabricMixinFixture {
    return MixinFit.parse(z.getInputStream(e).readAllBytes());
   }
  }
+ /** The module mixin as Mixin APPLIES it: the remapped class with its annotation strings resolved through the
+  * module's own — remapped — refmap, the lookup {@link ConfigRefmaps} makes for the kernel's own judging path.
+  * A fabric-api injector is authored in Yarn names, so judging the class as it stands reads "no anchor resolves"
+  * for anchors that bind perfectly; Mixin never sees those raw strings. */
+ static ClassNode resolved(String module,String name)throws Exception{
+  Path jar=remappedModule(TestFixtures.fabricApi(),module);
+  try(ZipFile z=new ZipFile(jar.toFile())){
+   ZipEntry e=z.getEntry(name+".class");
+   if(e==null)throw new AssertionError("actual mixin not found in the remapped module: "+name);
+   ClassNode node=MixinFit.parse(z.getInputStream(e).readAllBytes());
+   // Every config the module ships: a module has one per side, and only the one that DECLARES this mixin holds
+   // its refmap entries. Resolving through a config that does not know the class changes nothing.
+   for(String config:z.stream().map(ZipEntry::getName).filter(n->n.endsWith(".mixins.json")).toList()){
+    ConfigRefmaps.Refmap refmap=ConfigRefmaps.of(z.getInputStream(z.getEntry(config)).readAllBytes(),resource->{
+     ZipEntry entry=z.getEntry(resource);
+     try{return entry==null?null:z.getInputStream(entry).readAllBytes();}
+     catch(IOException unreadable){throw new java.io.UncheckedIOException(unreadable);}
+    });
+    refmap.resolve(node);
+   }
+   return node;
+  }
+ }
  /** The same class as the patched base's, from the unpatched vanilla 1.21.1 the patches were applied to,
   * in the base's Mojmap names: one class out of the intermediary cache of that vanilla client. */
  static ClassNode vanilla(String name)throws Exception{
   ClassNode cached=VANILLA_CLASSES.get(name);if(cached!=null)return cached;
+  ClassNode node=MixinFit.parse(vanillaBytes(name));
+  VANILLA_CLASSES.put(name,node);return node;
+ }
+ /** The vanilla body's own bytes, for the tests that read it with its debug info ({@link #vanilla(String)} goes
+  * through MixinFit, which skips it). */
+ static byte[] vanillaBytes(String name)throws Exception{
+  Path out=vanillaJar(name);
+  try(ZipFile z=new ZipFile(out.toFile())){
+   return z.getInputStream(z.stream().filter(x->x.getName().endsWith(".class")).findFirst().orElseThrow()).readAllBytes();
+  }
+ }
+ private static final java.util.Map<String,Path> VANILLA_JARS=new java.util.HashMap<>();
+ /** The unpatched client, remapped into the base's Mojmap names, as a one-class jar: the intermediary cache of
+  * the vanilla jar itself. */
+ private static Path vanillaJar(String name)throws Exception{
+  Path cached=VANILLA_JARS.get(name);if(cached!=null)return cached;
   NeoForbricMappings mappings=mappings();Path game=intermediaryGame(mappings);
   String entry=mappings.mapClass(name)+".class";
   Path work=Path.of("build/test-vanilla-classes",name.replace('/','_'));
@@ -64,11 +107,7 @@ final class StagedFabricMixinFixture {
    zo.putNextEntry(new ZipEntry(entry));zo.write(TestFixtures.requireEntry(Fixture.STAGED,game,entry));
   }
   ForgeModRemapper.remapJar(input,out,ForgeModRemapper.provider(mappings,NeoForbricMappings.INTERMEDIARY,NeoForbricMappings.NAMED),List.of(game),null);
-  ClassNode node;
-  try(ZipFile z=new ZipFile(out.toFile())){
-   node=MixinFit.parse(z.getInputStream(z.stream().filter(x->x.getName().endsWith(".class")).findFirst().orElseThrow()).readAllBytes());
-  }
-  VANILLA_CLASSES.put(name,node);return node;
+  VANILLA_JARS.put(name,out);return out;
  }
  private static Path remappedModule(Path api,String module)throws Exception{
   Path raw=Path.of("build/test-module-remap",module+"-raw.jar"),out=Path.of("build/test-module-remap",module+"-remapped.jar");

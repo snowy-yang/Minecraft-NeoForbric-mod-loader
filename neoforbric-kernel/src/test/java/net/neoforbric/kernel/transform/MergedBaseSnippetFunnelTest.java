@@ -17,47 +17,62 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
-import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.FieldInsnNode;
-import org.objectweb.asm.tree.MethodInsnNode;
-import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.TypeInsnNode;
-import org.objectweb.asm.tree.analysis.Analyzer;
-import org.objectweb.asm.tree.analysis.BasicVerifier;
-import org.objectweb.asm.util.Textifier;
-import org.objectweb.asm.util.TraceMethodVisitor;
 
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
-import net.neoforbric.kernel.mixin.MixinFit;
 
-/** The funnel over the REAL merged {@code RenderPipeline$Builder} and {@code $Snippet}, and its payoff for fabric-rendering-v1. */
+/**
+ * What this test used to assert, against the REAL merged base: that {@link SnippetConstructorFunnel} rewrites
+ * {@code RenderPipeline$Builder.buildSnippet} to construct the Snippet through the eleven-argument constructor
+ * with the stencil test scoped to the Builder's own field, that the Snippet's eleven-arg stub then takes from
+ * {@code KernelSnippets.take} instead of {@code Optional.empty}, that the twelve-arg canonical constructor is left
+ * byte for byte as it was, that a second pass changes nothing, that the switch turns both halves off, and — the
+ * payoff — that fabric-rendering-v1's {@code RenderPipelineBuilderMixin} reads PARTIAL on the raw base and FIT on
+ * the funnelled one.
+ *
+ * <p>None of that can run on 1.21.1, and each half was checked against the artifact rather than assumed:
+ *
+ * <ul>
+ *   <li>{@code com/mojang/blaze3d/pipeline/RenderPipeline} is here, but it is a single 3246-byte class with no
+ *       {@code Builder} and no {@code Snippet} nest member at all. There is no {@code buildSnippet}, no
+ *       {@code stencilTest} field and no eleven- or twelve-argument constructor: the class the funnel is written
+ *       against does not exist on this anchor.</li>
+ *   <li>fabric-api 0.116.17's {@code fabric-rendering-v1} module ships no {@code RenderPipelineBuilderMixin}
+ *       either — its {@code client/rendering} package holds ArmorFeatureRendererMixin, BlockColorsMixin,
+ *       EntityModelsMixin, WorldRendererMixin and the shader package, and no pipeline mixin. So the wrap the
+ *       funnel exists to satisfy went with the class.</li>
+ * </ul>
+ *
+ * <p>Re-pointing the funnel is not a rename: the whole seam (the Builder, its field, the stub, the mixin that
+ * needs it) is absent. What is asserted instead is that absence and the funnel's own stand-down — it reads the
+ * Snippet it would rewrite through its resolver and hands the Builder back untouched when there is none, which is
+ * the case on every class of this base. The gap is recorded rather than guessed at.
+ */
 class MergedBaseSnippetFunnelTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
-	private static final Path CLIENT_MODS = Path.of(System.getProperty("user.dir"), "run", "client-kernel", "mods").normalize();
-	private static final String RENDER_PIPELINE_BUILDER_MIXIN = "net/fabricmc/fabric/mixin/client/rendering/RenderPipelineBuilderMixin.class";
+	private static final String RENDER_PIPELINE = "com/mojang/blaze3d/pipeline/RenderPipeline";
+	private static final String RENDER_PIPELINE_BUILDER_MIXIN =
+			"net/fabricmc/fabric/mixin/client/rendering/RenderPipelineBuilderMixin.class";
 
 	@AfterEach
 	void reset() {
@@ -65,141 +80,72 @@ class MergedBaseSnippetFunnelTest {
 	}
 
 	@Test
-	void theBuilderConstructsThroughTheElevenArgConstructorWithTheStencilScoped() throws Exception {
-		SnippetConstructorFunnel funnel = new SnippetConstructorFunnel(rawResolver());
-		byte[] original = bytesOf(SnippetConstructorFunnel.BUILDER_INTERNAL);
-		byte[] routed = funnel.transform(SnippetConstructorFunnel.BUILDER, original, null);
-		assertNotSame(original, routed);
-		assertEquals(1, funnel.routedSites());
+	void theBuilderAndTheSnippetThisFunnelRewritesAreNotInThisBase() throws Exception {
+		ClassNode node = parse(bytesOf(RENDER_PIPELINE));
 
-		MethodNode build = find(parse(routed), SnippetConstructorFunnel.BUILD_SNIPPET);
-		List<MethodInsnNode> ctors = new ArrayList<>();
-		TypeInsnNode construction = null;
-		MethodInsnNode scope = null, clear = null;
-		for (AbstractInsnNode insn = build.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof TypeInsnNode t && t.getOpcode() == Opcodes.NEW) construction = t;
-			if (insn instanceof MethodInsnNode c && "<init>".equals(c.name) && SnippetConstructorFunnel.SNIPPET_INTERNAL.equals(c.owner)) ctors.add(c);
-			if (insn instanceof MethodInsnNode c && SnippetConstructorFunnel.RUNTIME.equals(c.owner) && "scope".equals(c.name)) scope = c;
-			if (insn instanceof MethodInsnNode c && SnippetConstructorFunnel.RUNTIME.equals(c.owner) && "clear".equals(c.name)) clear = c;
+		assertTrue(node.methods.stream().noneMatch(m -> SnippetConstructorFunnel.BUILD_SNIPPET.equals(m.name)),
+				"1.21.1's RenderPipeline has no " + SnippetConstructorFunnel.BUILD_SNIPPET + " — the method the "
+						+ "funnel rewrites");
+		assertTrue(node.fields.stream().noneMatch(f -> SnippetConstructorFunnel.STENCIL_FIELD.equals(f.name)),
+				"…nor a " + SnippetConstructorFunnel.STENCIL_FIELD + " field for the scoped stencil test");
+		assertFalse(nestMembers(node).contains(SnippetConstructorFunnel.BUILDER_INTERNAL),
+				"…nor a Builder nest member, the class the funnel is handed: " + nestMembers(node));
+		assertFalse(nestMembers(node).contains(SnippetConstructorFunnel.SNIPPET_INTERNAL),
+				"…nor the Snippet whose stub it redirects: " + nestMembers(node));
+	}
+
+	/** And the fabric-api mixin whose anchor the funnel was built to satisfy is gone with them. */
+	@Test
+	void theFabricWrapThisFunnelSatisfiesIsNotInThisFabricApi() throws Exception {
+		Path jar = TestFixtures.fabricApi();
+		TestFixtures.require(Fixture.THIRD_PARTY, Files.isRegularFile(jar), "actual Fabric API fixture required");
+
+		Set<String> entries = new LinkedHashSet<>();
+		try (ZipFile zip = new ZipFile(jar.toFile())) {
+			for (ZipEntry entry : zip.stream().toList()) {
+				entries.add(entry.getName());
+				if (!entry.getName().startsWith("META-INF/jars/") || !entry.getName().endsWith(".jar")) continue;
+				entries.addAll(entries(nested(zip, entry)));
+			}
 		}
-		assertEquals(1, ctors.size(), "exactly one Snippet construction");
-		assertEquals(11, Type.getArgumentTypes(ctors.get(0).desc).length, "…through the vanilla-shaped constructor");
-		assertNotNull(scope, "the stencil test is scoped");
-		assertTrue(previousReal(scope) instanceof FieldInsnNode f && SnippetConstructorFunnel.STENCIL_FIELD.equals(f.name), "…from the Builder's own field");
-		assertTrue(index(build, scope) < index(build, construction), "…before `new Snippet`");
-		assertNotNull(clear, "and cleared afterwards");
-		assertEquals(index(build, ctors.get(0)) + 1, index(build, clear), "…right after the constructor call");
-		// The twelfth argument's two feeding instructions are gone: nothing reads stencilTest right before the call.
-		assertTrue(!(previousReal(ctors.get(0)) instanceof FieldInsnNode f2 && SnippetConstructorFunnel.STENCIL_FIELD.equals(f2.name)));
-		for (MethodNode m : parse(routed).methods) new Analyzer<>(new BasicVerifier()).analyze(SnippetConstructorFunnel.BUILDER_INTERNAL, m);
+		assertFalse(entries.contains(RENDER_PIPELINE_BUILDER_MIXIN),
+				"fabric-rendering-v1 ships no " + RENDER_PIPELINE_BUILDER_MIXIN + " on this anchor — the wrap the "
+						+ "funnel exists for");
+		assertTrue(entries.contains("net/fabricmc/fabric/mixin/client/rendering/WorldRendererMixin.class"),
+				"the module itself is still there and was really read, nested jars included");
 	}
 
+	/** Both halves stand down on every class of this base: the Snippet they would rewrite cannot be resolved. */
 	@Test
-	void theSnippetStubTakesFromTheScopeAndTheCanonicalConstructorIsUntouched() throws Exception {
+	void onThisBaseTheFunnelStandsDownOnEveryClass() throws Exception {
+		byte[] pipeline = bytesOf(RENDER_PIPELINE);
 		SnippetConstructorFunnel funnel = new SnippetConstructorFunnel(rawResolver());
-		byte[] original = bytesOf(SnippetConstructorFunnel.SNIPPET_INTERNAL);
-		byte[] routed = funnel.transform(SnippetConstructorFunnel.SNIPPET, original, null);
-		assertNotSame(original, routed);
 
-		ClassNode before = parse(original), after = parse(routed);
-		SnippetConstructorFunnel.Stub stub = SnippetConstructorFunnel.stubOf(after);
-		assertNotNull(stub);
-		assertTrue(stub.alreadyRouted(), "the 11-arg constructor now calls KernelSnippets.take");
-		assertEquals(11, Type.getArgumentTypes(stub.ctor().desc).length);
-		assertEquals(0, count(stub.ctor(), "java/util/Optional", "empty"), "…and no longer Optional.empty");
-		MethodNode canonicalBefore = ctorWithArity(before, 12), canonicalAfter = ctorWithArity(after, 12);
-		assertEquals(listing(canonicalBefore), listing(canonicalAfter), "the 12-arg constructor is byte-for-byte what it was");
-		for (MethodNode m : after.methods) new Analyzer<>(new BasicVerifier()).analyze(SnippetConstructorFunnel.SNIPPET_INTERNAL, m);
-	}
-
-	/** The payoff: fabric-rendering-v1's wrap reads PARTIAL on the raw base and FIT on the funnelled one. */
-	@Test
-	void fabricRenderingsSnippetWrapFitsAfterTheFunnel() throws Exception {
-		byte[] mixin = nested("fabric-rendering-v1", RENDER_PIPELINE_BUILDER_MIXIN);
-		Function<String, byte[]> raw = rawResolver();
-		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(mixin, raw).verdict(), "premise (MixinFitStagedTest pins the wording)");
-
-		SnippetConstructorFunnel funnel = new SnippetConstructorFunnel(raw);
-		Map<String, byte[]> funnelled = Map.of(
-				SnippetConstructorFunnel.BUILDER_INTERNAL + ".class", funnel.transform(SnippetConstructorFunnel.BUILDER, bytesOf(SnippetConstructorFunnel.BUILDER_INTERNAL), null),
-				SnippetConstructorFunnel.SNIPPET_INTERNAL + ".class", funnel.transform(SnippetConstructorFunnel.SNIPPET, bytesOf(SnippetConstructorFunnel.SNIPPET_INTERNAL), null));
-		Function<String, byte[]> after = name -> funnelled.containsKey(name) ? funnelled.get(name) : raw.apply(name);
-		MixinFit.Result r = MixinFit.evaluate(mixin, after);
-		assertEquals(MixinFit.Verdict.FIT, r.verdict(), r.unresolved().toString());
-	}
-
-	@Test
-	void aSecondPassChangesNothingFurther() throws Exception {
-		SnippetConstructorFunnel funnel = new SnippetConstructorFunnel(rawResolver());
-		byte[] builder = funnel.transform(SnippetConstructorFunnel.BUILDER, bytesOf(SnippetConstructorFunnel.BUILDER_INTERNAL), null);
-		assertSame(builder, funnel.transform(SnippetConstructorFunnel.BUILDER, builder, null));
-		byte[] snippet = funnel.transform(SnippetConstructorFunnel.SNIPPET, bytesOf(SnippetConstructorFunnel.SNIPPET_INTERNAL), null);
-		assertSame(snippet, funnel.transform(SnippetConstructorFunnel.SNIPPET, snippet, null));
-	}
-
-	/** Both-or-nothing: a Snippet the resolver serves WITHOUT the recognised stub leaves the Builder untouched. */
-	@Test
-	void theBuilderStandsDownWhenTheSnippetStubIsNotRecognised() throws Exception {
-		Function<String, byte[]> raw = rawResolver();
-		byte[] noStub = bytesOf("com/mojang/blaze3d/pipeline/RenderPipeline");    // a real class, no such constructor
-		Function<String, byte[]> drifted = name -> (SnippetConstructorFunnel.SNIPPET_INTERNAL + ".class").equals(name) ? noStub : raw.apply(name);
-		byte[] original = bytesOf(SnippetConstructorFunnel.BUILDER_INTERNAL);
-		assertSame(original, new SnippetConstructorFunnel(drifted).transform(SnippetConstructorFunnel.BUILDER, original, null));
+		assertSame(pipeline, funnel.transform(SnippetConstructorFunnel.BUILDER, pipeline, null),
+				"handed as the Builder, the real RenderPipeline has no buildSnippet to rewrite and comes back as it was");
+		assertSame(pipeline, funnel.transform(SnippetConstructorFunnel.SNIPPET, pipeline, null),
+				"handed as the Snippet, it has no eleven-arg stub to redirect and comes back as it was");
+		assertEquals(0, funnel.routedSites());
 	}
 
 	@Test
 	void switchedOffBothHalvesStandDown() throws Exception {
 		System.setProperty(SnippetConstructorFunnel.PROPERTY, "off");
 		SnippetConstructorFunnel funnel = new SnippetConstructorFunnel(rawResolver());
-		byte[] builder = bytesOf(SnippetConstructorFunnel.BUILDER_INTERNAL);
-		byte[] snippet = bytesOf(SnippetConstructorFunnel.SNIPPET_INTERNAL);
-		assertSame(builder, funnel.transform(SnippetConstructorFunnel.BUILDER, builder, null));
-		assertSame(snippet, funnel.transform(SnippetConstructorFunnel.SNIPPET, snippet, null));
+		byte[] pipeline = bytesOf(RENDER_PIPELINE);
+
+		assertSame(pipeline, funnel.transform(SnippetConstructorFunnel.BUILDER, pipeline, null));
+		assertSame(pipeline, funnel.transform(SnippetConstructorFunnel.SNIPPET, pipeline, null));
 		assertTrue(funnel.anchors().anchors().isEmpty());
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
 
-	private static MethodNode find(ClassNode node, String name) {
-		for (MethodNode m : node.methods) if (m.name.equals(name)) return m;
-		throw new AssertionError(name);
-	}
-
-	private static MethodNode ctorWithArity(ClassNode node, int arity) {
-		for (MethodNode m : node.methods) if ("<init>".equals(m.name) && Type.getArgumentTypes(m.desc).length == arity) return m;
-		throw new AssertionError("no " + arity + "-arg constructor");
-	}
-
-	private static int count(MethodNode m, String owner, String name) {
-		int n = 0;
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn instanceof MethodInsnNode c && owner.equals(c.owner) && name.equals(c.name)) n++;
-		}
-		return n;
-	}
-
-	private static int index(MethodNode m, AbstractInsnNode target) {
-		int i = 0;
-		for (AbstractInsnNode insn = m.instructions.getFirst(); insn != null; insn = insn.getNext()) {
-			if (insn.getOpcode() < 0) continue;
-			if (insn == target) return i;
-			i++;
-		}
-		return -1;
-	}
-
-	private static String listing(MethodNode m) {
-		Textifier text = new Textifier();
-		m.accept(new TraceMethodVisitor(text));
-		StringBuilder sb = new StringBuilder();
-		for (Object line : text.getText()) sb.append(line);
-		return sb.toString();
-	}
-
-	private static AbstractInsnNode previousReal(AbstractInsnNode cursor) {
-		AbstractInsnNode prev = cursor == null ? null : cursor.getPrevious();
-		while (prev != null && prev.getOpcode() < 0) prev = prev.getPrevious();
-		return prev;
+	/** The nest members {@code RenderPipeline} declares, by internal name. */
+	private static Set<String> nestMembers(ClassNode node) {
+		Set<String> members = new LinkedHashSet<>();
+		if (node.nestMembers != null) members.addAll(node.nestMembers);
+		return members;
 	}
 
 	private static ClassNode parse(byte[] bytes) {
@@ -226,19 +172,6 @@ class MergedBaseSnippetFunnelTest {
 		return bytes;
 	}
 
-	private static byte[] nested(String module, String entry) throws Exception {
-		Path fabricApi = null;
-		if (Files.isDirectory(CLIENT_MODS)) {
-			try (var files = Files.list(CLIENT_MODS)) {
-				fabricApi = files.filter(p -> p.getFileName().toString().startsWith("fabric-api-")).findFirst().orElse(null);
-			}
-		}
-		TestFixtures.require(Fixture.THIRD_PARTY, fabricApi != null, "fabric-api jar absent from run/client-kernel/mods");
-		byte[] bytes = readFromNestedJar(fabricApi, module, entry);
-		TestFixtures.require(Fixture.THIRD_PARTY, bytes != null, entry + " absent from the nested " + module);
-		return bytes;
-	}
-
 	private static byte[] readFromJar(Path jar, String entry) throws Exception {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry found = zip.getEntry(entry);
@@ -249,23 +182,21 @@ class MergedBaseSnippetFunnelTest {
 		}
 	}
 
-	private static byte[] readFromNestedJar(Path outer, String modulePrefix, String entry) throws Exception {
-		try (ZipFile zip = new ZipFile(outer.toFile())) {
-			for (Enumeration<? extends ZipEntry> e = zip.entries(); e.hasMoreElements(); ) {
-				ZipEntry nested = e.nextElement();
-				if (!nested.getName().startsWith("META-INF/jars/" + modulePrefix)) continue;
-				Path tmp = Files.createTempFile("neoforbric-nested", ".jar");
-				try (InputStream in = zip.getInputStream(nested)) {
-					Files.write(tmp, in.readAllBytes());
-				}
-				try {
-					byte[] bytes = readFromJar(tmp, entry);
-					if (bytes != null) return bytes;
-				} finally {
-					Files.deleteIfExists(tmp);
-				}
-			}
+	/**
+	 * A nested entry's bytes. Read straight off the outer jar's entry, NOT through a {@code ZipInputStream} over
+	 * it: that one sits before its first local header and reads nothing until {@code getNextEntry()}.
+	 */
+	private static byte[] nested(ZipFile zip, ZipEntry entry) throws Exception {
+		try (InputStream in = zip.getInputStream(entry)) {
+			return in.readAllBytes();
 		}
-		return null;
+	}
+
+	private static Set<String> entries(byte[] jarBytes) throws Exception {
+		Set<String> names = new LinkedHashSet<>();
+		try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(jarBytes))) {
+			for (ZipEntry e; (e = zip.getNextEntry()) != null;) names.add(e.getName());
+		}
+		return names;
 	}
 }

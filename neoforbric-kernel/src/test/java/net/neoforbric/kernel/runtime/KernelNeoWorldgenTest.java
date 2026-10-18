@@ -17,6 +17,7 @@
 package net.neoforbric.kernel.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,9 +105,13 @@ class KernelNeoWorldgenTest {
 			for (String call : calls) {
 				assertTrue(call.startsWith("4:LOWEST|false|"), "the four-argument overload at LOWEST, after NeoForgeEventHandler's NORMAL: " + call);
 			}
-			assertTrue(calls.get(0).contains("net.neoforged.neoforge.event.AddServerReloadListenersEvent"), calls.get(0));
+			// Re-anchored class names: 1.21.1 has AddReloadListenerEvent (26.x renamed it
+			// AddServerReloadListenersEvent) and a single TagsUpdatedEvent whose cause is read inside the handler
+			// (26.x split the server-data-load cause out as its own nested event class).
+			assertTrue(calls.get(0).contains("net.neoforged.neoforge.event.AddReloadListenerEvent"), calls.get(0));
 			assertTrue(calls.get(1).contains("net.neoforged.neoforge.registries.datamaps.DataMapsUpdatedEvent"), calls.get(1));
-			assertTrue(calls.get(2).contains("net.neoforged.neoforge.event.TagsUpdatedEvent$ServerDataLoad"), calls.get(2));
+			assertTrue(calls.get(2).contains("net.neoforged.neoforge.event.TagsUpdatedEvent"), calls.get(2));
+			assertFalse(calls.get(2).contains("TagsUpdatedEvent$"), "this line has no per-cause nested event: " + calls.get(2));
 			assertNotNull(priority);
 		}
 	}

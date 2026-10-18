@@ -193,9 +193,30 @@ class PrepareWorldTest {
             MethodNode compatibility = flows.methods.stream().filter(m -> m.name.equals("openWorldCheckWorldStemCompatibility")).findFirst().orElseThrow();
             MethodInsnNode check = Arrays.stream(compatibility.instructions.toArray()).filter(instruction -> instruction instanceof MethodInsnNode call
                     && call.name.equals("hasConfirmedExperimentalWarning")).map(MethodInsnNode.class::cast).findFirst().orElseThrow();
-            JumpInsnNode acknowledged = assertInstanceOf(JumpInsnNode.class, nextCode(check));
-            assertEquals(Opcodes.IFNE, acknowledged.getOpcode(), "true acknowledgement must jump to the no-warning branch");
-            assertEquals(Opcodes.ICONST_0, nextCode(acknowledged.label).getOpcode());
+
+            // This base reads the flag through the && idiom — `(data instanceof PrimaryLevelData) && flag` is
+            // materialised into a local and branched on afterwards — so the jump right after the call is the
+            // false path of that expression, not the branch on the acknowledgement. (26.x compiled it straight to
+            // `ifne`, which is what this used to assert.)
+            JumpInsnNode materialised = assertInstanceOf(JumpInsnNode.class, nextCode(check));
+            assertEquals(Opcodes.IFEQ, materialised.getOpcode(), "the acknowledgement is read as a boolean, false path first");
+            assertEquals(Opcodes.ICONST_0, nextCode(materialised.label).getOpcode());
+
+            // The branch that acts on it: a true acknowledgement jumps over askForBackup and lands on the
+            // no-warning path. That is the property that matters — the flag suppressing only this prompt.
+            JumpInsnNode acknowledged = null;
+            for (AbstractInsnNode instruction = materialised.getNext(); instruction != null; instruction = instruction.getNext()) {
+                if (instruction instanceof JumpInsnNode jump && jump.getOpcode() == Opcodes.IFNE) { acknowledged = jump; break; }
+            }
+            assertNotNull(acknowledged, "nothing branches on the acknowledgement any more");
+            // The target is the argument loads of the no-warning call, so walk to the call itself.
+            MethodInsnNode noWarning = null;
+            for (AbstractInsnNode instruction = acknowledged.label; instruction != null; instruction = instruction.getNext()) {
+                if (instruction instanceof MethodInsnNode call) { noWarning = call; break; }
+            }
+            assertNotNull(noWarning, "the acknowledgement's branch leads nowhere");
+            assertEquals("openWorldLoadBundledResourcePack", noWarning.name,
+                    "a true acknowledgement must land on the no-warning path");
             assertTrue(Arrays.stream(compatibility.instructions.toArray()).anyMatch(instruction -> instruction instanceof MethodInsnNode call
                     && call.name.equals("askForBackup")), "the prompt itself must remain in production");
         }

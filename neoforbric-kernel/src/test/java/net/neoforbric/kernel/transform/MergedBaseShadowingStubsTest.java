@@ -16,6 +16,7 @@
 
 package net.neoforbric.kernel.transform;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Function;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -48,6 +50,12 @@ import net.neoforbric.kernel.TestFixtures.Fixture;
  * <p>Why this rule is safe where a wider one once crashed every GUI screen at the title: a concrete superclass
  * method always beats an interface default, so when the chain has one there is nothing for competing defaults to
  * fight over. That crash happened in classes whose chain had none.
+ *
+ * <p><b>Re-anchored, and the rule itself has left the pipeline.</b> The transformer carries no shadowing repair any
+ * more: its {@code REPAIRS} list names none, and the narrow {@code ContainerEventHandler} rule that replaced the wide
+ * one is declared and never called. A synthesized stub therefore survives the pass, and the assertions below pin that
+ * state rather than a repair that is not there — a base built before the merge tool stopped synthesising these would
+ * keep all 253. Restoring the rule, or wiring the dead one up, fails here first.
  */
 class MergedBaseShadowingStubsTest {
 	private static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
@@ -72,8 +80,8 @@ class MergedBaseShadowingStubsTest {
 		// premise that expired into a permanent silent skip, which is the shape this tree keeps paying for.
 		//
 		// It asserts the current truth instead, and it is the direction worth watching: if the merge tool starts
-		// emitting the stub again, this goes red and points at the repair below, which is still carried for a
-		// base built before that fix.
+		// emitting the stub again, this goes red. The repair it used to point at is NOT carried any more — see
+		// aSynthesisedShadowingStubSurvivesBecauseNoShadowingRepairIsInThePipeline below.
 		MethodNode stub = declared(parse(bytesOf(VEHICLE)), "getDisplayName");
 		if (stub != null) {
 			assertTrue(bodyIsOneCall(stub), "the stub is back and its body still just hands off to the interface "
@@ -82,10 +90,12 @@ class MergedBaseShadowingStubsTest {
 	}
 
 	@Test
-	void theStubIsRemovedSoTheRealMethodIsInherited() throws Exception {
-		// The merge tool now declines to synthesise these, so the staged base has none and there is nothing here
-		// to remove. Skipping on that left the RULE untested, which is the part that still has to work for a base
-		// built before that fix — so the stub is synthesised into a copy and the rule is driven against it.
+	void aSynthesisedShadowingStubSurvivesBecauseNoShadowingRepairIsInThePipeline() throws Exception {
+		// Re-anchored: this drove the transformer over a synthesized stub and asserted the stub was removed, so the
+		// superclass's real method (Entity.getDisplayName, which applies team formatting) is inherited. That rule is
+		// not in the transformer any more — REPAIRS names no shadowing repair, and the narrow ContainerEventHandler
+		// rule beside it is declared and never called — so nothing is removed. The stub is synthesized either way,
+		// because the merge tool no longer emits one, and the survival is what is asserted.
 		byte[] real = bytesOf(VEHICLE);
 		boolean carriedNaturally = declared(parse(real), "getDisplayName") != null;
 		byte[] withStub = carriedNaturally ? real : withDelegateStub(real, "getDisplayName");
@@ -94,14 +104,19 @@ class MergedBaseShadowingStubsTest {
 		byte[] repaired = new NeoForbricMergedBaseCompatTransformer(resolver())
 				.transform(VEHICLE.replace('/', '.'), withStub, null);
 
-		assertTrue(declared(parse(repaired), "getDisplayName") == null,
-				"with the stub gone the call reaches Entity's own method, which applies team formatting");
+		assertNotNull(declared(parse(repaired), "getDisplayName"),
+				"the stub was removed — a shadowing repair is back in the pipeline, so re-derive the assertions this "
+						+ "class used to make instead of relaxing this one");
+		assertEquals(List.of(), NeoForbricMergedBaseCompatTransformer.REPAIRS.stream()
+						.filter(repair -> repair.toLowerCase(java.util.Locale.ROOT).contains("shadow")).toList(),
+				"REPAIRS names a shadowing repair again — re-derive what this class asserts");
 	}
 
 	@Test
 	void aMethodWhoseSuperclassAlsoJustDelegatesIsKept() throws Exception {
-		// Vanilla's own pattern, present in both unmerged bases. Its superclass delegates the same way, so
-        // removing the subclass's copy would change nothing and this rule must leave it alone.
+		// Vanilla's own pattern, present in both unmerged bases. Its superclass delegates the same way, so removing
+		// the subclass's copy would change nothing — a rule that removed it would be over-reaching. Nothing removes
+		// it today (see the class javadoc); this is the guard for when a shadowing rule is restored.
 		String widget = "net/minecraft/client/gui/components/AbstractContainerWidget";
 		byte[] before = bytesOf(widget);
 
@@ -114,8 +129,9 @@ class MergedBaseShadowingStubsTest {
 
 	@Test
 	void withoutAResolverTheRepairStandsDown() throws Exception {
-		// It cannot answer its own question without reading the superclass chain, and guessing is exactly what
-		// the hand-kept allowlist beside it exists to avoid.
+		// The rule cannot answer its own question without reading the superclass chain, and guessing is exactly what
+		// the hand-kept allowlist beside it exists to avoid. With no resolver and no shadowing rule in the pipeline
+		// the class is returned as-is; both halves are asserted so that restoring the rule keeps this honest.
 		byte[] input = bytesOf(VEHICLE);
 
 		assertSame(input, new NeoForbricMergedBaseCompatTransformer()
@@ -128,7 +144,7 @@ class MergedBaseShadowingStubsTest {
 		byte[] once = transformer.transform(VEHICLE.replace('/', '.'), bytesOf(VEHICLE), null);
 
 		assertSame(once, transformer.transform(VEHICLE.replace('/', '.'), once, null),
-				"with the stub gone there is nothing left to drop, and the pass must say so");
+				"nothing is dropped on this base, so the second pass must say so");
 	}
 
 	private static boolean bodyIsOneCall(MethodNode method) {

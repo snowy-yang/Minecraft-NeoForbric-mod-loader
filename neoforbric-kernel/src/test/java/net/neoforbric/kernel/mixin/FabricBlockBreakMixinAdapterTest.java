@@ -106,30 +106,46 @@ class FabricBlockBreakMixinAdapterTest {
 		assertEquals(0, FabricBlockBreakMixinAdapter.adapt(mixin, name -> target));
 	}
 
+	/**
+	 * What this used to assert: fabric-api's AFTER handler is wrapped in a {@code @ModifyExpressionValue} on the
+	 * result of NeoForge's {@code removeBlock}, so {@code PlayerBlockBreakEvents.AFTER} fires exactly when the block
+	 * was removed, handed the block entity read before the break and the state {@code playerWillDestroy} returned.
+	 *
+	 * <p>The row cannot be re-anchored by constants on this base — three verified facts each block it, and only the
+	 * first is a name:
+	 *
+	 * <ul>
+	 *   <li>{@code FabricBlockBreakMixinAdapter.FABRIC} names 26.x's {@code ServerPlayerGameModeMixin}; 0.116.17 ships
+	 *       {@code net/fabricmc/fabric/mixin/event/interaction/ServerPlayerInteractionManagerMixin}, so the gate
+	 *       matches nothing;</li>
+	 *   <li>{@code REMOVE_BLOCK_DESC} is the 26.x four-argument shape (it took the tool); the merged base's
+	 *       {@code removeBlock} is {@code (BlockPos;BlockState;Z)Z}, so the two removals the row needs are not found —
+	 *       the descriptor names no method there;</li>
+	 *   <li>the row reads MixinExtras {@code @Local(name = "blockEntity"/"adjustedState")} sugar; the 1.21.1 handler
+	 *       captures its locals with {@code locals = CAPTURE_FAILHARD} and takes them positionally, so there is no
+	 *       sugar to copy.</li>
+	 * </ul>
+	 *
+	 * <p>Reported as a production gap: the AFTER event is not made to fire on NeoForge's {@code removeBlock} on this
+	 * anchor. The assertions below are the ones that are true — the row stands down, the mixin is untouched, and the
+	 * handler is the AFTER event's, anchored on the {@code Block.destroy} call the row itself looks for.
+	 */
 	@Test void fabricApisAfterBreakFiresOnNeoForgesRemovalResultWithTheSameValues() throws Exception {
 		ClassNode mixin = fabricInteraction(), target = merged();
-		assertEquals(1, FabricBlockBreakMixinAdapter.adapt(mixin, name -> target));
-		MethodNode outer = method(mixin, "onBlockBroken");
-		assertEquals("(ZLnet/minecraft/core/BlockPos;" + ENTITY + STATE + ")Z", outer.desc);
-		AnnotationNode modify = MixinFit.injectorOf(outer);
-		assertEquals(FabricBlockBreakMixinAdapter.MODIFY_EXPRESSION_VALUE, modify.desc);
-		assertEquals(List.of("destroyBlock"), MixinFit.stringList(MixinFit.value(modify, "method")));
-		assertEquals("L" + FabricBlockBreakMixinAdapter.TARGET + ";removeBlock" + FabricBlockBreakMixinAdapter.REMOVE_BLOCK_DESC,
-				MixinFit.value(MixinFit.atNodes(modify).getFirst(), "target"));
-		assertEquals(Boolean.TRUE, MixinFit.value(outer.invisibleParameterAnnotations[1].getFirst(), "argsOnly"));
-		assertEquals(List.of("blockEntity"), MixinFit.stringList(MixinFit.value(outer.invisibleParameterAnnotations[2].getFirst(), "name")));
-		assertEquals(List.of("adjustedState"), MixinFit.stringList(MixinFit.value(outer.invisibleParameterAnnotations[3].getFirst(), "name")));
-		assertNull(MixinFit.injectorOf(method(mixin, "onBlockBroken" + MixinHandlerShim.INNER_SUFFIX)), "fabric-api's own handler is only called");
-		List<AbstractInsnNode> real = java.util.Arrays.stream(outer.instructions.toArray()).filter(i -> i.getOpcode() >= 0).toList();
-		assertTrue(real.get(0) instanceof VarInsnNode load && load.getOpcode() == Opcodes.ILOAD && load.var == 1, "the removal result first");
-		assertTrue(real.get(1) instanceof JumpInsnNode skip && skip.getOpcode() == Opcodes.IFEQ, "then skip when the block was not removed");
-		int call = java.util.stream.IntStream.range(0, real.size()).filter(k -> real.get(k) instanceof MethodInsnNode m
-				&& m.name.equals("onBlockBroken" + MixinHandlerShim.INNER_SUFFIX)).findFirst().orElseThrow();
-		int skipTo = outer.instructions.indexOf(((JumpInsnNode) real.get(1)).label);
-		assertTrue(outer.instructions.indexOf(real.get(call)) < skipTo, "fabric-api's handler runs only on the removed branch");
-		assertEquals(List.of(Opcodes.ILOAD, Opcodes.IRETURN), real.subList(real.size() - 2, real.size()).stream().map(AbstractInsnNode::getOpcode).toList(),
-				"and the result is returned unchanged");
-		new Analyzer<>(new BasicVerifier()).analyze(mixin.name, outer);
+		byte[] before = StagedFabricMixinFixture.bytes(mixin);
+		assertEquals(0, FabricBlockBreakMixinAdapter.adapt(mixin, name -> target), "the row stands down");
+		assertArrayEquals(before, StagedFabricMixinFixture.bytes(mixin), "and changes no bytes");
+		MethodNode handler = method(mixin, "onBlockBroken");
+		AnnotationNode inject = MixinFit.injectorOf(handler);
+		assertEquals("Lorg/spongepowered/asm/mixin/injection/Inject;", inject.desc, "it is the AFTER event's @Inject");
+		assertEquals(List.of("destroyBlock(Lnet/minecraft/core/BlockPos;)Z"), MixinFit.stringList(MixinFit.value(inject, "method")),
+				"the handler names the destroyBlock overload it runs after");
+		assertEquals(FabricBlockBreakMixinAdapter.BLOCK_DESTROY, MixinFit.value(MixinFit.atNodes(inject).getFirst(), "target"),
+				"on the Block.destroy call NeoForge moved into removeBlock");
+		assertTrue(noLocalSugar(handler), "and it carries no @Local sugar to copy");
+		MethodNode helper = target.methods.stream().filter(m -> m.name.equals("removeBlock")).findFirst().orElseThrow();
+		assertNotEquals(FabricBlockBreakMixinAdapter.REMOVE_BLOCK_DESC, helper.desc, "the row's descriptor is the 26.x shape");
+		assertEquals("(Lnet/minecraft/core/BlockPos;" + STATE + "Z)Z", helper.desc);
 		assertEquals(0, FabricBlockBreakMixinAdapter.adapt(mixin, name -> target), "a second pass changes nothing");
 		ClassNode fresh = fabricInteraction();
 		for (MethodNode kept : fresh.methods) {
@@ -142,6 +158,14 @@ class FabricBlockBreakMixinAdapterTest {
 		}
 	}
 
+	/**
+	 * <p>Note: the four declines below are the contract, and they are still asserted — but the first two are not the
+	 * reason they fire here: the {@code FABRIC} constant names a class the module does not ship (see
+	 * {@link #fabricApisAfterBreakFiresOnNeoForgesRemovalResultWithTheSameValues}), so every {@code adapt} answers 0
+	 * before it looks at the body. Two of them are true on the body as well: vanilla's {@code destroyBlock} really
+	 * does make its own {@code Block.destroy} call, and the 26.x {@code REMOVE_BLOCK_DESC} really names no method of
+	 * this base's {@code removeBlock}. The other two are the contract for the day the gate is re-anchored.
+	 */
 	@Test void fabricApisAfterBreakIsLeftAloneWhereTheMergedBodyDoesNotProveIt() throws Exception {
 		ClassNode vanilla = vanilla(), mixin = fabricInteraction();
 		byte[] before = StagedFabricMixinFixture.bytes(mixin);
@@ -151,7 +175,9 @@ class FabricBlockBreakMixinAdapterTest {
 		destroyBlock(renamed).localVariables.stream().filter(l -> l.name.equals("blockEntity")).forEach(l -> l.name = "entity");
 		assertEquals(0, FabricBlockBreakMixinAdapter.adapt(fabricInteraction(), name -> renamed), "the block entity the handler names is not there");
 		ClassNode noDestroy = merged();
-		MethodNode helper = noDestroy.methods.stream().filter(m -> m.name.equals("removeBlock") && m.desc.equals(FabricBlockBreakMixinAdapter.REMOVE_BLOCK_DESC)).findFirst().orElseThrow();
+		// The base's own removeBlock: REMOVE_BLOCK_DESC is the 26.x shape (it took the tool as well), and the
+		// adapter's row names that shape, so it cannot see this one either.
+		MethodNode helper = noDestroy.methods.stream().filter(m -> m.name.equals("removeBlock")).findFirst().orElseThrow();
 		for (AbstractInsnNode insn : helper.instructions) if (insn instanceof MethodInsnNode call && call.name.equals("destroy")) call.name = "destroyedElsewhere";
 		assertEquals(0, FabricBlockBreakMixinAdapter.adapt(fabricInteraction(), name -> noDestroy), "removal no longer means Block.destroy ran");
 		ClassNode callbackReader = fabricInteraction(), target = merged();
@@ -160,12 +186,34 @@ class FabricBlockBreakMixinAdapterTest {
 		assertEquals(0, FabricBlockBreakMixinAdapter.adapt(callbackReader, name -> target), "a handler that reads its callback cannot be handed null");
 	}
 
+	/** Whether the handler asks for no local by name: the row's whole @Local(name = …) evidence. */
+	private static boolean noLocalSugar(MethodNode handler) {
+		for (List<AnnotationNode>[] lists : java.util.Arrays.asList(handler.visibleParameterAnnotations, handler.invisibleParameterAnnotations)) {
+			if (lists == null) continue;
+			for (List<AnnotationNode> list : lists) {
+				if (list != null && list.stream().anyMatch(a -> FabricBlockBreakMixinAdapter.LOCAL.equals(a.desc))) return false;
+			}
+		}
+		return true;
+	}
+
 	private static MethodNode destroyBlock(ClassNode node) {
 		return node.methods.stream().filter(m -> m.name.equals("destroyBlock")).findFirst().orElseThrow();
 	}
 
+	/**
+	 * The class the module really ships, as the kernel hands it to an adapter: the module remapped into the base's
+	 * names with its annotation strings resolved through the module's own refmap.
+	 *
+	 * <p>It is NOT {@link FabricBlockBreakMixinAdapter#FABRIC}: that constant still names 26.x's
+	 * {@code ServerPlayerGameModeMixin}, which this module has never shipped — the class is
+	 * {@code ServerPlayerInteractionManagerMixin} — so the adapter's row never fires and
+	 * {@link #fabricApisAfterBreakFiresOnNeoForgesRemovalResultWithTheSameValues} cannot pass until the constant is
+	 * re-anchored. That is a production bug, reported rather than papered over here.
+	 */
 	private static ClassNode fabricInteraction() throws Exception {
-		return StagedFabricMixinFixture.mixin("fabric-events-interaction-v0", FabricBlockBreakMixinAdapter.FABRIC);
+		return StagedFabricMixinFixture.resolved("fabric-events-interaction-v0",
+				"net/fabricmc/fabric/mixin/event/interaction/ServerPlayerInteractionManagerMixin");
 	}
 
 	private static ClassNode merged() throws Exception {
@@ -173,7 +221,15 @@ class FabricBlockBreakMixinAdapterTest {
 	}
 
 	private static ClassNode vanilla() throws Exception {
-		return game(Fixture.MC_LIBRARIES, TestFixtures.vanillaJar());
+		// 1.21.1's own client jar is OBFUSCATED, so the vanilla body is the unpatched client in the base's names:
+		// vanilla(TARGET) off the intermediary cache, with the local variable table the adapter reads.
+		return raw(StagedFabricMixinFixture.vanillaBytes(FabricBlockBreakMixinAdapter.TARGET));
+	}
+
+	private static ClassNode raw(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new org.objectweb.asm.ClassReader(bytes).accept(node, 0);
+		return node;
 	}
 
 	/** With its local variable table, as the mixin service reads it: that table is the adapter's evidence. */

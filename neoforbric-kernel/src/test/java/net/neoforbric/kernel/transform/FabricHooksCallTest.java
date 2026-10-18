@@ -93,7 +93,7 @@ class FabricHooksCallTest {
 		byte[] out = LifecycleHookInjector.forServer().transform(LifecycleHookInjector.SERVER_MAIN, serverMain(), null);
 
 		List<AbstractInsnNode> code = real(method(out, "main"));
-		int window = indexOfCall(code, KERNEL_LIFECYCLE, "onServerModLoading");
+		int window = indexOfCall(code, KERNEL_LIFECYCLE, "onServerModLoadingNoArg");
 		assertTrue(window >= 0, "the NeoForge trigger must still be redirected to the kernel");
 		assertEquals(Opcodes.ACONST_NULL, code.get(window + 1).getOpcode(), "Fabric passes a null run directory");
 		assertEquals(Opcodes.ACONST_NULL, code.get(window + 2).getOpcode(), "Fabric passes a null game instance");
@@ -141,7 +141,7 @@ class FabricHooksCallTest {
 		for (AbstractInsnNode insn : main.instructions) {
 			if (!(insn instanceof MethodInsnNode call)) continue;
 			if (call.owner.equals(HOOKS) && call.name.equals("startServer")) markers++;
-			if (call.owner.equals(KERNEL_LIFECYCLE) && call.name.equals("onServerModLoading")) redirects++;
+			if (call.owner.equals(KERNEL_LIFECYCLE) && call.name.equals("onServerModLoadingNoArg")) redirects++;
 		}
 		assertEquals(1, markers, "one Hooks.startServer per method, whatever the number of trigger calls");
 		assertEquals(2, redirects, "premise: both trigger calls were redirected");
@@ -177,7 +177,7 @@ class FabricHooksCallTest {
 
 		MethodNode main = method(out, "main");
 		List<AbstractInsnNode> code = real(main);
-		int window = indexOfCall(code, KERNEL_LIFECYCLE, "onServerModLoading");
+		int window = indexOfCall(code, KERNEL_LIFECYCLE, "onServerModLoadingNoArg");
 		assertTrue(window >= 0, "the merged Main.main must still carry the NeoForge trigger");
 		MethodInsnNode marker = (MethodInsnNode) code.get(window + 3);
 		assertEquals(HOOKS + ".startServer" + HOOK_DESC, marker.owner + "." + marker.name + marker.desc);
@@ -316,7 +316,7 @@ class FabricHooksCallTest {
 	}
 
 	/**
-	 * owo-lib 0.13.1's own {@code MainMixin} and {@code MinecraftMixin}, against the real merged {@code Main} and
+	 * owo-lib 0.12.15.4's own {@code MainMixin} and {@code MinecraftClientMixin}, against the real merged {@code Main} and
 	 * {@code Minecraft} as the kernel transforms them: both FIT. Before the group was read, both stayed PARTIAL on
 	 * their Quilt alternative after the Fabric call was put in -- a SUSPECTED finding on every boot.
 	 */
@@ -332,7 +332,7 @@ class FabricHooksCallTest {
 			MixinFit.Result mainMixin = MixinFit.evaluate(entry(owo, "io/wispforest/owo/mixin/MainMixin.class"),
 					name -> "net/minecraft/server/Main.class".equals(name) ? server : null);
 			assertEquals(MixinFit.Verdict.FIT, mainMixin.verdict(), mainMixin.unresolved().toString());
-			MixinFit.Result minecraftMixin = MixinFit.evaluate(entry(owo, "io/wispforest/owo/mixin/MinecraftMixin.class"),
+			MixinFit.Result minecraftMixin = MixinFit.evaluate(entry(owo, "io/wispforest/owo/mixin/MinecraftClientMixin.class"),
 					name -> "net/minecraft/client/Minecraft.class".equals(name) ? client : null);
 			assertEquals(MixinFit.Verdict.FIT, minecraftMixin.verdict(), minecraftMixin.unresolved().toString());
 		}
@@ -340,7 +340,7 @@ class FabricHooksCallTest {
 
 	// --- fixtures -------------------------------------------------------------------------------------------------
 
-	/** {@code main(String[])}: {@code if (args.length == 0) ServerModLoader.load(false);} — the merged base's shape. */
+	/** {@code main(String[])}: {@code if (args.length == 0) ServerModLoader.load();} — the merged base's shape. */
 	private static byte[] serverMain() {
 		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "net/minecraft/server/Main", null, "java/lang/Object", null);
@@ -351,8 +351,7 @@ class FabricHooksCallTest {
 		mv.visitVarInsn(Opcodes.ALOAD, 0);
 		mv.visitInsn(Opcodes.ARRAYLENGTH);
 		mv.visitJumpInsn(Opcodes.IFNE, skip);
-		mv.visitInsn(Opcodes.ICONST_0);
-		mv.visitMethodInsn(Opcodes.INVOKESTATIC, SERVER_MOD_LOADER, "load", "(Z)V", false);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, SERVER_MOD_LOADER, "load", "()V", false);
 		mv.visitLabel(skip);
 		mv.visitInsn(Opcodes.RETURN);
 		mv.visitMaxs(0, 0);
@@ -361,7 +360,7 @@ class FabricHooksCallTest {
 		return cw.toByteArray();
 	}
 
-	/** {@code main(String[])}: NeoForge's {@code ServerModLoader.load(false)}, twice. */
+	/** {@code main(String[])}: NeoForge's {@code ServerModLoader.load()}, twice. */
 	private static byte[] serverMainTwice() {
 		ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
 		cw.visit(Opcodes.V21, Opcodes.ACC_PUBLIC, "net/minecraft/server/Main", null, "java/lang/Object", null);
@@ -372,11 +371,9 @@ class FabricHooksCallTest {
 		mv.visitVarInsn(Opcodes.ALOAD, 0);
 		mv.visitInsn(Opcodes.ARRAYLENGTH);
 		mv.visitJumpInsn(Opcodes.IFNE, skip);
-		mv.visitInsn(Opcodes.ICONST_0);
-		mv.visitMethodInsn(Opcodes.INVOKESTATIC, SERVER_MOD_LOADER, "load", "(Z)V", false);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, SERVER_MOD_LOADER, "load", "()V", false);
 		mv.visitLabel(skip);
-		mv.visitInsn(Opcodes.ICONST_0);
-		mv.visitMethodInsn(Opcodes.INVOKESTATIC, SERVER_MOD_LOADER, "load", "(Z)V", false);
+		mv.visitMethodInsn(Opcodes.INVOKESTATIC, SERVER_MOD_LOADER, "load", "()V", false);
 		mv.visitInsn(Opcodes.RETURN);
 		mv.visitMaxs(0, 0);
 		mv.visitEnd();
@@ -410,7 +407,7 @@ class FabricHooksCallTest {
 			for (AbstractInsnNode insn : m.instructions) {
 				if (insn instanceof MethodInsnNode call && SERVER_MOD_LOADER.equals(call.owner)) {
 					call.owner = KERNEL_LIFECYCLE;
-					call.name = "onServerModLoading";
+					call.name = "onServerModLoadingNoArg";
 				}
 			}
 		}

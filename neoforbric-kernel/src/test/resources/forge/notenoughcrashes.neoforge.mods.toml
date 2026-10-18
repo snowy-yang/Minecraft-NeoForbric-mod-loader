@@ -5,7 +5,7 @@ license = "MIT"
 
 [[mods]]
 modId = "notenoughcrashes"
-version = "4.4.9+26.2"
+version = "4.4.9+1.21.1"
 displayName = "Not Enough Crashes"
 authors = "Fudge"
 description = '''

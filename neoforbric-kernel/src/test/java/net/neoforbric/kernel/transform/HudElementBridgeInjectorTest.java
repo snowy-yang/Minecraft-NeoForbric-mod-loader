@@ -18,12 +18,14 @@ package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -43,34 +45,55 @@ import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * Verifies in real {@code neoforge-runtime.jar} bytecode that every {@code GuiLayer} registered with NeoForge's
- * layer manager passes through the kernel, and that the overloads which merely delegate are left alone.
+ * Verifies in real {@code neoforge-runtime.jar} bytecode that the injector routes NeoForge's layer manager at the
+ * seam 1.21.1 actually offers.
+ *
+ * <p>Re-anchored: the class used to assert the seam was {@code add(Identifier, GuiLayer[, BooleanSupplier])}. On this
+ * anchor there is no {@code net.neoforged.neoforge.client.gui.GuiLayer} and no {@code Identifier}: the overload is
+ * {@code add(ResourceLocation, LayeredDraw$Layer)}, so the 26.x descriptors matched nothing, the injector returned
+ * every class untouched and warned "the seam has drifted" on every launch. The injector now matches the real
+ * overload and the shapes are pinned here so the next drift is visible.
+ *
+ * <p>Routing it is correct even though fabric-api 0.116.17 ships no HUD element registry: its whole HUD API is
+ * {@code HudRenderCallback}, dispatched by {@code InGameHudMixin}'s {@code @Inject(at = @At("TAIL"))} into
+ * {@code Gui.render}, which the merge cannot break. {@code KernelHudBridge.wrap} therefore returns every layer by
+ * identity here — the transformer hands the layer over, the bridge decides there is nothing to bridge.
  */
 class HudElementBridgeInjectorTest {
 	private static final Path NEOFORGE_RUNTIME = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar");
 
 	private static final String TARGET = "net.neoforged.neoforge.client.gui.GuiLayerManager";
 	private static final String ENTRY = "net/neoforged/neoforge/client/gui/GuiLayerManager.class";
-	private static final String LAYER = "Lnet/neoforged/neoforge/client/gui/GuiLayer;";
+	private static final String LAYER = "Lnet/minecraft/client/gui/LayeredDraw$Layer;";
 	private static final String HOOK = "net/neoforbric/kernel/boot/KernelHudBridge";
 
 	@Test
-	void routesBothGuiLayerOverloads() throws Exception {
-		ClassNode node = transformed();
+	void theRealSeamIsLayeredDrawAndTheInjectorRoutesIt() throws Exception {
+		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEOFORGE_RUNTIME), "staged neoforge-runtime.jar absent");
+		byte[] before = readClass();
+		ClassNode node = parse(before);
 
-		int routed = 0;
-		for (MethodNode m : node.methods) {
-			if (!"add".equals(m.name)) continue;
-			Type[] args = Type.getArgumentTypes(m.desc);
-			boolean takesLayer = args.length >= 2 && LAYER.equals(args[1].getDescriptor());
-			if (!takesLayer) continue;
+		List<String> adds = node.methods.stream().filter(m -> "add".equals(m.name)).map(m -> m.desc).toList();
+		assertTrue(adds.contains("(Lnet/minecraft/resources/ResourceLocation;Lnet/minecraft/client/gui/LayeredDraw$Layer;)"
+						+ "Lnet/neoforged/neoforge/client/gui/GuiLayerManager;"),
+				"the two-arg overload's shape moved — re-derive the seam the injector has to match: " + adds);
+		assertTrue(adds.contains("(Lnet/neoforged/neoforge/client/gui/GuiLayerManager;Ljava/util/function/BooleanSupplier;)"
+						+ "Lnet/neoforged/neoforge/client/gui/GuiLayerManager;"),
+				"the sub-manager overload's shape moved: " + adds);
+		assertTrue(adds.stream().noneMatch(desc -> desc.contains("Lnet/minecraft/resources/Identifier;")
+						|| desc.contains("Lnet/neoforged/neoforge/client/gui/GuiLayer;")),
+				"the 26.x GuiLayer/Identifier seam is back — re-derive the injector against it: " + adds);
 
-			assertTrue(callsHook(m), "add" + m.desc + " must route its layer through KernelHudBridge.wrap");
+		byte[] after = new HudElementBridgeInjector().transform(TARGET, before, null);
+		assertNotSame(before, after, "the layer-taking overload matches, so the class must be rewritten");
+
+		int hits = 0;
+		for (MethodNode m : parse(after).methods) {
+			if (!"add".equals(m.name) || !callsHook(m)) continue;
+			hits++;
 			assertPrologue(m);
-			routed++;
 		}
-		assertEquals(2, routed, "expected the (Identifier, GuiLayer) and (Identifier, GuiLayer, BooleanSupplier) "
-				+ "overloads — the NeoForge API drifted");
+		assertEquals(1, hits, "exactly add(ResourceLocation, LayeredDraw$Layer) carries the wrap");
 	}
 
 	@Test
@@ -119,13 +142,16 @@ class HudElementBridgeInjectorTest {
 	private static ClassNode transformed() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(NEOFORGE_RUNTIME), "staged neoforge-runtime.jar absent");
 
-		byte[] out = new HudElementBridgeInjector().transform(TARGET, readClass(), null);
+		return parse(new HudElementBridgeInjector().transform(TARGET, readClass(), null));
+	}
+
+	private static ClassNode parse(byte[] bytes) {
 		ClassNode node = new ClassNode();
-		new ClassReader(out).accept(node, 0);
+		new ClassReader(bytes).accept(node, 0);
 		return node;
 	}
 
-	/** ALOAD 1; ALOAD 2; INVOKESTATIC wrap; CHECKCAST GuiLayer; ASTORE 2 — and it must come FIRST. */
+	/** ALOAD 1; ALOAD 2; INVOKESTATIC wrap; CHECKCAST LayeredDraw$Layer; ASTORE 2 — and it must come FIRST. */
 	private static void assertPrologue(MethodNode m) {
 		AbstractInsnNode insn = m.instructions.getFirst();
 		while (insn != null && insn.getOpcode() == -1) insn = insn.getNext();

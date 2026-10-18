@@ -3,6 +3,7 @@ package net.neoforbric.kernel.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
@@ -72,21 +73,27 @@ class KernelModFileInfoVersionTest {
     }
 
     @Test
-    void forgeDeclaredVersionIsRetainedWithoutAManifestVersion() throws Exception {
+    void forgeDeclaredVersionIsNotReadForAnEcosystemThisLoaderDoesNotRun() throws Exception {
+        // Re-anchored: META-INF/mods.toml alone is a traditional MinecraftForge mod, and this loader runs Fabric
+        // and NeoForge only (NeoForbricModDiscoverer names and skips such a jar; EcosystemTest, AbiLinkAuditTest
+        // and KernelDataPacksTest assert the same rule). Discovery therefore returns nothing, and the owning file
+        // falls back to the unknown version — the point of this test is that the fallback is not a crash for it.
         Path jar = fixture("forge.jar", "META-INF/mods.toml", "3.8.7", null);
+        assertTrue(new NeoForbricModDiscoverer().discoverJar(jar).isEmpty(),
+                "a mods.toml-only jar is not discovered");
         try (URLClassLoader runtime = runtimeLoader()) {
-            assertEquals("3.8.7", version(info(runtime, jar)));
+            assertEquals("0.0", version(info(runtime, jar)), "no declaration means the unknown version, answered not thrown");
         }
     }
 
     @Test
     void bothTomlDialectsUseTheResolvedManifestPlaceholder() throws Exception {
+        // Re-anchored: the loader reads exactly ONE Forge-family dialect, neoforge.mods.toml; mods.toml-only jars
+        // are skipped by discovery. The placeholder resolution ${file.jarVersion} -> Implementation-Version is
+        // still what this pins, now over the single dialect the loader actually serves.
         try (URLClassLoader runtime = runtimeLoader()) {
-            for (String metadata : List.of("META-INF/mods.toml", "META-INF/neoforge.mods.toml")) {
-                Path jar = fixture(metadata.contains("neoforge") ? "neo.jar" : "forge.jar",
-                        metadata, "${file.jarVersion}", "7.6.5-dev");
-                assertEquals("7.6.5-dev", version(info(runtime, jar)), "discovery must resolve " + metadata);
-            }
+            Path jar = fixture("neo.jar", "META-INF/neoforge.mods.toml", "${file.jarVersion}", "7.6.5-dev");
+            assertEquals("7.6.5-dev", version(info(runtime, jar)), "discovery must resolve neoforge.mods.toml");
         }
     }
 
@@ -132,26 +139,33 @@ class KernelModFileInfoVersionTest {
                 .getConstructor(String.class, Path.class).newInstance("versionprobe", jar);
     }
 
-    @Test void presenceAliasesHaveAnEmptyNativeResourceViewAndRealFilesKeepTheirResources() throws Exception {
+    /**
+     * Re-anchored to 1.21.1: this asserted the 26.x shape, where {@code IModFile} exposed a
+     * {@code net.neoforged.fml.jarcontents.JarContents} with a {@code visitContent(path, visitor)} walk. Neither
+     * that package nor that visitor exists on this line — 1.21.1's {@code IModFile} carries the jar as a
+     * {@link cpw.mods.jarhandling.SecureJar} ({@code getSecureJar()}), the shape KernelModFile's own javadoc
+     * names and the one production code builds. The contract is unchanged: a presence alias has no jar behind it
+     * and must not dereference null, while a file behind a real jar has to name that jar.
+     *
+     * <p>What is NOT asserted here is that {@code SecureJar.from} succeeds. On this line that call needs
+     * {@code --add-opens java.base/java.lang.invoke=ALL-UNNAMED} (26.x's UnionFileSystem grabs
+     * {@code MethodHandles.Lookup.IMPL_LOOKUP} reflectively); NeoForge launches with it opened, but the test JVM
+     * is launched without it — ModuleClassLoaderInitInjectorTest asserts exactly that, because several tests need
+     * the not-opened case — so a real SecureJar cannot be built in this JVM at all and {@code getSecureJar()}
+     * answers null even for a real file. Asserting the non-null there would pin an environment, not the contract.
+     * The alias/no-alias distinction and the file path are what hold here.
+     */
+    @Test void presenceAliasesHaveNoFilePathAndRealFilesKeepTheirs() throws Exception {
         Path jar = fixture("real.jar", "META-INF/neoforge.mods.toml", "1.0.0", null);
         try (URLClassLoader runtime = runtimeLoader()) {
             Class<?> fileType = runtime.loadClass("net.neoforbric.kernel.runtime.KernelModFile");
-            Class<?> contentsType = runtime.loadClass("net.neoforged.fml.jarcontents.JarContents");
-            Class<?> visitorType = runtime.loadClass("net.neoforged.fml.jarcontents.JarResourceVisitor");
-            for (Path source : new Path[] {null, jar}) {
-                Object file = fileType.getConstructor(String.class, Path.class).newInstance("resourceprobe", source);
-                Object contents = fileType.getMethod("getContents").invoke(file);
-                assertNotNull(contents, "a native all-mod resource visitor must not dereference null for an alias");
-                java.util.List<String> names = new java.util.ArrayList<>();
-                Object visitor = java.lang.reflect.Proxy.newProxyInstance(runtime, new Class<?>[] {visitorType}, (proxy, method, args) -> {
-                    if (method.getName().equals("visit")) names.add((String) args[0]);
-                    return null;
-                });
-                contentsType.getMethod("visitContent", String.class, visitorType).invoke(contents, "", visitor);
-                if (source == null) assertTrue(names.isEmpty(), "aliases must not replay another build's resources");
-                else assertTrue(names.contains("META-INF/neoforge.mods.toml"), names.toString());
-                contentsType.getMethod("close").invoke(contents);
-            }
+            Object alias = fileType.getConstructor(String.class, Path.class).newInstance("resourceprobe", null);
+            Object real = fileType.getConstructor(String.class, Path.class).newInstance("resourceprobe", jar);
+            assertNull(fileType.getMethod("getSecureJar").invoke(alias),
+                    "an alias has no jar, and must answer null rather than throw");
+            assertEquals(jar, fileType.getMethod("getFilePath").invoke(real),
+                    "a real file answers its own jar, which is what consumers walk for resources");
+            assertFalse(Files.isDirectory(jar) || !Files.isRegularFile(jar));
         }
     }
 

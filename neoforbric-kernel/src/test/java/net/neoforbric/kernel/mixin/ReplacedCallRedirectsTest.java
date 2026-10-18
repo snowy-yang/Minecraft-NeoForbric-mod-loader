@@ -122,12 +122,24 @@ class ReplacedCallRedirectsTest {
 		assertUntouched(other, merged(SHOVEL), "a return that is neither null nor the forwarded value");
 	}
 
-	/** A row moves only its listed families' mods, only on the shape it was written for, and only while switched on. */
+	/**
+	 * A row moves only its listed families' mods, only on the shape it was written for, and only while switched on.
+	 *
+	 * <p>What the FML cases used to assert: that a <em>MinecraftForge</em>-compiled mod's redirect of
+	 * {@code matches(KeyEvent)} is moved anyway, because the host was MinecraftForge's own screen and it still made
+	 * that call. There is no such host on this anchor. {@link Ecosystem} names NeoForge as the only FML-descended
+	 * ecosystem ("a jar whose only manifest is META-INF/mods.toml is reported as unsupported and skipped"), the
+	 * merged host is NeoForge's {@code checkHotbarKeyPressed}, and it already asks the row's own carrier
+	 * {@code isActiveAndMatches(key)} at both places — so no FML-compiled mod's redirect of the vanilla call is
+	 * moved here, which is what the three {@code NEOFORGE} cases below assert.
+	 */
 	@Test void theFamilyTheHostAndTheSwitchDecide() throws Exception {
-		assertUntouched(hotbar("NeoForgeMixin", Ecosystem.NEOFORGE, false), merged(SCREEN), "NeoForge mods call NeoForge's");
-		assertEquals(1, ReplacedCallRedirects.adapt(hotbar("ForgeHotbarMixin", Ecosystem.NEOFORGE, false), merged(SCREEN)),
-				"MinecraftForge's own screen still calls matches(KeyEvent)");
-		assertUntouched(itemUse("ForgeItemUseMixin", Ecosystem.NEOFORGE), merged(LIVING), "MinecraftForge's own asks ForgeHooks");
+		assertUntouched(hotbar("NeoForgeMixin", Ecosystem.NEOFORGE, false), merged(SCREEN),
+				"NeoForge mods call NeoForge's — and the merged host already asks isActiveAndMatches, not matches");
+		assertUntouched(hotbar("ForgeHotbarMixin", Ecosystem.NEOFORGE, false), merged(SCREEN),
+				"MinecraftForge is not an ecosystem here and its screen is not the host; the row lists Fabric mods only");
+		assertUntouched(itemUse("ForgeItemUseMixin", Ecosystem.NEOFORGE), merged(LIVING),
+				"the merged updatingUsingItem asks CommonHooks.canContinueUsing, not ItemStack.isSameItem");
 		assertUntouched(hotbar("VanillaHostMixin", Ecosystem.FABRIC, false), vanilla(SCREEN), "vanilla's call is there");
 		System.setProperty(ReplacedCallRedirects.PROPERTY, "off");
 		assertUntouched(hotbar("OffMixin", Ecosystem.FABRIC, false), merged(SCREEN), "switched off");

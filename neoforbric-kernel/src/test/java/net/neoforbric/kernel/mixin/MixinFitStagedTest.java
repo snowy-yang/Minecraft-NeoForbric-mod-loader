@@ -31,35 +31,52 @@ import java.util.zip.ZipFile;
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 import org.junit.jupiter.api.Test;
+import org.objectweb.asm.tree.ClassNode;
 
-/** The three anchor kinds over REAL fabric-api mixins and the RAW merged base — the verdicts before any repair. */
+/**
+ * The three anchor kinds over REAL fabric-api mixins and the RAW merged base — the verdicts before any repair.
+ *
+ * <p>Two of these used to read fabric-api classes that 0.116.17 does not ship: {@code RenderPipelineBuilderMixin}
+ * (fabric-rendering-v1) and {@code AttributeSupplierBuilderAccessor} (fabric-object-builder-api-v1), and
+ * {@code transfer/SimpleContainerMixin}, which is {@code transfer/SimpleInventoryMixin}. The accessor is rebuilt
+ * here in the shape it had — the field it names, {@code AttributeSupplier$Builder.builder}, is still widened by the
+ * merge and {@code WidenedFieldTwinInjector} still carries that row — because the fabric class that read it is not
+ * here; the other two are asserted on the real classes that carry the same contract.
+ */
 class MixinFitStagedTest {
 	static final Path MERGED_BASE = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar").normalize();
 	static final Path CLIENT_MODS = Path.of(System.getProperty("user.dir"), "run", "client-kernel", "mods").normalize();
 
-	static final String RENDER_PIPELINE_BUILDER_MIXIN = "net/fabricmc/fabric/mixin/client/rendering/RenderPipelineBuilderMixin.class";
-	static final String ATTRIBUTE_BUILDER_ACCESSOR = "net/fabricmc/fabric/mixin/object/builder/AttributeSupplierBuilderAccessor.class";
-	static final String SIMPLE_CONTAINER_MIXIN = "net/fabricmc/fabric/mixin/transfer/SimpleContainerMixin.class";
+	static final String SIMPLE_CONTAINER_MIXIN = "net/fabricmc/fabric/mixin/transfer/SimpleInventoryMixin.class";
+	static final String ATTRIBUTE_BUILDER_OWNER = "net/minecraft/world/entity/ai/attributes/AttributeSupplier$Builder";
+	static final String IMMUTABLE_MAP_BUILDER = "Lcom/google/common/collect/ImmutableMap$Builder;";
 
-	/** Today's false FIT: the merged Snippet constructor takes 12 arguments, fabric's wrap handles 11. */
+	/**
+	 * Used to assert that fabric-rendering-v1's {@code RenderPipelineBuilderMixin} read PARTIAL on the raw base with
+	 * the arity named ("handler wraps a 11-arg constructor, the call site constructs with 12"). That mixin is not in
+	 * 0.116.17 and no mixin the module does ship has an arity mismatch, so the same contract — a NEW point the raw
+	 * base cannot answer is named as an anchor — is asserted on the real NEW point that cannot bind.
+	 */
 	@Test
-	void theSnippetWrapReadsPartialOnTheRawBaseNamingTheArity() throws Exception {
+	void aNewPointTheRawBaseDoesNotHaveIsNamedAsAnAnchor() throws Exception {
 		Function<String, byte[]> resolver = rawResolver();
-		byte[] mixin = nested("fabric-rendering-v1", RENDER_PIPELINE_BUILDER_MIXIN);
-		MixinFit.Result r = MixinFit.evaluate(mixin, resolver);
+		ClassNode mixin = StagedFabricMixinFixture.resolved("fabric-item-api-v1",
+				"net/fabricmc/fabric/mixin/item/BrewingStandBlockEntityMixin");
+		MixinFit.Result r = MixinFit.evaluate(StagedFabricMixinFixture.bytes(mixin), resolver);
 		assertEquals(MixinFit.Verdict.PARTIAL, r.verdict(), r.unresolved().toString());
-		assertEquals(1, r.unresolved().size(), r.unresolved().toString());
-		assertTrue(r.unresolved().get(0).contains("@At(NEW)") && r.unresolved().get(0).contains("Snippet")
-				&& r.unresolved().get(0).contains("handler wraps a 11-arg constructor, the call site constructs with 12"),
+		assertTrue(r.unresolved().stream().anyMatch(u -> u.contains("@At(NEW)") && u.contains("is not constructed in")),
 				r.unresolved().toString());
 	}
 
-	/** Mixin's InvalidAccessorException on every fabric-api boot, now named as an anchor. */
+	/**
+	 * Mixin's InvalidAccessorException on every fabric-api boot, now named as an anchor: the merged
+	 * {@code AttributeSupplier$Builder.builder} is a {@code java.util.Map}, where vanilla declares — and the accessor
+	 * reads — an {@code ImmutableMap.Builder}.
+	 */
 	@Test
 	void theAttributeBuilderAccessorCannotBindOnTheRawBase() throws Exception {
 		Function<String, byte[]> resolver = rawResolver();
-		byte[] mixin = nested("fabric-object-builder-api-v1", ATTRIBUTE_BUILDER_ACCESSOR);
-		MixinFit.Result r = MixinFit.evaluate(mixin, resolver);
+		MixinFit.Result r = MixinFit.evaluate(attributeBuilderAccessor(), resolver);
 		assertEquals(1, r.unresolved().size(), r.unresolved().toString());
 		assertTrue(r.unresolved().get(0).contains("@Accessor field")
 				&& r.unresolved().get(0).contains("builder:Lcom/google/common/collect/ImmutableMap$Builder;"), r.unresolved().toString());
@@ -69,19 +86,52 @@ class MixinFitStagedTest {
 	@Test
 	void theAttributeBuilderAccessorBindsAgainstTheTwinnedBase() throws Exception {
 		Function<String, byte[]> raw = rawResolver();
-		String owner = "net/minecraft/world/entity/ai/attributes/AttributeSupplier$Builder";
+		String owner = ATTRIBUTE_BUILDER_OWNER;
 		byte[] twinned = new net.neoforbric.kernel.transform.WidenedFieldTwinInjector().transform(owner.replace('/', '.'), raw.apply(owner + ".class"), null);
 		Function<String, byte[]> after = name -> (owner + ".class").equals(name) ? twinned : raw.apply(name);
-		MixinFit.Result r = MixinFit.evaluate(nested("fabric-object-builder-api-v1", ATTRIBUTE_BUILDER_ACCESSOR), after);
+		MixinFit.Result r = MixinFit.evaluate(attributeBuilderAccessor(), after);
 		assertTrue(r.unresolved().isEmpty(), r.unresolved().toString());
 	}
 
-	/** An explicit-descriptor selector is not touched by overload resolution — the R1 case stays R1's. */
+	/**
+	 * {@code fabric-object-builder-api-v1}'s {@code AttributeSupplierBuilderAccessor}, in the shape 0.116.17 no
+	 * longer ships but the merged base still needs: an {@code @Accessor} for {@code AttributeSupplier$Builder.builder}
+	 * as vanilla declares it.
+	 */
+	static byte[] attributeBuilderAccessor() {
+		org.objectweb.asm.tree.ClassNode mixin = new org.objectweb.asm.tree.ClassNode();
+		mixin.version = org.objectweb.asm.Opcodes.V21;
+		mixin.access = org.objectweb.asm.Opcodes.ACC_PUBLIC | org.objectweb.asm.Opcodes.ACC_ABSTRACT;
+		mixin.name = "net/fabricmc/fabric/mixin/object/builder/AttributeSupplierBuilderAccessor";
+		org.objectweb.asm.tree.AnnotationNode type =
+				new org.objectweb.asm.tree.AnnotationNode("Lorg/spongepowered/asm/mixin/Mixin;");
+		type.values = new java.util.ArrayList<>(java.util.List.of("value",
+				new java.util.ArrayList<>(java.util.List.of(org.objectweb.asm.Type.getObjectType(ATTRIBUTE_BUILDER_OWNER)))));
+		mixin.invisibleAnnotations = new java.util.ArrayList<>(java.util.List.of(type));
+		org.objectweb.asm.tree.MethodNode getter = new org.objectweb.asm.tree.MethodNode(
+				org.objectweb.asm.Opcodes.ACC_PUBLIC | org.objectweb.asm.Opcodes.ACC_ABSTRACT, "builder", "()" + IMMUTABLE_MAP_BUILDER, null, null);
+		org.objectweb.asm.tree.AnnotationNode accessor =
+				new org.objectweb.asm.tree.AnnotationNode("Lorg/spongepowered/asm/mixin/gen/Accessor;");
+		accessor.values = new java.util.ArrayList<>(java.util.List.of("value", "builder"));
+		getter.visibleAnnotations = new java.util.ArrayList<>(java.util.List.of(accessor));
+		mixin.methods = new java.util.ArrayList<>(java.util.List.of(getter));
+		return StagedFabricMixinFixture.bytes(mixin);
+	}
+
+	/**
+	 * An explicit-descriptor selector resolves on the merged base as Mixin applies it: 0.116.17's transfer mixin
+	 * names {@code SimpleContainer.setItem(int, ItemStack)} with its descriptor and the merged body still declares
+	 * it, so R1 has nothing to move. Used to assert the opposite — PARTIAL, R1's to retarget — on 26.x's
+	 * {@code SimpleContainerMixin}, which is not in this module.
+	 */
 	@Test
-	void anExplicitDescriptorSelectorIsStillPartialWithoutRetargeting() throws Exception {
+	void anExplicitDescriptorSelectorResolvesOnTheMergedBase() throws Exception {
 		Function<String, byte[]> resolver = rawResolver();
-		byte[] mixin = nested("fabric-transfer-api-v1", SIMPLE_CONTAINER_MIXIN);
-		assertEquals(MixinFit.Verdict.PARTIAL, MixinFit.evaluate(mixin, resolver).verdict());
+		ClassNode mixin = StagedFabricMixinFixture.resolved("fabric-transfer-api-v1",
+				"net/fabricmc/fabric/mixin/transfer/SimpleInventoryMixin");
+		MixinFit.Result r = MixinFit.evaluate(StagedFabricMixinFixture.bytes(mixin), resolver);
+		assertEquals(MixinFit.Verdict.FIT, r.verdict(), r.unresolved().toString());
+		assertEquals(r.total(), r.resolved(), r.toString());
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------

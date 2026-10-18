@@ -17,33 +17,46 @@ import net.fabricmc.api.EnvType;
 
 /**
  * {@link HudElementBridgeInjector}'s output, run: a layer added to NeoForge's {@code GuiLayerManager} is the one the
- * bridge hands back, inside the overload's {@code BooleanSupplier} gate, so a hidden vanilla layer hides the Fabric
- * elements attached to it too.
+ * bridge hands back, and a sub-manager re-added through the manager overload is not wrapped a second time.
  *
  * <p>The bridge is a recording stand-in under {@code KernelHudBridge}'s name, defined child-first: the real one
  * resolves fabric-rendering-v1 and generates a class through the kernel's game loader. Its stand-in wraps every layer
  * it is given so that the wrap shows in what the manager renders.
+ *
+ * <p>Re-anchored to 1.21.1: the stand-ins used to be {@code add(Identifier, GuiLayer[, BooleanSupplier])}. On this
+ * anchor there is no {@code GuiLayer} and no {@code Identifier} — the overload is
+ * {@code add(ResourceLocation, LayeredDraw$Layer)} and the gate lives on {@code add(GuiLayerManager, BooleanSupplier)}
+ * (javap on {@code neoforge-runtime.jar}). The old shape matched nothing, so this test proved the wrap on a seam the
+ * game does not have. The gate assertion survives in its real form: a child manager added under a false condition
+ * draws nothing, because the child's own layers were wrapped when they were added to the child.
  */
 @ExecutesInjector(HudElementBridgeInjector.class)
 class HudElementBridgeInjectorExecutionTest {
 	private static final String MANAGER = "net.neoforged.neoforge.client.gui.GuiLayerManager";
-	private static final String IDENTIFIER = "net.minecraft.resources.Identifier";
+	private static final String RESOURCE_LOCATION = "net.minecraft.resources.ResourceLocation";
+	private static final String LAYER = "net.minecraft.client.gui.LayeredDraw$Layer";
 	private static final String BRIDGE = "net.neoforbric.kernel.boot.KernelHudBridge";
 
 	private static final Map<String, String> STAND_INS = Map.of(
-			IDENTIFIER, """
+			RESOURCE_LOCATION, """
 					package net.minecraft.resources;
 
-					public record Identifier(String path) {
+					public record ResourceLocation(String path) {
+						@Override
+						public String toString() {
+							return "minecraft:" + path;
+						}
 					}
 					""",
-			"net.neoforged.neoforge.client.gui.GuiLayer", """
-					package net.neoforged.neoforge.client.gui;
+			"net.minecraft.client.gui.LayeredDraw", """
+					package net.minecraft.client.gui;
 
 					import java.util.List;
 
-					public interface GuiLayer {
-						void render(List<String> drawn);
+					public interface LayeredDraw {
+						interface Layer {
+							void render(List<String> drawn);
+						}
 					}
 					""",
 			MANAGER, """
@@ -52,19 +65,20 @@ class HudElementBridgeInjectorExecutionTest {
 					import java.util.ArrayList;
 					import java.util.List;
 					import java.util.function.BooleanSupplier;
-					import net.minecraft.resources.Identifier;
+					import net.minecraft.client.gui.LayeredDraw;
+					import net.minecraft.resources.ResourceLocation;
 
 					public class GuiLayerManager {
-						public final List<GuiLayer> layers = new ArrayList<>();
+						public final List<LayeredDraw.Layer> layers = new ArrayList<>();
 
-						public GuiLayerManager add(Identifier id, GuiLayer layer) {
+						public GuiLayerManager add(ResourceLocation id, LayeredDraw.Layer layer) {
 							layers.add(layer);
 							return this;
 						}
 
-						public GuiLayerManager add(Identifier id, GuiLayer layer, BooleanSupplier condition) {
+						public GuiLayerManager add(GuiLayerManager child, BooleanSupplier condition) {
 							layers.add(drawn -> {
-								if (condition.getAsBoolean()) layer.render(drawn);
+								if (condition.getAsBoolean()) child.renderInto(drawn);
 							});
 							return this;
 						}
@@ -73,9 +87,13 @@ class HudElementBridgeInjectorExecutionTest {
 							layers.add(drawn -> drawn.add("a NeoForge mod's layer"));
 						}
 
+						public void renderInto(List<String> drawn) {
+							for (LayeredDraw.Layer layer : layers) layer.render(drawn);
+						}
+
 						public List<String> render() {
 							List<String> drawn = new ArrayList<>();
-							for (GuiLayer layer : layers) layer.render(drawn);
+							renderInto(drawn);
 							return drawn;
 						}
 					}
@@ -85,15 +103,15 @@ class HudElementBridgeInjectorExecutionTest {
 
 					import java.util.ArrayList;
 					import java.util.List;
-					import net.neoforged.neoforge.client.gui.GuiLayer;
+					import net.minecraft.client.gui.LayeredDraw;
 
 					public final class KernelHudBridge {
 						public static final List<String> calls = new ArrayList<>();
 
 						public static Object wrap(Object identifier, Object layer) {
 							calls.add("wrap " + identifier);
-							GuiLayer vanilla = (GuiLayer) layer;
-							return (GuiLayer) drawn -> {
+							LayeredDraw.Layer vanilla = (LayeredDraw.Layer) layer;
+							return (LayeredDraw.Layer) drawn -> {
 								vanilla.render(drawn);
 								drawn.add("fabric elements on " + identifier);
 							};
@@ -102,7 +120,7 @@ class HudElementBridgeInjectorExecutionTest {
 					""");
 
 	private static Object layer(ClassLoader loader, String name) throws ClassNotFoundException {
-		Class<?> type = loader.loadClass("net.neoforged.neoforge.client.gui.GuiLayer");
+		Class<?> type = loader.loadClass(LAYER);
 		return java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[] {type}, (proxy, method, args) -> {
 			if (!method.getName().equals("render")) throw new UnsupportedOperationException(method.getName());
 			@SuppressWarnings("unchecked")
@@ -113,20 +131,26 @@ class HudElementBridgeInjectorExecutionTest {
 	}
 
 	private static Object id(ClassLoader loader, String path) throws Throwable {
-		return InjectorExecution.construct(loader.loadClass(IDENTIFIER), path);
+		return InjectorExecution.construct(loader.loadClass(RESOURCE_LOCATION), path);
+	}
+
+	/** A child manager holding one layer, gated on {@code drawn}. */
+	private static Object child(ClassLoader loader, String path, boolean drawn) throws Throwable {
+		Object child = InjectorExecution.construct(loader.loadClass(MANAGER));
+		InjectorExecution.invoke(child, "add", id(loader, path), layer(loader, path));
+		return child;
 	}
 
 	@SuppressWarnings("unchecked")
 	private static List<String> hud(ClassLoader loader) throws Throwable {
 		Object manager = InjectorExecution.construct(loader.loadClass(MANAGER));
 		InjectorExecution.invoke(manager, "add", id(loader, "hotbar"), layer(loader, "hotbar"));
-		InjectorExecution.invoke(manager, "add", id(loader, "boss_bar"), layer(loader, "boss bar"), (BooleanSupplier) () -> true);
-		InjectorExecution.invoke(manager, "add", id(loader, "chat"), layer(loader, "chat"), (BooleanSupplier) () -> false);
+		InjectorExecution.invoke(manager, "add", child(loader, "chat", false), (BooleanSupplier) () -> false);
 		InjectorExecution.invoke(manager, "initModdedLayers");
 		return (List<String>) InjectorExecution.invoke(manager, "render");
 	}
 
-	@Test void addedLayersCarryTheBridgeInsideTheirGate(@TempDir Path work) throws Throwable {
+	@Test void addedLayersCarryTheBridgeAndChildManagersAreNotWrappedTwice(@TempDir Path work) throws Throwable {
 		Map<String, byte[]> original = InjectorExecution.compile(work, STAND_INS);
 		String internal = MANAGER.replace('.', '/');
 		byte[] routed = InjectorExecution.transform(new HudElementBridgeInjector(), MANAGER, original.get(internal), EnvType.CLIENT);
@@ -135,15 +159,16 @@ class HudElementBridgeInjectorExecutionTest {
 		ClassLoader loader = InjectorExecution.load(classes);
 		assertEquals("", InjectorExecution.verify(routed, loader));
 
-		assertEquals(List.of("hotbar", "fabric elements on Identifier[path=hotbar]", "boss bar",
-				"fabric elements on Identifier[path=boss_bar]", "a NeoForge mod's layer"), hud(loader),
-				"a hidden layer (chat) hides the Fabric elements attached to it too");
-		assertEquals(List.of("wrap Identifier[path=hotbar]", "wrap Identifier[path=boss_bar]", "wrap Identifier[path=chat]"),
+		assertEquals(List.of("hotbar", "fabric elements on minecraft:hotbar", "a NeoForge mod's layer"), hud(loader),
+				"the gated child draws nothing, so its Fabric elements stay hidden with it");
+
+		assertEquals(List.of("wrap minecraft:hotbar", "wrap minecraft:chat"),
 				InjectorExecution.getStatic(loader.loadClass(BRIDGE), "calls"),
-				"both GuiLayer overloads are routed through the bridge — the gate hides the Fabric elements with their layer");
+				"each layer is wrapped once — the child's layer when it was added to the child, and NOT again when "
+						+ "add(GuiLayerManager, BooleanSupplier) re-adds the child");
 
 		ClassLoader merged = InjectorExecution.load(original);
-		assertEquals(List.of("hotbar", "boss bar", "a NeoForge mod's layer"), hud(merged),
+		assertEquals(List.of("hotbar", "a NeoForge mod's layer"), hud(merged),
 				"premise: as merged, no Fabric element is drawn on any layer");
 		assertSame(routed, InjectorExecution.transform(new HudElementBridgeInjector(), MANAGER, routed, EnvType.CLIENT),
 				"an already routed manager is left alone");

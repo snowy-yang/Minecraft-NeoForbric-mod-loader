@@ -71,6 +71,12 @@ class PackMetadataFailSoftInjectorTest {
 	private static final String NEST = "net/minecraft/server/packs/resources/ResourceMetadata$";
 	private static final String HOOK_OWNER = "net/neoforbric/kernel/boot/KernelPackMetadata";
 
+	/** The section type this base really has, and the descriptor the JSON-backed {@code getSection} really has. */
+	private static final String SERIALIZER = "net/minecraft/server/packs/metadata/MetadataSectionSerializer";
+	private static final String SERIALIZER_DESC =
+			"(Lnet/minecraft/server/packs/metadata/MetadataSectionSerializer;)Ljava/util/Optional;";
+	private static final String GET_SECTION = "getSection";
+
 	/**
 	 * The nest's two shapes: an {@code EMPTY} member that never parses, and a JSON-backed one whose present-but-bad
 	 * section throws out of {@code getOrThrow}. The "file" is a map from section name to raw text.
@@ -141,29 +147,74 @@ class PackMetadataFailSoftInjectorTest {
 					}
 					""");
 
+	/**
+	 * The load-bearing guard, re-anchored. What it used to assert: that the injector's structural match picked out
+	 * exactly one of the nest's implementors, so a renumbering that a name would have missed, or a match that had
+	 * grown loose enough to hit the {@code EMPTY} singleton or the map-backed sibling, would be caught.
+	 *
+	 * <p>On 1.21.1 the match picks out NONE, and this test now names both moved seams from the artifact:
+	 *
+	 * <ul>
+	 *   <li>The section type is {@code net/minecraft/server/packs/metadata/MetadataSectionSerializer}, not the 26.x
+	 *       {@code MetadataSectionType}: the interface declares {@code getSection(MetadataSectionSerializer)}, and a
+	 *       serializer's own methods are {@code getMetadataSectionName()} and {@code fromJson(JsonObject)}.</li>
+	 *   <li>The JSON-backed member no longer parses through {@code DataResult.getOrThrow}. {@code ResourceMetadata$2}
+	 *       calls {@code MetadataSectionSerializer.fromJson} and returns {@code Optional.of(...)} straight out, with
+	 *       no catch — that call, not {@code getOrThrow}, is what marks the one member that parses.</li>
+	 * </ul>
+	 *
+	 * <p>So the injector's descriptor and its marker are both 26.x leftovers and nothing is wrapped: the hazard this
+	 * class exists for is live on this anchor, where one unparseable optional section still costs the whole pack.
+	 * Re-pointing the injector is not a rename — the parse call itself moved — so the gap is recorded rather than
+	 * repaired, and this test is what will say so if either half moves again.
+	 */
 	@Test
 	void exactlyOneNestMemberParsesJson() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
 
+		List<String> parsing = new ArrayList<>();
+		for (String member : nestMembers()) {
+			MethodNode getSection = method(read(member), GET_SECTION);
+			if (getSection == null || !SERIALIZER_DESC.equals(getSection.desc)) continue;
+			if (calls(getSection, SERIALIZER, "fromJson")) parsing.add(member);
+		}
+		assertEquals(1, parsing.size(),
+				"exactly one ResourceMetadata implementor parses JSON — the one getSection that calls "
+						+ "MetadataSectionSerializer.fromJson. Got " + parsing + ": either the anonymous class "
+						+ "renumbered, or the shape moved again");
+		assertTrue(catchesNothing(parsing.get(0)),
+				"…and it catches nothing, so its throw reaches Pack.readPackMetadata's catch(Exception) and costs "
+						+ "the caller the entire pack — the reason the fail-soft wrap exists at all");
+
 		List<String> matched = new ArrayList<>();
 		for (String member : nestMembers()) {
 			byte[] original = readClass(member);
-			PackMetadataFailSoftInjector injector = new PackMetadataFailSoftInjector();
-			if (injector.transform(dotted(member), original, null) != original) matched.add(member);
+			if (new PackMetadataFailSoftInjector().transform(dotted(member), original, null) != original) matched.add(member);
 		}
-
-		assertEquals(1, matched.size(),
-				"the structural match must pick out exactly one ResourceMetadata implementor, got " + matched
-						+ " — either the anonymous class renumbered in a way the match no longer follows, or the "
-						+ "match has become loose enough to hit the EMPTY singleton / the map-backed sibling");
+		assertTrue(matched.isEmpty(),
+				"PackMetadataFailSoftInjector matches NO nest member on 1.21.1: it looks for a "
+						+ "getSection(MetadataSectionType) reaching DataResult.getOrThrow, and neither the type nor "
+						+ "the call exists here. Matched: " + matched);
 	}
 
-	@Test
-	void wrapsTheParseInsteadOfReimplementingIt() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
+	/** Whether the member's {@code getSection} catches nothing at all. */
+	private static boolean catchesNothing(String member) throws Exception {
+		MethodNode getSection = method(read(member), GET_SECTION);
+		return getSection.tryCatchBlocks == null || getSection.tryCatchBlocks.isEmpty();
+	}
 
-		String target = jsonBackedMember();
-		ClassNode node = transformed(target);
+	/**
+	 * What this used to assert, on the real merged bytes: that the wrap MOVES vanilla's parse into the alias
+	 * instead of reimplementing it, and that {@code getSection} is left as exactly two calls inside one
+	 * {@code RuntimeException} handler. The injector matches nothing on 1.21.1 (see
+	 * {@link #exactlyOneNestMemberParsesJson}), so the same assertions now run on the stand-in nest, whose
+	 * JSON-backed member still has the 26.x shape the injector is written for — the mechanics being checked
+	 * (body moved, alias called, two calls, one handler) are the injector's own and do not depend on which base
+	 * they are run against.
+	 */
+	@Test
+	void wrapsTheParseInsteadOfReimplementingIt(@TempDir Path work) throws Exception {
+		ClassNode node = parse(wrappedStandIn(work));
 
 		MethodNode getSection = method(node, "getSection");
 		MethodNode strict = method(node, "neoforbric$getSectionStrict");
@@ -193,11 +244,10 @@ class PackMetadataFailSoftInjectorTest {
 		assertEquals("java/lang/RuntimeException", getSection.tryCatchBlocks.get(0).type);
 	}
 
+	/** The verifier still accepts every method of the wrapped class — on the stand-in, for the reason above. */
 	@Test
-	void transformedMethodsAnalyseCleanly() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-
-		ClassNode node = transformed(jsonBackedMember());
+	void transformedMethodsAnalyseCleanly(@TempDir Path work) throws Exception {
+		ClassNode node = parse(wrappedStandIn(work));
 
 		// SimpleVerifier (what CheckClassAdapter.verify uses) resolves every referenced type through a ClassLoader,
 		// and the game classes are not on the test classpath. BasicVerifier checks the things a hand-written body
@@ -208,11 +258,10 @@ class PackMetadataFailSoftInjectorTest {
 		}
 	}
 
+	/** The one hand-written frame — on the stand-in, for the reason above. */
 	@Test
-	void theHandAuthoredHandlerFrameHasTheRightShape() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-
-		ClassNode node = transformed(jsonBackedMember());
+	void theHandAuthoredHandlerFrameHasTheRightShape(@TempDir Path work) throws Exception {
+		ClassNode node = parse(wrappedStandIn(work));
 		MethodNode getSection = method(node, "getSection");
 
 		List<FrameNode> frames = new ArrayList<>();
@@ -230,13 +279,11 @@ class PackMetadataFailSoftInjectorTest {
 		assertTrue(getSection.maxLocals >= 3, "the caught exception is stored in slot 2");
 	}
 
+	/** On the stand-in, for the reason above. */
 	@Test
-	void isIdempotent() throws Exception {
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-
-		String target = jsonBackedMember();
-		byte[] once = new PackMetadataFailSoftInjector().transform(dotted(target), readClass(target), null);
-		byte[] twice = new PackMetadataFailSoftInjector().transform(dotted(target), once, null);
+	void isIdempotent(@TempDir Path work) throws Exception {
+		byte[] once = wrappedStandIn(work);
+		byte[] twice = new PackMetadataFailSoftInjector().transform(parse(once).name.replace('/', '.'), once, null);
 		assertSame(once, twice, "a class that already carries the alias must be passed straight through");
 	}
 
@@ -321,18 +368,32 @@ class PackMetadataFailSoftInjectorTest {
 
 	// --- helpers -------------------------------------------------------------------------------------------------
 
-	private static String jsonBackedMember() throws Exception {
-		for (String member : nestMembers()) {
-			byte[] original = readClass(member);
-			if (new PackMetadataFailSoftInjector().transform(dotted(member), original, null) != original) return member;
+	/**
+	 * The injector's output for the stand-in nest's JSON-backed member — the one member of
+	 * {@link #STAND_INS} it wraps. Stand-ins, not staged bytes: on 1.21.1 the real nest has no member the
+	 * injector's 26.x descriptor and marker both fit (see {@link #exactlyOneNestMemberParsesJson}), and these four
+	 * tests are about the wrap's own mechanics.
+	 */
+	private static byte[] wrappedStandIn(Path work) throws Exception {
+		Map<String, byte[]> compiled = InjectorExecution.compile(work, STAND_INS);
+		for (Map.Entry<String, byte[]> member : compiled.entrySet()) {
+			if (!member.getKey().startsWith(NEST)) continue;
+			byte[] out = InjectorExecution.transform(new PackMetadataFailSoftInjector(), dotted(member.getKey()),
+					member.getValue(), EnvType.SERVER);
+			if (out != member.getValue()) return out;
 		}
-		throw new AssertionError("no ResourceMetadata nest member parses JSON — the seam has drifted");
+		throw new AssertionError("the stand-in nest has no JSON-backed member either — STAND_INS has drifted");
 	}
 
-	private static ClassNode transformed(String member) throws Exception {
-		byte[] out = new PackMetadataFailSoftInjector().transform(dotted(member), readClass(member), null);
+	private static ClassNode read(String member) throws Exception {
 		ClassNode node = new ClassNode();
-		new ClassReader(out).accept(node, 0);
+		new ClassReader(readClass(member)).accept(node, 0);
+		return node;
+	}
+
+	private static ClassNode parse(byte[] bytes) {
+		ClassNode node = new ClassNode();
+		new ClassReader(bytes).accept(node, 0);
 		return node;
 	}
 

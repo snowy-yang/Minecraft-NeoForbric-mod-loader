@@ -17,14 +17,12 @@
 package net.neoforbric.kernel.transform;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
@@ -38,172 +36,106 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 /**
- * Covers the MinecraftForge face put back on the merged {@code KeyMapping}, against the real artifact.
+ * Covers the vanilla face put back on the merged {@code KeyMapping}, against the real artifact.
  *
- * <p>onekeyminer died in its class initializer on
- * {@code AbstractMethodError: KeyMapping.setKeyConflictContext(…IKeyConflictContext) is abstract}, which cost it
- * every keybinding. The merge had kept MinecraftForge's constructors and fields but not its accessors.
+ * <p>Re-anchored to 1.21.1. This test used to cover a MINECRAFTFORGE face: MinecraftForge-typed
+ * {@code setKeyConflictContext}/{@code getKeyModifier} accessors mirrored onto the live NeoForge fields by
+ * {@code KernelForgeKeyBindings}, driven through a {@code net.minecraftforge.client.settings.KeyConflictContext}.
+ * None of that exists on this anchor. The merged base carries ZERO {@code net/minecraftforge} entries, there is no
+ * {@code forge-runtime} artifact, no {@code KernelForgeKeyBindings} class and no MinecraftForge-typed
+ * {@code keyConflictContext} field to mirror from — the merge keeps ONE context, NeoForge's:
  *
- * <p>The assertions that matter are not "the methods exist" — they are that the methods reach the fields the
- * game READS. Re-adding them over the MinecraftForge fields would have silenced the crash and left a Forge mod's
- * conflict context ignored, which is worse.
+ * <pre>
+ *   private net.neoforged.neoforge.client.settings.IKeyConflictContext keyConflictContext;
+ * </pre>
+ *
+ * <p>What survives of the original subject is the other half of the same repair, which is live and testable:
+ * {@code giveKeyMappingItsVanillaMap}. NeoForge retypes vanilla's {@code MAP} to its own
+ * {@code KeyMappingLookup}, so a mod compiled against vanilla that reads {@code KeyMapping.MAP} as a
+ * {@code Map} gets {@code NoSuchFieldError}; the repair adds vanilla's descriptor back as a view of
+ * {@code ALL}. The assertions below are the ones with teeth: the field is present, it is populated in
+ * {@code <clinit>} from {@code ALL} through the kernel's view helper, it is public (the access wideners that
+ * would have made it accessible have already run by the time this repair adds it), and a second pass changes
+ * nothing.
  */
 class MergedBaseKeyMappingFaceTest {
 	private static final Path MERGED = TestFixtures.stagedRoot().resolve("neoforge-base/patched-mc-neoforge-1.21.1.jar");
 	private static final String KEY_MAPPING = "net/minecraft/client/KeyMapping";
-	private static final String MF_CONTEXT = "Lnet/minecraftforge/client/settings/IKeyConflictContext;";
-	private static final String NEO_CONTEXT = "Lnet/neoforged/neoforge/client/settings/IKeyConflictContext;";
-	private static final String MF_MODIFIER = "Lnet/minecraftforge/client/settings/KeyModifier;";
-	private static final String NEO_MODIFIER = "Lnet/neoforged/neoforge/client/settings/KeyModifier;";
-	private static final String BRIDGE = "net/neoforbric/kernel/runtime/KernelForgeKeyBindings";
+	private static final String VANILLA_MAP = "Ljava/util/Map;";
+	private static final String NEO_LOOKUP = "Lnet/neoforged/neoforge/client/settings/KeyMappingLookup;";
+	private static final String BOTH_SPELLINGS = "Lcom/mojang/blaze3d/platform/InputConstants$Type;";
+	private static final String KERNEL_KEY_MAPPING_MAP = "net/neoforbric/kernel/runtime/KernelKeyMappingMap";
 
+	/** The repair's whole reason to exist: the vanilla descriptor must be there. */
 	@Test
-	void theAccessorsAForgeModCallsAreThere() throws IOException {
-		ClassNode node = repaired();
-		for (String[] shape : new String[][] {
-				{"setKeyConflictContext", "(" + MF_CONTEXT + ")V"},
-				{"getKeyConflictContext", "()" + MF_CONTEXT},
-				{"getKeyModifier", "()" + MF_MODIFIER},
-				{"getDefaultKeyModifier", "()" + MF_MODIFIER},
-				{"setKeyModifierAndCode", "(" + MF_MODIFIER + "Lcom/mojang/blaze3d/platform/InputConstants$Key;)V"},
-		}) {
-			assertTrue(find(node, shape[0], shape[1]) != null,
-					shape[0] + shape[1] + " is missing — a Forge mod calling it dies in its class initializer");
-		}
-	}
+	void theVanillaMapDescriptorIsBack() throws IOException {
+		ClassNode before = new ClassNode();
+		new ClassReader(original()).accept(before, ClassReader.SKIP_CODE);
+		assertTrue(findField(before, "MAP", VANILLA_MAP) == null,
+				"content drift: this base already carries a vanilla-typed MAP, so nothing is left to repair");
 
-	/** The NeoForge originals must survive untouched: a getter pair differing only in return type is legal. */
-	@Test
-	void theNeoForgeAccessorsAreStillThere() throws IOException {
-		ClassNode node = repaired();
-		assertTrue(find(node, "getKeyConflictContext", "()" + NEO_CONTEXT) != null);
-		assertTrue(find(node, "setKeyConflictContext", "(" + NEO_CONTEXT + ")V") != null);
+		ClassNode after = repaired();
+		assertNotNull(findField(after, "MAP", VANILLA_MAP),
+				"a mod reading KeyMapping.MAP as a Map dies on NoSuchFieldError (LiquidBounce, on a key press)");
+		// The repair ADDS vanilla's descriptor; NeoForge's own lookup field must survive beside it. Moving or
+		// replacing it would take the game's own key handling with it.
+		assertNotNull(findField(after, "MAP", NEO_LOOKUP), "NeoForge's own MAP field must still be there");
 	}
 
 	/**
-	 * The assertion with teeth. A MinecraftForge setter that wrote the MinecraftForge field would pass every
-	 * "does it exist" check and leave the binding behaving as though nothing had been set, because every live
-	 * consumer reads NeoForge's.
+	 * Public, and that is not cosmetic: the access wideners that would have made vanilla's private field reachable
+	 * from a mod have already run when this repair adds it, so a private field here would be unreachable to
+	 * exactly the callers the repair exists for.
 	 */
 	@Test
-	void theForgeSetterReachesTheFieldTheGameReads() throws IOException {
-		MethodNode setter = find(repaired(), "setKeyConflictContext", "(" + MF_CONTEXT + ")V");
-		assertTrue(setter != null);
-
-		boolean converts = false;
-		boolean reachesNeo = false;
-		for (AbstractInsnNode insn : setter.instructions) {
-			if (insn instanceof MethodInsnNode call && BRIDGE.equals(call.owner)
-					&& "toNeoContext".equals(call.name)) {
-				converts = true;
-			}
-			if (insn instanceof MethodInsnNode call && KEY_MAPPING.equals(call.owner)
-					&& "setKeyConflictContext".equals(call.name) && ("(" + NEO_CONTEXT + ")V").equals(call.desc)) {
-				reachesNeo = true;
-			}
-			if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
-					&& MF_CONTEXT.equals(f.desc)) {
-				throw new AssertionError("the setter writes the MinecraftForge field, which nothing reads — the "
-						+ "crash would be gone and the conflict context would never take effect");
-			}
-		}
-		assertTrue(converts, "the MinecraftForge context must be adapted, not cast");
-		assertTrue(reachesNeo, "and stored through the NeoForge setter, which is what same() consults");
+	void theAddedFieldIsPublicSoModsCanReachIt() throws IOException {
+		var field = findField(repaired(), "MAP", VANILLA_MAP);
+		assertNotNull(field);
+		assertTrue((field.access & Opcodes.ACC_PUBLIC) != 0, "the added field must be public");
+		assertTrue((field.access & Opcodes.ACC_STATIC) != 0, "and static, as vanilla's was");
 	}
 
 	/**
-	 * The MinecraftForge-typed constructors write only the dead fields, leaving the NeoForge ones null — so a
-	 * mod using one gets a mapping whose first conflict check is a NullPointerException.
+	 * The assertion with teeth. A field that exists but is never assigned reads as null for every consumer, which
+	 * is the same NoSuchFieldError one step later. It has to be filled in {@code <clinit>}, from {@code ALL},
+	 * through the kernel's own view helper, and assigned right after {@code ALL} itself is — before any mapping
+	 * exists to be grouped.
 	 */
 	@Test
-	void theForgeConstructorsFillTheLiveFieldsToo() throws IOException {
+	void theMapIsFilledFromAllInTheClassInitializer() throws IOException {
 		ClassNode node = repaired();
-		int checked = 0;
-		for (MethodNode m : node.methods) {
-			if (!"<init>".equals(m.name) || !m.desc.contains(MF_CONTEXT)) continue;
-			checked++;
-			List<String> written = new ArrayList<>();
-			for (AbstractInsnNode insn : m.instructions) {
-				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD) written.add(f.desc);
-			}
-			assertTrue(written.contains(NEO_CONTEXT),
-					m.desc + " never writes the NeoForge conflict context, so same() will NPE on it");
-			assertTrue(written.contains(NEO_MODIFIER),
-					m.desc + " never writes the NeoForge key modifier");
-		}
-		assertTrue(checked > 0, "content drift: this base declares no MinecraftForge-typed KeyMapping constructor");
-	}
+		MethodNode clinit = find(node, "<clinit>", "()V");
+		assertNotNull(clinit, "KeyMapping has a static initializer");
 
-	/**
-	 * WHERE the mirror lands, which is the whole of it.
-	 *
-	 * <p>The constructor's own tail registers the binding: {@code GETSTATIC KeyMapping.MAP},
-	 * {@code KeyMappingLookup.put(key, this)}, {@code RETURN}. That put reads the mapping back through
-	 * {@code getKeyModifier()} — the MinecraftForge-faced accessor this transformer adds, which reads the
-	 * NEOFORGE field. Mirroring before the RETURN put the write after the read, so the field was still null at
-	 * the put, and MinecraftForge's lookup did {@code computeIfAbsent} on the result. Every Forge-typed key
-	 * binding died in its own {@code <clinit>} with an NPE raised inside MinecraftForge's own code.
-	 *
-	 * <p>Assert the ORDER, not merely the presence: the previous test passes either way.
-	 */
-	@Test
-	void theLiveFieldsAreWrittenBeforeTheConstructorRegistersTheBinding() throws IOException {
-		ClassNode node = repaired();
-		int checked = 0;
-		for (MethodNode m : node.methods) {
-			if (!"<init>".equals(m.name) || !m.desc.contains(MF_CONTEXT)) continue;
-
-			int firstLookup = -1;
-			int lastLiveWrite = -1;
-			int i = 0;
-			for (AbstractInsnNode insn : m.instructions) {
-				if (firstLookup < 0 && insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC
-						&& "MAP".equals(f.name)) {
-					firstLookup = i;
-				}
-				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD
-						&& (NEO_CONTEXT.equals(f.desc) || NEO_MODIFIER.equals(f.desc))) {
-					lastLiveWrite = i;
-				}
-				i++;
+		int allStore = -1;
+		int viewStore = -1;
+		boolean readsAll = false;
+		boolean callsTheView = false;
+		int i = 0;
+		for (AbstractInsnNode insn : clinit.instructions) {
+			if (insn instanceof FieldInsnNode f && KEY_MAPPING.equals(f.owner) && "ALL".equals(f.name)
+					&& "Ljava/util/Map;".equals(f.desc)) {
+				if (f.getOpcode() == Opcodes.PUTSTATIC) allStore = i;
 			}
-			if (firstLookup < 0) continue; // a delegating constructor; it has no registration of its own
-			checked++;
-			assertTrue(lastLiveWrite >= 0 && lastLiveWrite < firstLookup,
-					m.desc + " writes the NeoForge fields at " + lastLiveWrite + " but reaches the key lookup at "
-							+ firstLookup + " — the lookup reads those fields back through the adapted "
-							+ "getKeyModifier(), so a write that comes after it is an NPE inside MinecraftForge");
-		}
-		assertTrue(checked > 0, "content drift: this base has no MinecraftForge-typed constructor that registers a binding");
-	}
-
-	/**
-	 * And WHICH lookup it registers into. Both {@code getAll} overloads read NeoForge's {@code MAP}, so a binding
-	 * put into MinecraftForge's would sit in a map nothing ever reads: the key exists, binds, shows in the
-	 * Controls screen and never fires. The two {@code put} methods are descriptor-identical, so this is a field
-	 * descriptor and an owner and nothing else.
-	 */
-	@Test
-	void theConstructorRegistersIntoTheLookupTheGameReads() throws IOException {
-		ClassNode node = repaired();
-		int checked = 0;
-		for (MethodNode m : node.methods) {
-			if (!"<init>".equals(m.name) || !m.desc.contains(MF_CONTEXT)) continue;
-			for (AbstractInsnNode insn : m.instructions) {
-				if (insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.GETSTATIC && "MAP".equals(f.name)) {
-					checked++;
-					assertTrue(f.desc.startsWith("Lnet/neoforged/"),
-							m.desc + " registers into " + f.desc + ", which nothing reads — the binding would "
-									+ "exist, bind and never fire");
-				}
-				if (insn instanceof MethodInsnNode call && "put".equals(call.name)
-						&& call.owner.endsWith("KeyMappingLookup")) {
-					assertTrue(call.owner.startsWith("net/neoforged/"),
-							m.desc + " calls " + call.owner + ".put, so the binding lands in the dead lookup");
-				}
+			if (insn instanceof FieldInsnNode f && KEY_MAPPING.equals(f.owner) && "MAP".equals(f.name)
+					&& VANILLA_MAP.equals(f.desc) && f.getOpcode() == Opcodes.PUTSTATIC) {
+				viewStore = i;
 			}
+			if (insn instanceof FieldInsnNode f && KEY_MAPPING.equals(f.owner) && "ALL".equals(f.name)
+					&& f.getOpcode() == Opcodes.GETSTATIC) {
+				readsAll = true;
+			}
+			if (insn instanceof MethodInsnNode call && KERNEL_KEY_MAPPING_MAP.equals(call.owner)
+					&& "vanillaView".equals(call.name)) {
+				callsTheView = true;
+			}
+			i++;
 		}
-		assertTrue(checked > 0, "content drift: this base has no MinecraftForge-typed constructor that registers a binding");
+		assertTrue(readsAll, "the view must be built from ALL, which the class still keeps and fills");
+		assertTrue(callsTheView, "and through KernelKeyMappingMap.vanillaView, which groups on each read");
+		assertTrue(viewStore >= 0, "the added MAP field is never assigned, so it reads as null");
+		assertTrue(allStore >= 0 && viewStore > allStore,
+				"MAP must be assigned right after ALL (" + allStore + " -> " + viewStore + "), before any mapping exists");
 	}
 
 	@Test
@@ -212,122 +144,31 @@ class MergedBaseKeyMappingFaceTest {
 				.transform("net.minecraft.client.KeyMapping", original(), null);
 		byte[] twice = new NeoForbricMergedBaseCompatTransformer()
 				.transform("net.minecraft.client.KeyMapping", once, null);
-		assertSame(once, twice, "re-running must not stack another set of accessors on top");
+		assertSame(once, twice, "re-running must not stack another field on top");
 	}
 
-	/**
-	 * The adapters themselves, loaded and driven for real.
-	 *
-	 * <p>{@code KernelForgeKeyBindings} is in the game-side source set, which is not on the test classpath by
-	 * design, so it is loaded from its compiled output over the staged carriers — the same shape
-	 * {@code PassiveSeederLoadingModListTest} uses. Without this, the conversion tables are asserted by nothing:
-	 * the bytecode tests above only check that the CALL is made.
-	 */
+	/** The live field the merge keeps: ONE conflict context, NeoForge's. There is no MinecraftForge one to mirror. */
 	@Test
-	void theModifierMappingIsByNameWithOneDeliberateException() throws Exception {
-		try (java.net.URLClassLoader cl = gameSideLoader()) {
-			Class<?> bridge = Class.forName("net.neoforbric.kernel.runtime.KernelForgeKeyBindings", true, cl);
-			java.lang.reflect.Method toForge = bridge.getMethod("toForgeModifier", Object.class);
-			java.lang.reflect.Method toNeo = bridge.getMethod("toNeoModifier", Object.class);
-			Class<?> neoMod = Class.forName("net.neoforged.neoforge.client.settings.KeyModifier", true, cl);
-			Class<?> mfMod = Class.forName("net.minecraftforge.client.settings.KeyModifier", true, cl);
-
-			for (String shared : List.of("CONTROL", "SHIFT", "ALT", "NONE")) {
-				Object neo = enumConstant(neoMod, shared);
-				assertEquals(shared, name(toForge.invoke(null, neo)), shared + " must survive the round trip");
-				assertEquals(shared, name(toNeo.invoke(null, enumConstant(mfMod, shared))), shared);
-			}
-			assertEquals("CONTROL", name(toForge.invoke(null, enumConstant(neoMod, "CONTROL_OR_COMMAND"))),
-					"NeoForge's extra constant means \"control, or command on macOS\", which is what "
-							+ "MinecraftForge's CONTROL does. NONE would silently drop a modifier the player bound");
-			// NONE, not null, on the way OUT. MinecraftForge's KeyMappingLookup.put reads this accessor and uses
-			// the result as an EnumMap key straight away — computeIfAbsent on a null bucket, which is an NPE
-			// raised inside Forge's code and blamed on whichever mod was constructing a key binding. There is no
-			// such thing as a null modifier in either family: unmodified IS NONE, which is what the field starts
-			// as. Null still passes through unchanged on the way IN, where nothing dereferences it.
-			assertEquals("NONE", name(toForge.invoke(null, new Object[] {null})),
-					"a null modifier must adapt to NONE, or MinecraftForge's own lookup NPEs on it");
-			assertEquals(null, toNeo.invoke(null, new Object[] {null}), "null stays null going the other way");
-		}
-	}
-
-	/** A conflict context adapted out and back must come back as the SAME object, not a second wrapper. */
-	@Test
-	void adaptingAContextBackAgainUnwrapsIt() throws Exception {
-		try (java.net.URLClassLoader cl = gameSideLoader()) {
-			Class<?> bridge = Class.forName("net.neoforbric.kernel.runtime.KernelForgeKeyBindings", true, cl);
-			java.lang.reflect.Method toNeo = bridge.getMethod("toNeoContext", Object.class);
-			java.lang.reflect.Method toForge = bridge.getMethod("toForgeContext", Object.class);
-
-			Class<?> forgeContexts = Class.forName("net.minecraftforge.client.settings.KeyConflictContext", true, cl);
-			Object inGame = enumOrField(forgeContexts, "IN_GAME");
-			assertTrue(inGame != null, "content drift: the carrier's KeyConflictContext has no IN_GAME");
-
-			Object asNeo = toNeo.invoke(null, inGame);
-			assertTrue(asNeo != null && !asNeo.equals(inGame), "it must be adapted, not returned as-is");
-			assertSame(inGame, toForge.invoke(null, asNeo),
-					"round-tripping must UNWRAP — stacking adapters would make conflicts() recurse a layer "
-							+ "deeper on every pass through a mod that reads and re-sets its own context");
-		}
-	}
-
-	/**
-	 * The compiled game-side set over the staged carriers and merged base.
-	 *
-	 * <p>{@code net.neoforbric.kernel.runtime} is not on the test classpath by design, and the carriers' own
-	 * {@code KeyModifier} reaches into the game for its display name, so the merged base has to be here too.
-	 */
-	private static java.net.URLClassLoader gameSideLoader() throws IOException {
-		Path compiled = Path.of(System.getProperty("user.dir"), "build", "classes", "java", "runtime").normalize();
-		Path run = TestFixtures.stagedRoot();
-		Path forgeRt = run.resolve("forge-runtime/forge-runtime.jar");
-		Path neoRt = run.resolve("neoforge-runtime/neoforge-runtime.jar");
-		TestFixtures.require(Fixture.GAME_SIDE, Files.isDirectory(compiled), "the game-side set is not compiled");
-		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(forgeRt) && Files.isRegularFile(neoRt) && Files.isRegularFile(MERGED),
-				"the staged artifacts are absent");
-		List<java.net.URL> urls = new ArrayList<>(List.of(compiled.toUri().toURL(), forgeRt.toUri().toURL(),
-				neoRt.toUri().toURL(), MERGED.toUri().toURL()));
-		// Touching the carrier's KeyModifier initialises it, and its display name reaches into the game — which
-		// reaches into brigadier, DataFixerUpper, fastutil, guava and on. The whole library tree is what the game
-		// itself puts on the classpath, so that is what goes here rather than chasing one NoClassDefFoundError
-		// at a time.
-		Path libraries = mcLibraries();
-		TestFixtures.require(Fixture.MC_LIBRARIES, libraries != null, "the Minecraft library tree is not where this machine keeps it — skipping");
-		try (var jars = Files.walk(libraries)) {
-			for (Path jar : jars.filter(f -> f.toString().endsWith(".jar")).toList()) {
-				urls.add(jar.toUri().toURL());
-			}
-		}
-		return new java.net.URLClassLoader(urls.toArray(new java.net.URL[0]),
-				ClassLoader.getPlatformClassLoader());
-	}
-
-	/** The same library tree {@code build.gradle} resolves brigadier from. */
-	private static Path mcLibraries() {
-		String configured = System.getProperty("neoforbric.mcLibraries");
-		Path root = configured != null ? Path.of(configured) : TestFixtures.minecraftDir().resolve("libraries");
-		return Files.isDirectory(root) ? root : null;
-	}
-
-	private static Object enumConstant(Class<?> type, String name) throws Exception {
-		return type.getField(name).get(null);
-	}
-
-	private static Object enumOrField(Class<?> type, String name) {
-		try {
-			return type.getField(name).get(null);
-		} catch (ReflectiveOperationException absent) {
-			return null;
-		}
-	}
-
-	private static String name(Object enumConstant) throws Exception {
-		return (String) enumConstant.getClass().getMethod("name").invoke(enumConstant);
+	void theMergeKeepsExactlyOneConflictContextAndItIsNeoForges() throws IOException {
+		ClassNode before = new ClassNode();
+		new ClassReader(original()).accept(before, ClassReader.SKIP_CODE);
+		long contexts = before.fields.stream().filter(f -> "keyConflictContext".equals(f.name)).count();
+		assertEquals(1, contexts, "the merge keeps one conflict context");
+		assertEquals(NEO_LOOKUP.replace("KeyMappingLookup", "IKeyConflictContext"),
+				before.fields.stream().filter(f -> "keyConflictContext".equals(f.name)).findFirst().orElseThrow().desc,
+				"and it is NeoForge's — there is no MinecraftForge type on this anchor to mirror from");
 	}
 
 	private static MethodNode find(ClassNode node, String name, String desc) {
 		for (MethodNode m : node.methods) {
 			if (m.name.equals(name) && m.desc.equals(desc)) return m;
+		}
+		return null;
+	}
+
+	private static org.objectweb.asm.tree.FieldNode findField(ClassNode node, String name, String desc) {
+		for (var f : node.fields) {
+			if (f.name.equals(name) && f.desc.equals(desc)) return f;
 		}
 		return null;
 	}
@@ -341,14 +182,6 @@ class MergedBaseKeyMappingFaceTest {
 	}
 
 	private static byte[] original() throws IOException {
-		byte[] bytes = TestFixtures.requireEntry(Fixture.STAGED, MERGED, KEY_MAPPING + ".class");
-		ClassNode node = new ClassNode();
-		new ClassReader(bytes).accept(node, ClassReader.SKIP_CODE);
-		boolean split = node.fields.stream().anyMatch(f -> "keyConflictContext".equals(f.name)
-						&& MF_CONTEXT.equals(f.desc))
-				&& node.fields.stream().anyMatch(f -> "keyConflictContext".equals(f.name)
-						&& NEO_CONTEXT.equals(f.desc));
-		assertTrue(split, "content drift: this base no longer splits KeyMapping's conflict context");
-		return bytes;
+		return TestFixtures.requireEntry(Fixture.STAGED, MERGED, KEY_MAPPING + ".class");
 	}
 }

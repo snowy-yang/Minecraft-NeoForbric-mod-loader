@@ -16,7 +16,6 @@
 
 package net.neoforbric.kernel.transform;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,7 +35,6 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
-import org.objectweb.asm.tree.TryCatchBlockNode;
 import org.objectweb.asm.tree.VarInsnNode;
 import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.BasicVerifier;
@@ -45,10 +43,17 @@ import net.neoforbric.kernel.TestFixtures;
 import net.neoforbric.kernel.TestFixtures.Fixture;
 
 /**
- * Covers the shutdown-save repair: {@code IntegratedServer.stopServer} runs {@code teardownPublishedState()}
+ * Covers the shutdown-save repair: on 26.x {@code IntegratedServer.stopServer} ran {@code teardownPublishedState()}
  * first and unguarded, and {@code MinecraftServer.stopServer()} — which writes players and worlds — second, so a
- * throw in the teardown ends the process with {@code level.dat} at the last autosave. Measured on a real install
+ * throw in the teardown ended the process with {@code level.dat} at the last autosave. Measured on a real install
  * after an Alt+F4: region files on disk at the moment of exit, {@code level.dat} sixty seconds behind.
+ *
+ * <p>Re-anchored to 1.21.1 for the two base-reading tests. 1.21.1's {@code IntegratedServer.stopServer()} calls
+ * {@code MinecraftServer.stopServer()} — the save — as its FIRST action, then interrupts the LAN pinger, and has
+ * no {@code teardownPublishedState()} method at all. The failure mode the repair guarded cannot occur, so the
+ * repair correctly declines on the staged base; what is pinned below is that order (the save first, no teardown
+ * call), which is what makes the repair unnecessary. The repair's own logic is still exercised, on a synthetic
+ * stand-in with 26.x's exact shape, by the load-and-run tests further down.
  *
  * <p>The load-and-run test is the one with teeth. Asserting an exception table exists says nothing about whether
  * the save is REACHED, and it says nothing about whether the frames the pass writes are ones the JVM will accept
@@ -83,41 +88,39 @@ public class MergedBaseShutdownSaveTest {
 	}
 
 	@Test
-	void theStagedBaseStillRunsTheTeardownUnguarded() throws Exception {
+	void theStagedBaseSavesFirstAndHasNoUnguardedTeardown() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
 		ClassNode before = parse(readClass(INTEGRATED_SERVER + ".class"));
 		MethodNode stop = method(before, "stopServer", "()V");
 		assertNotNull(stop, "the base must still have IntegratedServer.stopServer()V");
 		assertTrue(stop.tryCatchBlocks == null || stop.tryCatchBlocks.isEmpty(),
-				"the staged base must still need the repair — if upstream guarded it, re-derive this test");
-		assertTrue(callsBefore(stop, "teardownPublishedState", "stopServer"),
-				"the repair is only correct while the teardown still runs BEFORE the save");
+				"no handler is needed here: nothing runs before the save that could throw");
+		assertTrue(noCall(stop, "teardownPublishedState"),
+				"content drift: a teardown call came back — re-derive the repair that had to guard it");
+		assertTrue(savesFirst(stop),
+				"the save must be the first thing the body does; that order is why the repair is unnecessary");
 	}
 
 	@Test
-	void theRepairedBaseCatchesTheTeardownAndStillReachesTheSave() throws Exception {
+	void theBaseIsHandedBackUntouchedBecauseTheFailureModeCannotOccur() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
 		byte[] in = readClass(INTEGRATED_SERVER + ".class");
 		byte[] out = transform(in);
-		assertTrue(out != in, "the staged base must still need the repair");
+		assertSame(in, out, "the staged base already saves first and has no teardown call, so the pass must decline");
 
 		ClassNode node = parse(out);
 		MethodNode stop = method(node, "stopServer", "()V");
-		assertEquals(1, stop.tryCatchBlocks.size(), "exactly one handler, around the teardown and nothing else");
-		TryCatchBlockNode handler = stop.tryCatchBlocks.get(0);
-		assertEquals("java/lang/Throwable", handler.type, "an Error on the way out costs the save just as dearly");
-		assertEquals(2, protectedRealInstructions(stop, handler),
-				"the range must cover the receiver push and the call, and stop there");
-		assertTrue(callsBefore(stop, "teardownPublishedState", "stopServer"),
-				"the upstream order is deliberately kept — only the coupling is removed");
+		assertTrue(savesFirst(stop), "the upstream order is deliberately kept — the save is first");
 		new Analyzer<>(new BasicVerifier()).analyze(node.name, stop);
 	}
 
 	@Test
 	void aSecondPassLeavesTheRepairedClassAlone() throws Exception {
 		TestFixtures.require(Fixture.STAGED, Files.isRegularFile(MERGED_BASE), "staged merged base absent — skipping real-bytecode check");
-		byte[] once = transform(readClass(INTEGRATED_SERVER + ".class"));
-		assertSame(once, transform(once), "a body that already has a handler must not be wrapped twice");
+		byte[] in = readClass(INTEGRATED_SERVER + ".class");
+		byte[] once = transform(in);
+		assertSame(in, once, "the pass declines on the base, so the base comes back unchanged");
+		assertSame(once, transform(once));
 	}
 
 	/**
@@ -267,27 +270,28 @@ public class MergedBaseShutdownSaveTest {
 		return null;
 	}
 
-	/** Whether {@code first} is invoked before {@code second} in this body. */
-	private static boolean callsBefore(MethodNode method, String first, String second) {
-		boolean seenFirst = false;
+	/** Whether the body calls {@code name} at all. */
+	private static boolean noCall(MethodNode method, String name) {
 		for (AbstractInsnNode insn : method.instructions) {
-			if (!(insn instanceof MethodInsnNode call)) continue;
-			if (call.name.equals(first)) seenFirst = true;
-			else if (call.name.equals(second) && call.getOpcode() == Opcodes.INVOKESPECIAL) return seenFirst;
+			if (insn instanceof MethodInsnNode call && call.name.equals(name)) return false;
 		}
-		return false;
+		return true;
 	}
 
-	/** Real (non-label, non-frame, non-line) instructions inside the handler's protected range. */
-	private static int protectedRealInstructions(MethodNode method, TryCatchBlockNode handler) {
-		int n = 0;
-		boolean inside = false;
-		for (AbstractInsnNode insn : method.instructions) {
-			if (insn == handler.start) inside = true;
-			else if (insn == handler.end) inside = false;
-			else if (inside && insn.getOpcode() >= 0) n++;
-		}
-		return n;
+	/** Whether the first real instructions are {@code this.stopServer()} — the save, on the superclass. */
+	private static boolean savesFirst(MethodNode method) {
+		AbstractInsnNode first = nextReal(method.instructions.getFirst());
+		AbstractInsnNode second = nextReal(first);
+		return first instanceof VarInsnNode receiver && receiver.getOpcode() == Opcodes.ALOAD && receiver.var == 0
+				&& second instanceof MethodInsnNode call && "stopServer".equals(call.name)
+				&& call.getOpcode() == Opcodes.INVOKESPECIAL
+				&& "net/minecraft/server/MinecraftServer".equals(call.owner);
+	}
+
+	private static AbstractInsnNode nextReal(AbstractInsnNode insn) {
+		AbstractInsnNode next = insn == null ? null : insn.getNext();
+		while (next != null && next.getOpcode() < 0) next = next.getNext();
+		return next;
 	}
 
 	private static byte[] readClass(String entry) throws Exception {

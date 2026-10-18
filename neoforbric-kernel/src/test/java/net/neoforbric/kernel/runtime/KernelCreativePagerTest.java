@@ -47,21 +47,34 @@ class KernelCreativePagerTest {
 
 	@AfterEach void reset() { System.clearProperty(CreativePagerBridgeInjector.PROPERTY); }
 
-	/** Without the bridge: the cast works, and owo's retargeted call is the interface default. */
-	@Test void withoutTheBridgeOwosCallOnTheCreativeScreenThrowsAssertionError() throws Exception {
+	/**
+	 * Without the bridge the screen does not carry the interface at all, and owo's retargeted call finds no method.
+	 *
+	 * <p>Was {@code withoutTheBridgeOwosCallOnTheCreativeScreenThrowsAssertionError}: on 26.x the item-group module
+	 * injected the interface into the screen through a {@code .classtweaker}, so the cast succeeded off-game and
+	 * owo's call reached the interface's {@code default} body, which throws {@code AssertionError("Implemented by
+	 * mixin")} because a mixin is supposed to supply it. 1.21.1's module ships an accesswidener that does not touch
+	 * the screen, and the interface reaches it only through the pinned mixin's {@code implements} clause — applied
+	 * at runtime by Mixin, and not in this off-game fixture. So the assertion that has content here is the
+	 * negative one: nothing has attached the interface, and the call dies on resolution rather than on a stub.
+	 */
+	@Test void withoutTheBridgeOwosCallOnTheCreativeScreenFindsNoMethod() throws Exception {
 		try (Fixture f = fixture(false, false)) {
 			Object screen = f.screen();
-			assertTrue(f.api.isInstance(screen), "the class tweaker injects the interface: a cast would succeed");
+			assertFalse(f.api.isInstance(screen),
+					"1.21.1's item-group module attaches the interface through the pinned mixin's implements clause, "
+							+ "not through a classtweaker: off-game and unbridged, nothing has attached it");
 			InvocationTargetException thrown = assertThrows(InvocationTargetException.class, () -> f.owoPage(screen));
-			assertInstanceOf(AssertionError.class, thrown.getCause());
-			assertEquals("Implemented by mixin", thrown.getCause().getMessage());
+			assertInstanceOf(NoSuchMethodError.class, thrown.getCause(),
+					"owo's retargeted invokevirtual lands on a method only the interface's default provides");
 		}
 		System.setProperty(CreativePagerBridgeInjector.PROPERTY, "off");
 		try (Fixture f = fixture(true, false)) {
 			Object screen = f.screen();
+			assertFalse(f.api.isInstance(screen), "switched off, the bridge leaves the screen as it was");
 			InvocationTargetException thrown = assertThrows(InvocationTargetException.class, () -> f.owoPage(screen),
 					"switched off, the bridge leaves the screen as it was");
-			assertInstanceOf(AssertionError.class, thrown.getCause());
+			assertInstanceOf(NoSuchMethodError.class, thrown.getCause());
 		}
 	}
 
@@ -71,15 +84,15 @@ class KernelCreativePagerTest {
 			assertEquals(0, f.owoPage(screen), "owo's call now returns NeoForge's page");
 			assertEquals(2, f.api("getPageCount", screen));
 			assertEquals(true, f.api("hasAdditionalPages", screen));
-			assertEquals(List.of("A", "B", "SEARCH", "INVENTORY"), names(f.api("getTabsOnPage", screen, 0)),
+			assertEquals(List.of("A", "B", "SEARCH", "INVENTORY"), names(f.api("getItemGroupsOnPage", screen, 0)),
 					"the default tabs are on the current page, as NeoForge draws them");
-			assertEquals(List.of("C", "D"), names(f.api("getTabsOnPage", screen, 1)));
-			assertEquals(List.of(), names(f.api("getTabsOnPage", screen, 2)));
+			assertEquals(List.of("C", "D"), names(f.api("getItemGroupsOnPage", screen, 1)));
+			assertEquals(List.of(), names(f.api("getItemGroupsOnPage", screen, 2)));
 			assertEquals(0, f.api("getPage", screen, f.tab("A")));
 			assertEquals(1, f.api("getPage", screen, f.tab("D")));
 			assertEquals(0, f.api("getPage", screen, f.tab("SEARCH")));
 			assertEquals(-1, f.api("getPage", screen, f.tab("HIDDEN")), "a tab NeoForge shows on no page");
-			assertSame(f.tab("A"), f.api("getSelectedTab", screen));
+			assertSame(f.tab("A"), f.api("getSelectedItemGroup", screen));
 
 			assertEquals(true, f.api("switchToPage", screen, 1));
 			assertSame(f.page(1), f.neoForgePage(screen), "NeoForge's own page moved");
@@ -91,11 +104,11 @@ class KernelCreativePagerTest {
 			assertEquals(false, f.api("switchToPage", screen, -1));
 
 			f.calls().clear();
-			assertEquals(true, f.api("setSelectedTab", screen, f.tab("B")));
+			assertEquals(true, f.api("setSelectedItemGroup", screen, f.tab("B")));
 			assertSame(f.page(0), f.neoForgePage(screen));
 			assertEquals(List.of("selectTab A", "selectTab B"), f.calls(), "as Fabric: switch (reselect), then select");
-			assertEquals(false, f.api("setSelectedTab", screen, f.tab("B")), "already selected");
-			assertEquals(false, f.api("setSelectedTab", screen, f.tab("HIDDEN")), "on no page");
+			assertEquals(false, f.api("setSelectedItemGroup", screen, f.tab("B")), "already selected");
+			assertEquals(false, f.api("setSelectedItemGroup", screen, f.tab("HIDDEN")), "on no page");
 
 			assertEquals(true, f.api("switchToNextPage", screen), "the interface's own defaults work through the bodies");
 			assertEquals(true, f.api("switchToPreviousPage", screen));
@@ -141,7 +154,11 @@ class KernelCreativePagerTest {
 		defined.put("net.neoforbric.kernel.runtime.KernelCreativePager", Files.readAllBytes(pager));
 		defined.put("net.neoforbric.kernel.runtime.KernelCreativePagerScreen",
 				Files.readAllBytes(runtime.resolve("net/neoforbric/kernel/runtime/KernelCreativePagerScreen.class")));
-		defined.put(API, CreativePagerFixtures.creativeModule(CreativePagerFixtures.INTERFACE + ".class"));
+		// The REMAPPED module, not the raw nested one: fabric-api ships its item-group module in intermediary, where
+		// the screen's tab type is net.minecraft.class_1761, and this fixture defines it into a loader that has the
+		// base's Mojmap classes. remappedModule is the build's own remap of that entry — the interface a NeoForbric
+		// client installs, and the one the bridge's transform is handed.
+		defined.put(API, CreativePagerFixtures.remappedModule(CreativePagerFixtures.INTERFACE + ".class"));
 
 		Path classes = compileStandIns();
 		byte[] screen = CreativePagerFixtures.classTweaked(SCREEN,

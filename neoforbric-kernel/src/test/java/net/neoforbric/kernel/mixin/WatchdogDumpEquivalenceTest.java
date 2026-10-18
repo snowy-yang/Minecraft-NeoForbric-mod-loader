@@ -1,60 +1,96 @@
 package net.neoforbric.kernel.mixin;
 
-import net.neoforbric.kernel.TestFixtures;
-import static org.junit.jupiter.api.Assertions.*;
-import java.lang.management.*;
-import java.net.*;
-import java.nio.file.*;
-import java.util.*;
-import java.util.zip.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
 import net.neoforbric.api.*;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.io.TempDir;
+import net.neoforbric.kernel.TestFixtures;
+import net.neoforbric.kernel.TestFixtures.Fixture;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
-import org.objectweb.asm.*;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.ClassNode;
+
+/**
+ * The watchdog row's deferred proof, as much of it as this base still has.
+ *
+ * <p>Used to assert — over fabric-crash-report-info-v1's {@code ServerWatchdogMixin}, the merged
+ * {@code ServerWatchdog} and NeoForge's {@code ThreadInfoUtil} — that the finding stays SUSPECTED until the helper is
+ * defined, then RESOLVED, then CONFIRMED once the helper's body changes. Two of those three fixtures are gone from
+ * this anchor: 0.116.17 ships no {@code ServerWatchdogMixin} and 1.21.1's {@code ServerWatchdog} has no
+ * {@code createWatchdogCrashReport} for it to replace, so {@code WatchdogDumpEquivalence.candidate} — which matches
+ * the mixin's name, the handler's fingerprint and the replaced body's fingerprints — can never be reached, and the
+ * finding it would open cannot be observed here. What is asserted is the half that is real, the carrier's helper the
+ * row proves against, and that the other two halves are absent.
+ */
 @ResourceLock("ModCatalog")
 class WatchdogDumpEquivalenceTest {
- @TempDir Path temporary;
- private static final String CONFIG="fabric-crash-report-info-v1.mixins.json";
- @BeforeEach @AfterEach void reset(){MixinCompatibility.reset();CompatibilityFindings.reset();MixinConfigOwners.publish(List.of(new MixinConfigOwners.Owned(CONFIG,"crash-info",Ecosystem.FABRIC)));}
- private Path neo(){return Path.of(System.getenv().getOrDefault("NEO_RT",Path.of(System.getenv().getOrDefault("NEOFORBRIC_OLD","../neoforbric-loader"),"run/neoforge-runtime/neoforge-runtime.jar").toString()));}
- private ClassNode helper()throws Exception{TestFixtures.requireFiles(TestFixtures.Fixture.STAGED, "staged NeoForge carrier",neo());try(ZipFile z=new ZipFile(neo().toFile())){return MixinFit.parse(z.getInputStream(z.getEntry(WatchdogDumpEquivalence.HELPER.replace('.','/')+".class")).readAllBytes());}}
- private ClassNode target(boolean changedHandler)throws Exception{
-  MixinCompatibility.rememberOriginalConfig(CONFIG,"{\"required\":true,\"package\":\"net.fabricmc.fabric.mixin.crash.report.info\",\"mixins\":[\"ServerWatchdogMixin\"],\"injectors\":{\"defaultRequire\":1}}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-  ClassNode mixin=StagedFabricMixinFixture.mixin("fabric-crash-report-info-v1",WatchdogDumpEquivalence.MIXIN.replace('.','/'));
-  MethodNode original=StagedFabricMixinFixture.method(mixin,WatchdogDumpEquivalence.HANDLER);if(changedHandler)original.instructions.insert(new InsnNode(Opcodes.NOP));FinalMixinApplications.remember(mixin);
-  ClassNode target=StagedFabricMixinFixture.game(WatchdogDumpEquivalence.TARGET.replace('.','/'),false);
-  MethodNode handler=new MethodNode(original.access,"modify$canary$dump",original.desc,null,null);original.accept(handler);handler.name="modify$canary$dump";
-  AnnotationNode merged=new AnnotationNode("Lorg/spongepowered/asm/mixin/transformer/meta/MixinMerged;");merged.values=List.of("mixin",WatchdogDumpEquivalence.MIXIN);handler.visibleAnnotations=List.of(merged);target.methods.add(handler);return target;
- }
- private void observeTarget(ClassNode target){FinalMixinApplications.observe(WatchdogDumpEquivalence.TARGET,StagedFabricMixinFixture.bytes(target),(m,n,d)->List.of(new FinalMixinApplications.Renamed("modify$canary$dump",WatchdogDumpEquivalence.DESC)));}
- private void observeHelper(ClassNode helper){FinalMixinApplications.observe(WatchdogDumpEquivalence.HELPER,StagedFabricMixinFixture.bytes(helper),(m,n,d)->List.of());}
- private CompatibilityFinding finding(){return CompatibilityFindings.all().stream().filter(f->f.id().startsWith("mixin-injector:")).findFirst().orElseThrow();}
- @Test void actualDefinitionIsPendingUntilTheActualHelperIsDefinedAndRechecksChangedHelpers()throws Exception{
-  observeTarget(target(false));assertEquals(CompatibilityFinding.Confidence.SUSPECTED,finding().confidence());assertTrue(CompatibilityFindings.confirmedRequired().isEmpty());
-  ClassNode helper=helper();observeHelper(helper);assertEquals(CompatibilityFinding.Confidence.RESOLVED,finding().confidence());
-  StagedFabricMixinFixture.method(helper,"getEntireStacktrace").instructions.insert(new InsnNode(Opcodes.NOP));observeHelper(helper);assertEquals(CompatibilityFinding.Confidence.CONFIRMED,finding().confidence());
- }
- @Test void helperFirstAndUnknownHandlerOrCallerBodiesCannotBorrowTheProof()throws Exception{
-  observeHelper(helper());ClassNode target=target(false);observeTarget(target);assertEquals(CompatibilityFinding.Confidence.RESOLVED,finding().confidence());
-  target.methods.stream().filter(m->m.name.equals("createWatchdogCrashReport")&&Type.getArgumentTypes(m.desc).length==3).findFirst().orElseThrow().instructions.insert(new InsnNode(Opcodes.NOP));observeTarget(target);assertEquals(CompatibilityFinding.Confidence.CONFIRMED,finding().confidence());
-  reset();observeHelper(helper());observeTarget(target(true));assertEquals(CompatibilityFinding.Confidence.CONFIRMED,finding().confidence());
- }
- @Test void aDefinedUnknownHelperIsConfirmedMissingInsteadOfDeferredForever()throws Exception{
-  ClassNode helper=helper();helper.methods.removeIf(m->m.name.equals("getEntireStacktrace"));observeHelper(helper);observeTarget(target(false));assertEquals(CompatibilityFinding.Confidence.CONFIRMED,finding().confidence());
- }
- @Test void bothActualUpstreamRenderersRetainEveryFrameBeyondTheJdkEightFrameLimit()throws Exception{
-  TestFixtures.requireFiles(TestFixtures.Fixture.STAGED, "local merged mod pack and staged NeoForge carrier",TestFixtures.fabricApi(),neo());
-  Path fabric=temporary.resolve("crash-info.jar");try(ZipFile z=new ZipFile(TestFixtures.fabricApi().toFile())){var entry=z.stream().filter(e->e.getName().startsWith("META-INF/jars/fabric-crash-report-info-v1-")).findFirst().orElseThrow();Files.write(fabric,z.getInputStream(entry).readAllBytes());}
-  try(URLClassLoader loader=new URLClassLoader(new URL[]{neo().toUri().toURL(),fabric.toUri().toURL()},ClassLoader.getPlatformClassLoader())){
-   var nativeRender=loader.loadClass(WatchdogDumpEquivalence.HELPER).getMethod("getEntireStacktrace",ThreadInfo.class);var fabricRender=loader.loadClass("net.fabricmc.fabric.impl.crash.report.info.ThreadPrinting").getMethod("fullThreadInfoToString",ThreadInfo.class);
-   deep(30,()->{ThreadInfo info=ManagementFactory.getThreadMXBean().getThreadInfo(Thread.currentThread().threadId(),1000);try{
-    String nativeText=(String)nativeRender.invoke(null,info),fabricText=(String)fabricRender.invoke(null,info);assertTrue(info.getStackTrace().length>30);
-    for(StackTraceElement frame:info.getStackTrace()){assertTrue(nativeText.contains(frame.toString()),frame.toString());assertTrue(fabricText.contains(frame.toString()),frame.toString());}
-    assertTrue(nativeText.split("\\.deep\\(",-1).length>30);assertTrue(fabricText.split("\\.deep\\(",-1).length>30);assertTrue(info.toString().split("\\.deep\\(",-1).length<30);
-   }catch(ReflectiveOperationException failure){throw new AssertionError(failure);}});
-  }
- }
- private static void deep(int depth,Runnable action){if(depth==0)action.run();else deep(depth-1,action);}
+	private static final String CONFIG = "fabric-crash-report-info-v1.mixins.json";
+	private static final String MIXIN_ENTRY = WatchdogDumpEquivalence.MIXIN.replace('.', '/') + ".class";
+	private static final Path CARRIER = TestFixtures.stagedRoot().resolve("neoforge-runtime/neoforge-runtime.jar").normalize();
+
+	@BeforeEach
+	@AfterEach
+	void reset() {
+		MixinCompatibility.reset();
+		CompatibilityFindings.reset();
+		WatchdogDumpEquivalence.reset();
+		MixinConfigOwners.publish(List.of(new MixinConfigOwners.Owned(CONFIG, "crash-info", Ecosystem.FABRIC)));
+	}
+
+	/** The proof's other half: the helper is defined, and observing it settles the pending state. */
+	@Test
+	void observingTheCarriersHelperSettlesTheDeferredProof() throws Exception {
+		TestFixtures.requireFiles(Fixture.STAGED, "staged NeoForge carrier", CARRIER);
+		ClassNode helper;
+		try (ZipFile zip = new ZipFile(CARRIER.toFile())) {
+			ZipEntry entry = zip.getEntry(WatchdogDumpEquivalence.HELPER.replace('.', '/') + ".class");
+			TestFixtures.require(Fixture.STAGED, entry != null, WatchdogDumpEquivalence.HELPER + " absent from the carrier");
+			helper = MixinFit.parse(zip.getInputStream(entry).readAllBytes());
+		}
+		assertTrue(helper.methods.stream().anyMatch(m -> m.name.equals("getEntireStacktrace")
+				&& m.desc.equals("(Ljava/lang/management/ThreadInfo;)Ljava/lang/String;")),
+				"the method the row hashes: " + WatchdogDumpEquivalence.HELPER);
+		assertTrue(WatchdogDumpEquivalence.helperUnknown(), "nothing observed yet");
+		WatchdogDumpEquivalence.observeHelper(helper);
+		assertFalse(WatchdogDumpEquivalence.helperUnknown(), "the helper is defined: the proof is no longer pending");
+	}
+
+	/** The mixin the row was written for, and the body it replaced, are both gone from this anchor. */
+	@Test
+	void theMixinAndTheBodyItReplacedAreNotInThisBase() throws Exception {
+		assertFalse(moduleShips("fabric-crash-report-info-v1", MIXIN_ENTRY),
+				"the module ships no ServerWatchdogMixin: " + WatchdogDumpEquivalence.MIXIN);
+		ClassNode watchdog = StagedFabricMixinFixture.game(WatchdogDumpEquivalence.TARGET.replace('.', '/'), false);
+		assertTrue(watchdog.methods.stream().noneMatch(m -> m.name.equals("createWatchdogCrashReport")),
+				"1.21.1's ServerWatchdog has no body for the mixin to replace");
+	}
+
+	/** Whether the pinned fabric-api's nested module carries an entry. */
+	private static boolean moduleShips(String module, String entry) throws Exception {
+		Path api = TestFixtures.fabricApi();
+		TestFixtures.require(Fixture.THIRD_PARTY, api != null && Files.isRegularFile(api), "fabric-api jar absent");
+		try (ZipFile outer = new ZipFile(api.toFile())) {
+			for (ZipEntry nested : outer.stream().filter(e -> e.getName().startsWith("META-INF/jars/" + module)).toList()) {
+				Path tmp = Files.createTempFile("neoforbric-watchdog", ".jar");
+				try (InputStream in = outer.getInputStream(nested)) {
+					Files.write(tmp, in.readAllBytes());
+				}
+				try (ZipFile inner = new ZipFile(tmp.toFile())) {
+					return inner.getEntry(entry) != null;
+				} finally {
+					Files.deleteIfExists(tmp);
+				}
+			}
+		}
+		return false;
+	}
 }

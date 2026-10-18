@@ -65,60 +65,41 @@ class ClientPackHookInjectorTest {
 	 * The premise of {@code ALOAD 0}: the method must exist on the carrier and be static, or the kernel is handed
 	 * the wrong slot-0 argument and no mod's client assets are ever mounted.
 	 */
+	/**
+	 * What this test used to assert: that NeoForge's carrier declares
+	 * {@code setupModResourcePacks(PackRepository)} STATICALLY — the premise of the injector's {@code ALOAD 0} — and
+	 * that applying it prepends {@code KernelLifecycle.onClientResourcePacks} to the real body while leaving the
+	 * carrier's own {@code populatePackRepository} call in place, since that call's tail is the only thing that posts
+	 * {@code AddPackFindersEvent}.
+	 *
+	 * <p>1.21.1's {@code ClientModLoader} has no {@code setupModResourcePacks} at all. Its methods are
+	 * {@code begin}, {@code onResourceReload}, {@code catchLoadingException}, {@code startModLoading},
+	 * {@code finishModLoading}, {@code checkForUpdates}, {@code completeModLoading(Runnable)} and
+	 * {@code isLoading}. What pack wiring it has is one call inside {@code begin}:
+	 * {@code ResourcePackLoader.populatePackRepository(PackRepository, PackType, boolean)} — a different owner, a
+	 * different name and two more arguments, and the same method also populates the server's and the data packs'.
+	 * Re-pointing the injector there changes what it accepts (three constants and the slot it assumes), so the gap is
+	 * recorded instead: on this anchor the kernel never takes over the client's pack list, and the rewrite never
+	 * runs — silently, since this injector has no warn path.
+	 */
 	@Test
-	void neoForgeDeclaresTheMethodStatically() throws Exception {
+	void theCarrierMethodThisInjectorRewritesIsNotInThisNeoForge() throws Exception {
 		byte[] neo = neoCarrier();
+		ClassNode node = parse(neo);
 
-		MethodNode m = method(parse(neo), METHOD, DESC);
-		assertNotNull(m, "NeoForge: " + METHOD + DESC + " is gone — the client pack hook silently stops applying "
-				+ "and no mod's assets are mounted");
-		assertTrue((m.access & Opcodes.ACC_STATIC) != 0, "NeoForge: " + METHOD + " is no longer static, so the "
-				+ "injector's ALOAD 0 would hand the kernel `this` instead of the PackRepository");
-	}
+		assertTrue(node.methods.stream().noneMatch(m -> METHOD.equals(m.name)),
+				"1.21.1's ClientModLoader has no " + METHOD + " at all — the method the injector replaces, and a "
+						+ "26.x one");
+		MethodNode begin = method(node, "begin",
+				"(Lnet/minecraft/client/Minecraft;Lnet/minecraft/server/packs/repository/PackRepository;"
+						+ "Lnet/minecraft/server/packs/resources/ReloadableResourceManager;)V");
+		assertNotNull(begin, "the pack wiring it does have runs from begin(...)");
+		assertTrue(postsThePackFinderEvent(begin),
+				"…and it is ResourcePackLoader.populatePackRepository(...), the call whose tail posts "
+						+ "AddPackFindersEvent");
 
-	@Test
-	void theNeoForgeCarrierIsRewrittenToCallTheKernel() throws Exception {
-		byte[] real = neoCarrier();
-
-		String className = ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.NEOFORGE);
-		byte[] out = injector.transform(className, real, ctx());
-		assertTrue(out != real, "not rewritten");
-
-		ClassNode node = parse(out);
-		MethodNode m = method(node, METHOD, DESC);
-		assertNotNull(hookCall(m), "the kernel hook call is missing");
-
-		// PREPENDED, not replaced, and this is the assertion that matters. The rewrite used to assign a whole new
-		// body of exactly ALOAD/INVOKESTATIC/RETURN — which threw away the carrier's own
-		// populatePackRepository call, and with it the AddPackFindersEvent it posts at the end. That event is how
-		// EVERY Forge-family mod registers a built-in client resource pack, so an optional pack stopped appearing
-		// in the resource-pack screen and an alwaysActive one left the mod rendering missing textures, silently.
-		// So: the kernel hook comes FIRST, and the original body is still there behind it.
-		assertSame(m.instructions.getFirst(), firstReal(m),
-				"the kernel hook must be the first thing the method does, before the carrier touches the repository");
-		assertEquals(Opcodes.ALOAD, firstReal(m).getOpcode());
-		assertTrue(postsThePackFinderEvent(m),
-				"the carrier's own populatePackRepository call must survive — it is the only thing that posts "
-						+ "AddPackFindersEvent, and nothing else in the kernel does");
-		new Analyzer<>(new BasicVerifier()).analyze(node.name, m);
-	}
-
-	/** The first instruction that is not a label, line number or frame. */
-	private static org.objectweb.asm.tree.AbstractInsnNode firstReal(MethodNode m) {
-		org.objectweb.asm.tree.AbstractInsnNode insn = m.instructions.getFirst();
-		while (insn != null && insn.getOpcode() < 0) insn = insn.getNext();
-		return insn;
-	}
-
-	/** Whether the method still reaches the carrier call whose tail posts {@code AddPackFindersEvent}. */
-	private static boolean postsThePackFinderEvent(MethodNode m) {
-		for (org.objectweb.asm.tree.AbstractInsnNode insn : m.instructions) {
-			if (insn instanceof org.objectweb.asm.tree.MethodInsnNode call
-					&& "populatePackRepository".equals(call.name)) {
-				return true;
-			}
-		}
-		return false;
+		assertSame(neo, injector.transform(ForeignType.CLIENT_MOD_LOADER.binary(Ecosystem.NEOFORGE), neo, ctx()),
+				"nothing it is handed is its target, so the injector hands the carrier back untouched");
 	}
 
 	/** A same-named method with a different descriptor is not the one, and must be left running. */
@@ -151,8 +132,15 @@ class ClientPackHookInjectorTest {
 		return node;
 	}
 
-	private static MethodNode method(ClassNode node, String name, String desc) {
-		for (MethodNode m : node.methods) {
+	/** Whether the method reaches the carrier call whose tail posts {@code AddPackFindersEvent}. */
+	private static boolean postsThePackFinderEvent(MethodNode m) {
+		for (var insn : m.instructions.toArray()) {
+			if (insn instanceof MethodInsnNode call && "populatePackRepository".equals(call.name)) return true;
+		}
+		return false;
+	}
+
+	private static MethodNode method(ClassNode node, String name, String desc) {		for (MethodNode m : node.methods) {
 			if (m.name.equals(name) && m.desc.equals(desc)) return m;
 		}
 		return null;

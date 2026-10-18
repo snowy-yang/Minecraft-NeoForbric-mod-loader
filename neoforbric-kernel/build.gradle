@@ -271,6 +271,27 @@ sourceSets {
 		java { srcDir 'src/modmenuApi/java' }
 		compileClasspath += sourceSets.runtime.output + sourceSets.main.output + files(stagedGameJars) + files(stagedMcLibraries)
 	}
+	// The main suite loads game-side classes through a URLClassLoader whose PARENT is the test classloader, so
+	// anything the game side links against that is not a staged game jar has to be on the TEST classpath or the
+	// test meets NoClassDefFoundError the moment it touches one of those classes. transferTest already routes
+	// Minecraft's own library set in for exactly this reason; the main suite needed it too and did not have it:
+	// KernelModInfo builds a real DefaultArtifactVersion (shaded into the carrier), whose parseVersion calls
+	// Commons Lang's NumberUtils, so every test constructing one from version metadata failed with
+	// `NoClassDefFoundError: org/apache/commons/lang3/math/NumberUtils`. Test runtime linkage only, never bundled —
+	// the game supplies these at play time, exactly as it does for the transfer suite.
+	//
+	// The logging jars are EXCLUDED, and that is not an oversight. The suite's contract is that its classpath
+	// carries no log4j: several tests assert NeoForbricLog's fallback when the API is absent, and EventChainAuditTest
+	// gets the API through `neoforbric.log4jApiForTests` on its own loader instead. Minecraft's library list happens
+	// to contain log4j-api/core/slf4j, so routing the whole list in (as transferTest can, since it is a different
+	// suite with different contracts) silently switched the fallback off and took DependencyAuditTest's captured
+	// output with it — a regression this exclusion is here to prevent from returning.
+	test {
+		compileClasspath += files(stagedMcLibraries)
+		runtimeClasspath += files(stagedMcLibraries) + files(stagedTransferTestLibraries.findAll {
+			!it.name.startsWith('log4j-') && !it.name.startsWith('slf4j-')
+		})
+	}
 }
 
 repositories {
